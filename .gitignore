@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .venv/
 *.log
+mlruns/
+mlartifacts/
+mlflow.db

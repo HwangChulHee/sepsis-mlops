@@ -38,6 +38,38 @@ FEATURESET_VITALS_LABS = VITALS_7 + DEMOGRAPHICS + LABS_9  # 18
 # excluded everywhere (model + cache). The remaining 17 labs are simply not loaded.
 EXCLUDED_NONFEATURES = ["ICULOS", "Unit1", "Unit2", "HospAdmTime"]
 
+# --- H1-b: model / transform constants ---
+# Causal streaming model (결정 4): GRU must be unidirectional so right-padding +
+# loss masking is leak-free. The model lives in re-smoke/H2; this is the binding flag.
+GRU_BIDIRECTIONAL = False
+LOOKBACK = 8  # tree per-timestep lookback window in hours (결정 6)
+TREE_STATS = ["last", "mean", "min", "max", "delta", "range", "variance"]
+
+# Fixed physiological clip bounds (결정 3) — DATA-INDEPENDENT (no leak), light trim.
+# Keyed by the 18 model features (EtCO2 excluded; not a model input).
+CLIP_BOUNDS = {
+    "HR": (0.0, 300.0), "O2Sat": (0.0, 100.0), "Temp": (20.0, 45.0),
+    "SBP": (0.0, 300.0), "MAP": (0.0, 250.0), "DBP": (0.0, 250.0), "Resp": (0.0, 80.0),
+    "Age": (0.0, 120.0), "Gender": (0.0, 1.0),
+    "WBC": (0.0, 200.0), "BUN": (0.0, 300.0), "Platelets": (0.0, 2000.0),
+    "Lactate": (0.0, 40.0), "Creatinine": (0.0, 50.0), "Glucose": (0.0, 2000.0),
+    "PTT": (0.0, 250.0), "HCO3": (0.0, 60.0), "Calcium": (0.0, 20.0),
+}
+
+FEATURESETS = {"vitals": FEATURESET_VITALS, "vitals_labs": FEATURESET_VITALS_LABS}
+
+
+def featureset_columns(name: str) -> list[str]:
+    if name not in FEATURESETS:
+        raise ValueError(f"unknown featureset {name!r}; choose from {list(FEATURESETS)}")
+    return list(FEATURESETS[name])
+
+
+def featureset_indices(name: str) -> list[int]:
+    """Column indices into CACHE_FEATURES for a model feature set (EtCO2 excluded)."""
+    return [CACHE_FEATURES.index(c) for c in featureset_columns(name)]
+
+
 # EDA reference row-level missing % (reports/eda_findings.md §3) — for cache assert #4
 EDA_LAB_MISSING_PCT = {
     "WBC": 93.59,

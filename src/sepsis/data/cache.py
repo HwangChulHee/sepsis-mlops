@@ -21,6 +21,18 @@ import pandas as pd
 from sepsis import config as C
 
 
+def load_manifest(cache_dir: Path | None = None) -> pd.DataFrame:
+    cache_dir = Path(cache_dir) if cache_dir else C.CACHE_DIR
+    return pd.read_parquet(cache_dir / "manifest.parquet")
+
+
+def load_feats_labels(site: str, pid: str, cache_dir: Path | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Load one cached patient: (feats T×19 float32 NaN-preserved, labels T int8)."""
+    cache_dir = Path(cache_dir) if cache_dir else C.CACHE_DIR
+    z = np.load(cache_dir / site / f"{pid}.npz", allow_pickle=False)
+    return z["feats"], z["labels"]
+
+
 @dataclass
 class CacheStats:
     n_patients: int

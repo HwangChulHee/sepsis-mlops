@@ -58,6 +58,8 @@
 
 Worst-missing (>90%): Bilirubin_direct, Fibrinogen, TroponinI, Bilirubin_total, Alkalinephos, AST, Lactate, PTT, SaO2, EtCO2, Phosphate, HCO3, Chloride, BaseExcess, PaCO2, Calcium, Platelets, Creatinine, Magnesium, WBC, BUN, pH, Hgb, FiO2, Hct, Potassium. Lab values are measured rarely → mostly NaN; vitals are denser but still gappy.
 
+**Aggregate**: across the **34 measurement columns** (8 vitals + 26 labs, excluding the 6 demographics + label), the **mean per-column missingness is 80.1%** (column-wise average). This is the "~80% blank" figure cited in `research/02_features_missing.md`.
+
 ## 4. Sequence length (ICU hours per patient)
 - min **8** · median **38** · mean **38.5** · p90 **55** · p99 **133** · max **336**
 - length ≥ 8h: 40,336 patients (100.0%)

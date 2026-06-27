@@ -2,7 +2,13 @@
 
 > **설계 근거**: [`h1_decisions.md`](h1_decisions.md) (v4, 전 항목 PASS). 본 문서는 그 결정들을 **실행 명세**로 번역한 것이다.
 > **워크플로우**: [`WORKFLOW.md`](WORKFLOW.md). 이 핸드오프는 자립형이며, 검토(`h1_handoff_review.md`) 통과 후 실행한다.
-> **상태**: 초안 — 레드팀 검토 전.
+> **개정 이력**
+> - **v3 (2026-06-27)** — 검토 v2(`0ec8aca`) 비차단 주의 반영: H1-b PASS#9 양성비율 허용오차 완화(통합 1.8%±0.3%p → plausible 1%~4% + train-only 산출 + pos_weight 유한·양수). setA-only A-train이 상단에 spurious 정지하던 오발 제거.
+> - **v2 (2026-06-27)** — 핸드오프 검토 `1734bdb`의 HOLD 2건 + 게이트 크리스프 권고 반영
+>   - HOLD 1: H1-b "0-fill 없음" 검증을 **정규화 후 → 대치 직후(raw 공간)**로 이동(z-score 후엔 평균fill이 0이 돼 판정 불가).
+>   - HOLD 2: H1-b에 **A-train per-timestep 양성비율(pos_weight 입력) 산출·로깅 + assert** 추가(결정-구현 불일치 해소).
+>   - 권고: 결측률 `≈`→허용오차, 정규화 재현→식, 재스모크 "loss 하락"→"유한" 하드게이트, 마스크 극성 명시, 트리 NaN-aware 집계, 피처셋 파생 assert, 실패모드 2건 보강.
+> - v1: 초안.
 
 ---
 
@@ -49,6 +55,7 @@ src/sepsis/
     normalize.py     # H1-b
     sequence.py      # H1-b (GRU m2m + validity mask)
     features.py      # H1-b (트리 매시점 lookback 요약)
+    class_balance.py # H1-b (pos_weight 입력: per-timestep 양성비율)
   eda/diagnostics.py # H1-c
 scripts/
   build_cache.py     # H1-a 실행
@@ -75,7 +82,7 @@ scripts/
 1. 캐시된 환자 수 == **40,336** (setA 20,336 + setB 20,000).
 2. 각 환자 배열의 피처 컬럼 == **19개**(정의된 이름과 정확히 일치), 라벨·site·patient_id 동반.
 3. `ICULOS` 등 제외 컬럼이 캐시에 **없음**.
-4. **NaN 보존 검증**: 캐시 전체 검사 9종의 결측률이 `reports/eda_findings.md`의 EDA 측정치와 일치(예: WBC ≈93.6%, Lactate ≈97.3%). 0으로 안 채워졌는지 확인.
+4. **NaN 보존 검증**: 캐시 전체 검사 9종의 결측률이 `reports/eda_findings.md` 측정치와 **±0.5%p 이내**로 일치(예: WBC 93.6%, Lactate 97.3% ± 0.5%p). 0으로 안 채워졌는지 확인.
 5. 라벨 값 ∈ {0,1}, 환자 내 양성 블록이 **연속이며 기록 끝에서 끝남**(우측 절단) — 위반 환자 수를 로깅(제외는 H1-b 필터에서).
 
 ### 진행
@@ -92,27 +99,30 @@ scripts/
 - `data/split.py` (결정 5): **환자 단위** 분할. 모드: `unified`(A·B 통합 random) / `cross_site`(A→B). cross_site는 **3분할**: `A-train` / `A-val` / `B`(전체, 봉인). **B는 train·val·정규화통계·pos_weight 어디에도 미사용**, 평가 때만.
 - `data/missing.py` (결정 2):
   - **트리 경로**: NaN 그대로.
-  - **GRU 경로 순서**: ① (옵트인 시) **마스크 생성 — 원본 NaN 위치에서** ② forward-fill(과거→미래) ③ 잔여 빈칸 **train split 평균**. **0-fill 금지**. *마스크 기본 OFF(결정 7).*
+  - **GRU 경로 순서**: ① (옵트인 시) **마스크 생성 — 원본 NaN 위치에서**(극성: **1=관측됨, 0=결측**) ② forward-fill(과거→미래) ③ 잔여 빈칸 **train split 평균**. **0-fill 금지**. *마스크 기본 OFF(결정 7).*
 - `data/normalize.py` (결정 3): **클리핑(생리범위, 정규화 前)** → z-score. **평균·표준편차는 train split에서만**(cross_site면 A-train).
 - `data/sequence.py` (결정 4 — GRU m2m):
   - 환자 **전체 시퀀스**를 샘플 단위로. 라벨 = **매 시점 SepsisLabel**(per-timestep).
   - 배치는 **우측 패딩**(pad) + **validity mask**(실제=1, 패딩=0). `pack_padded_sequence` 등으로 가변 길이 처리.
   - **단방향(causal) GRU 전제**: 시각 t 예측에 1..t만. 양방향 금지(우측 패딩 무누수 전제).
   - validity mask는 **학습 loss + 평가 지표 양쪽**에서 패딩 시점을 제외하는 데 쓰임.
-- `data/features.py` (결정 6 — 트리): 각 시각 t에서 **"t까지 최대 8h lookback 요약통계"** 한 행. 통계 = `마지막값·평균·min·max·delta(마지막−처음)·range(max−min)·variance`. 초기 시점(가용<8h)은 **가용 범위만**. 전부 NaN인 lookback의 통계는 NaN 유지.
+- `data/features.py` (결정 6 — 트리): 각 시각 t에서 **"t까지 최대 8h lookback 요약통계"** 한 행. 통계 = `마지막값·평균·min·max·delta(마지막−처음)·range(max−min)·variance`, **모두 NaN-aware**(관측된 값만으로 집계, `np.nanmean` 등). 초기 시점(가용<8h)은 **가용 범위만**. 전부 NaN인 lookback의 통계는 NaN 유지.
+- `data/class_balance.py` (부속결정 — pos_weight 입력): **A-train(또는 통합 train)의 per-timestep 양성 비율**을 산출·로깅. many-to-many이므로 **시점 단위**로 집계(양성 시점 수 / 전체 유효 시점 수, 패딩 제외). pos_weight = neg/pos. **산출만, 적용은 H2.**
 
 ### PASS 기준 (assert)
 1. **환자 누수 없음**: 세 split의 patient_id 교집합 == ∅.
 2. **타깃 봉인**: cross_site에서 setB patient_id가 A-train·A-val에 **하나도 없음**.
-3. **train-only 정규화**: 정규화에 쓰인 평균/표준편차가 A-train(또는 통합 train)에서만 산출됨을 재현 검증(val/test 통계로 계산 시 불일치 확인).
-4. **마스크 순서**: (마스크 ON으로 임시 검증) 마스크의 1 위치가 **원본 NaN 위치와 정확히 일치**(= ffill 이전에 생성). ffill 후 생성이면 불일치로 검출.
+3. **train-only 정규화**: 정규화에 쓰인 μ·σ가 train split만으로 계산됐는지 식으로 재현 — `μ_used == mean(train)` 이고 `μ_used != mean(val)` 및 `!= mean(test)`(부동소수 허용오차 1e-6). 불일치면 train 밖 데이터 유입.
+4. **마스크 순서**: (마스크 ON으로 임시 검증) 마스크의 0 위치(결측)가 **원본 NaN 위치와 정확히 일치**(= ffill 이전에 생성). ffill 후 생성이면 불일치로 검출.
 5. **validity mask 정합**: 각 시퀀스의 validity mask 합 == 그 환자의 실제 시점 수(패딩 제외).
-6. **0-fill 없음**: GRU 입력에 결측 기인 0이 없음(평균/ffill로만 채워짐).
+6. **결측 대치 검증 (raw 공간 — 정규화 前에 판정)**: 대치 직후 GRU 입력에 **NaN 없음** AND 채운 자리 값이 **ffill값 또는 train평균과 일치**(= 0이 아님, 단 평균/실측이 우연히 0인 경우 제외). *정규화 후엔 평균fill이 0이 되어 판정 불가하므로 반드시 raw 공간에서 검사.*
 7. **단방향 설정**: GRU 구성이 `bidirectional=False`.
 8. **트리 정렬**: 트리 요약행 수 == 해당 split의 총 시점 수(매시점), 초기 시점이 누락되지 않음.
+9. **pos_weight 입력 산출**: A-train per-timestep 양성 비율이 **train split에서만** 산출·로깅되고, **plausible 범위(1%~4%) 내**(setA-only A-train은 통합 1.8%보다 높은 ~2.1% — 비율 정확도가 아니라 train-only 산출·유효성을 검증). pos_weight = neg/pos가 **유한·양수**.
+10. **피처셋 파생**: 활력셋(9)이 활력+검사셋(18)의 **컬럼 부분집합**임을 assert(집합 포함 관계).
 
 ### 진행
-- 8개 assert PASS → **자동 m2m 재-스모크**. 실패 → 정지·보고.
+- 10개 assert PASS → **자동 m2m 재-스모크**. 실패 → 정지·보고.
 
 ---
 
@@ -146,7 +156,7 @@ scripts/
 
 ### PASS 기준 (프로그래매틱)
 1. end-to-end 무오류 완주.
-2. 학습 loss가 하락(배선 정상 신호).
+2. **하드 게이트**: 학습 loss가 **유한**(NaN/inf 아님). *(loss 하락은 작은 배치에서 들쭉날쭉하므로 하드 게이트 아님 — 추세는 참고 로깅만.)*
 3. **평가에서 패딩 제외 검증**: validity mask로 패딩 시점을 뺀 지표와, 안 뺀 지표가 **다름**을 확인(패딩이 가짜 음성으로 안 새는지). 패딩 시점은 지표 계산에서 제외됨이 assert로 확인.
 4. 단방향 GRU, 우측 패딩 확인.
 
@@ -166,6 +176,9 @@ scripts/
 - 환자가 split에 걸침 / setB가 train·val에 유입
 - 정규화 통계가 train 밖에서 산출 / 마스크가 ffill 뒤에 생성
 - GRU bidirectional=True / 평가에서 패딩 미제외
+- pos_weight 입력 미산출 / 비유한
+- **긴 시퀀스(최대 331h) 메모리 초과** → 정지·보고(필요 시 truncated BPTT 등은 H2 논의, H1에선 완주 가능해야 함)
+- **유령 시점(초기 전부-NaN)** 처리 미정의로 NaN이 모델 입력까지 전파
 - 위 중 하나라도 → 그 토막에서 정지, 다음 진행 금지, 사람 보고.
 
 ## 검토 요청 (h1_handoff_review.md 용)

@@ -24,7 +24,7 @@
 - 공식 과제·평가(utility score)는 [1]에서 정의됨. 발병 6시간 전 조기 예측이 목표.
 - 공식 utility 1위는 시계열에서 **signature 기반 피처**를 뽑은 접근 [2].
 - 상위권 다수는 **gradient boosting(XGBoost/LightGBM)** 계열 [3][10].
-- **현실 점수**: 공식 utility 기준 상위 5팀 평균은 약 **0.426 / 0.411 / 0.409 / 0.403 / 0.403** [4]. 즉 "정직한" 천장이 0.4대다.
+- **현실 점수**: 상위 5팀 utility 점수는 약 **0.426 / 0.411 / 0.409 / 0.403 / 0.403** — **두 병원(공개 A·B) 데이터 기준** [4]. 즉 "정직한" 천장이 0.4대다. (제3 병원까지 포함한 전체 숨은 테스트셋에선 우승조차 0.360 — `03_evaluation.md` 참고.)
 
 ### ⚠️ 2019의 결정적 교훈 — 일반화 붕괴
 - 한 팀은 공개 데이터에서 utility **0.522**를 냈으나, 숨겨진(다른 병원) 데이터에선 **0.364**로 하락 [4].
@@ -86,7 +86,7 @@
 
 [7] **"A methodological systematic review of validation and performance of sepsis real-time prediction models."** *npj Digital Medicine*, 2025. nature.com/articles/s41746-025-01587-1 (PMC11973177). 91편 리뷰. (6h·12h AUROC 중앙값: **내부 0.886/0.861 → 외부 ~0.860**; full-stay 외부 0.783; **utility 중앙값 내부 0.381→외부 −0.164**; 시계열 알고리즘 중 LSTM 최다 채택 **전체 n=20**, 상위성능 서브그룹 내 n=6)
 
-[8] Rafiei A, et al. **"SSP: Early prediction of sepsis using fully connected LSTM-CNN model."** *Computers in Biology and Medicine*, 2020. PubMed:33227577. (AUROC 0.92/0.87/0.84 @ 4/8/12h)
+[8] Rafiei A, et al. **"SSP: Early prediction of sepsis using fully connected LSTM-CNN model."** *Computers in Biology and Medicine*, 128:104110, 2021(온라인 2020). PubMed:33227577. (AUROC 0.92/0.87/0.84 @ 4/8/12h — **Mode 2: 인구통계+활력징후+검사** 기준. Mode 1(활력만)은 0.89/0.88/0.86.)
 
 [9] Das PP, Wiese L, Mast M, et al. **"An attention-based bidirectional LSTM-CNN architecture for the early prediction of sepsis."** *International Journal of Data Science and Analytics*, 2024. DOI:10.1007/s41060-024-00568-z. (Attention+BiLSTM+CNN 하이브리드; 2019 PhysioNet 데이터, 4/8/12h 창에서 기존 기법 능가 주장)
 

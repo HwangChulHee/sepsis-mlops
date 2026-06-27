@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: sepsis-mlops
+Version: 0.1.0
+Summary: MLOps skeleton for real-time sepsis early warning (PhysioNet/CinC 2019)
+Requires-Python: >=3.12
+Requires-Dist: matplotlib>=3.11.0
+Requires-Dist: mlflow>=2.18
+Requires-Dist: numpy>=2.0
+Requires-Dist: pandas<3,>=2.2
+Requires-Dist: scikit-learn>=1.9.0
+Requires-Dist: torch>=2.12.1

@@ -12,6 +12,13 @@ dependencies = [
     "torch>=2.12.1",
 ]
 
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 # PyPI stays the default index; the pytorch CPU index is used ONLY for torch.
 [[tool.uv.index]]
 name = "pytorch-cpu"

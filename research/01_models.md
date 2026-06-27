@@ -78,7 +78,7 @@
 
 [3] **"Stronger Baseline Models — A Key Requirement for Aligning Machine Learning Research with Clinical Utility."** arXiv:2409.12116, 2024. (상위 5팀이 out-of-sample에서 음수 utility로 일반화 실패)
 
-[4] **"Exploring a global interpretation mechanism for deep learning networks when predicting sepsis."** *Scientific Reports*, 2023. nature.com/articles/s41598-023-30091-3. (상위 5팀 공식 utility 수치; XGBoost 0.522→0.364 일반화 하락)
+[4] **"Exploring a global interpretation mechanism for deep learning networks when predicting sepsis."** *Scientific Reports*, 2023. nature.com/articles/s41598-023-30091-3. (상위 5팀 utility 수치[두 병원 공개 데이터]; XGBoost 0.522[공개]→0.364[숨은 제3병원] 일반화 하락)
 
 [5] **"Application of the KA-Transformer model to early sepsis prediction: a hybrid network analysis based on time series data."** *Discover Applied Sciences*, 2025. DOI:10.1007/s42452-025-06628-8. (Transformer; AUROC **0.984 @ 12h 시점**, 6h 0.944 / 1h 0.962 — 비교 모델 중 최고) — 관련: Tang Y, Zhang Y, Li J. "A time series driven model for early sepsis prediction based on transformer module." *BMC Medical Research Methodology*, 24(1):23, 2024. DOI:10.1186/s12874-023-02138-6.
 

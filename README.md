@@ -46,6 +46,21 @@ See **[reports/eda_findings.md](reports/eda_findings.md)** for the writeup. Head
 | Positive-label window | contiguous, ≤10 h, ends at record end (100% of cases) |
 | Worst missingness | labs >90% NaN; vitals 10–66% NaN |
 
+## Research notes
+
+Design decisions for full training are worked out from primary sources in
+[`research/`](research/) (each doc tiers its claims: confirmed / derived / our
+decision / to-verify):
+
+- **[01_models.md](research/01_models.md)** — model choice: XGBoost/LightGBM
+  baseline → GRU main → Transformer stretch; the real open problem is cross-site
+  generalization, not model capacity.
+- **[02_features_missing.md](research/02_features_missing.md)** — feature
+  selection and missingness: per-model imputation, missingness mask, never
+  zero-fill.
+- **[03_evaluation.md](research/03_evaluation.md)** — metrics: PR-AUC primary,
+  official utility score, cross-site (A→B) as the headline generalization test.
+
 ## Environment
 
 WSL2 Ubuntu · `uv` + `pyproject.toml` · `pandas`, `numpy`, `matplotlib`.

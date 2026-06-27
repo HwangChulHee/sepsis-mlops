@@ -54,9 +54,12 @@ uv run python scripts/eda.py
   baseline → GRU 메인 → Transformer 욕심(stretch); 진짜 난제는 모델 용량이 아니라
   cross-site 일반화.
 - **[02_features_missing.md](research/02_features_missing.md)** — 피처 선택과
-  결측 처리: 모델별 대치, 결측 마스크, 0으로 절대 안 채움.
+  결측 처리: 모델별 대치, 0으로 절대 안 채움, 결측 마스크는 누수 위험으로
+  기본 미사용(옵트인).
 - **[03_evaluation.md](research/03_evaluation.md)** — 평가지표: PR-AUC 1차,
   공식 utility score, cross-site(A→B)를 일반화 핵심 시험으로.
+- **[04_leakage_generalization.md](research/04_leakage_generalization.md)** —
+  누수와 일반화: 컨닝 경로 4종과 차단/관리법, 마스크 옵트인 정책의 근거.
 
 ## 환경
 

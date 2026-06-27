@@ -1,18 +1,18 @@
-# PhysioNet 2019 Sepsis — EDA Findings
+# PhysioNet 2019 패혈증 — EDA Findings
 
-> Exploratory measurement only. No imputation, no modeling, no splitting. All patient-level stats aggregated per `.psv` file (= one patient) to avoid leakage in the statistics.
+> 탐색적 측정만 수행. 대치·모델링·분할 없음. 모든 통계는 환자 단위(`.psv` 파일 1개 = 환자 1명)로 집계해 통계 누수를 피했다.
 
-## 1. Inventory
-- `training_setA`: **20336** patients · `training_setB`: **20000** patients · **total 40336** patients
-- Total patient-hours (rows): **1,552,210**
-- Files skipped for header/parse mismatch: **0**
+## 1. 인벤토리
+- `training_setA`: 환자 **20336**명 · `training_setB`: 환자 **20000**명 · **합계 40336**명
+- 전체 환자-시간(행): **1,552,210**
+- 헤더/파싱 불일치로 건너뛴 파일: **0**
 
-## 2. Columns / types
-- All files carry the expected **41 columns** (40 features + `SepsisLabel`), pipe-separated, `NaN` for missing. dtypes are float64 except integer-coded `Gender`/`Unit1`/`Unit2`/`ICULOS`/`SepsisLabel` (read as float when NaNs present).
-- `ICULOS` strictly increases within a patient in **40336/40336** files (100.0%) — confirms one row = one ICU hour, time-ordered.
+## 2. 컬럼 / 타입
+- 모든 파일이 예상대로 **41개 컬럼**(40 피처 + `SepsisLabel`)을 가짐. 파이프 구분, 결측은 `NaN`. dtype은 float64이나, 정수 코드인 `Gender`/`Unit1`/`Unit2`/`ICULOS`/`SepsisLabel`은 NaN이 섞이면 float으로 읽힘.
+- `ICULOS`는 환자 내에서 **40336/40336** 파일(100.0%)에서 단조 증가 — 한 행 = ICU 1시간이며 시간순 정렬임을 확인.
 
-## 3. Missingness (per-row)
-| column | missing % | patients fully missing |
+## 3. 결측 (행 단위)
+| 컬럼 | 결측 % | 전부 결측인 환자 수 |
 |---|---:|---:|
 | Bilirubin_direct | 99.81% | 38,279 |
 | Fibrinogen | 99.34% | 35,821 |
@@ -56,35 +56,35 @@
 | ICULOS | 0.00% | 0 |
 | SepsisLabel | 0.00% | 0 |
 
-Worst-missing (>90%): Bilirubin_direct, Fibrinogen, TroponinI, Bilirubin_total, Alkalinephos, AST, Lactate, PTT, SaO2, EtCO2, Phosphate, HCO3, Chloride, BaseExcess, PaCO2, Calcium, Platelets, Creatinine, Magnesium, WBC, BUN, pH, Hgb, FiO2, Hct, Potassium. Lab values are measured rarely → mostly NaN; vitals are denser but still gappy.
+최악 결측(>90%): Bilirubin_direct, Fibrinogen, TroponinI, Bilirubin_total, Alkalinephos, AST, Lactate, PTT, SaO2, EtCO2, Phosphate, HCO3, Chloride, BaseExcess, PaCO2, Calcium, Platelets, Creatinine, Magnesium, WBC, BUN, pH, Hgb, FiO2, Hct, Potassium. 검사 수치는 드물게 측정 → 대부분 NaN; 활력징후는 더 촘촘하지만 여전히 빈칸이 있음.
 
-**Aggregate**: across the **34 measurement columns** (8 vitals + 26 labs, excluding the 6 demographics + label), the **mean per-column missingness is 80.1%** (column-wise average). This is the "~80% blank" figure cited in `research/02_features_missing.md`.
+**집계**: **측정 컬럼 34개**(활력 8 + 검사 26, 인구통계 6개와 라벨 제외) 기준 **컬럼별 평균 결측률은 80.1%**(컬럼 단위 평균)다. `research/02_features_missing.md`에서 인용한 "~80% 빈칸" 수치가 이것이다.
 
-## 4. Sequence length (ICU hours per patient)
-- min **8** · median **38** · mean **38.5** · p90 **55** · p99 **133** · max **336**
-- length ≥ 8h: 40,336 patients (100.0%)
-- length ≥ 12h: 39,317 patients (97.5%)
-- length ≥ 24h: 30,661 patients (76.0%)
-- length ≥ 48h: 9,538 patients (23.6%)
+## 4. 시퀀스 길이 (환자당 ICU 시간)
+- 최소 **8** · 중앙값 **38** · 평균 **38.5** · p90 **55** · p99 **133** · 최대 **336**
+- 길이 ≥ 8시간: 40,336명 (100.0%)
+- 길이 ≥ 12시간: 39,317명 (97.5%)
+- 길이 ≥ 24시간: 30,661명 (76.0%)
+- 길이 ≥ 48시간: 9,538명 (23.6%)
 
 ![seq length](figures/seq_length_hist.png)
 
-## 5. Labels / imbalance
-- **Sepsis patients** (≥1 positive hour): **2932/40336 = 7.27%**
-- **Positive patient-hours**: **27,916/1,552,210 = 1.798%**
-- Negative:positive row ratio ≈ **54.6** (rough `pos_weight` upper bound)
+## 5. 라벨 / 불균형
+- **패혈증 환자**(양성 시간 ≥1): **2932/40336 = 7.27%**
+- **양성 환자-시간**: **27,916/1,552,210 = 1.798%**
+- 음성:양성 행 비율 ≈ **54.6** (대략적인 `pos_weight` 상한)
 
-## 6. Label timing — first `SepsisLabel==1`
-- ICULOS of first positive: min **1** · p25 **7** · median **29** · mean **50.9** · p90 **135** · max **331**
-- First positive already at ICULOS==1 (label present from admission): **370 (12.6%)**
-- Positive-window length per patient: median **10h** · mean **9.5h** · max **10h**
-- **Rule verification**: once positive, the label stays positive to discharge (single contiguous block ending at the last row) in **2932/2932 = 100.0%** of sepsis patients.
-- Interpretation: this empirically confirms the Sepsis-3 challenge labeling. The positive window is **capped at 10h** (median 10, max 10) and is always the **final ≤10 hours** of a septic patient's record — i.e. the label switches on a fixed early-warning window before clinical onset (the 6-h rule) and the record is **right-truncated shortly after onset** (so end-of-record for septic patients is near-onset truncation, not real discharge). Some patients are already positive at admission (onset preceded ICU entry). Window/label alignment must treat the positive region as a contiguous pre-onset block, not a point event, and must not leak the truncation as a signal.
+## 6. 라벨 타이밍 — 첫 `SepsisLabel==1`
+- 첫 양성의 ICULOS: 최소 **1** · p25 **7** · 중앙값 **29** · 평균 **50.9** · p90 **135** · 최대 **331**
+- 입원(ICULOS==1)부터 이미 양성(라벨이 입원 시점부터 존재): **370명 (12.6%)**
+- 환자당 양성 구간 길이: 중앙값 **10시간** · 평균 **9.5시간** · 최대 **10시간**
+- **규칙 검증**: 한번 양성이 되면 퇴원까지 양성 유지(마지막 행에서 끝나는 단일 연속 블록)인 경우가 패혈증 환자의 **2932/2932 = 100.0%**.
+- 해석: Sepsis-3 챌린지 라벨링을 경험적으로 확인한 것. 양성 구간은 **10시간으로 상한**(중앙값 10, 최대 10)되며 항상 패혈증 환자 기록의 **마지막 ≤10시간**이다 — 즉 라벨은 임상 발병 전 고정된 조기경보 창에서 켜지고(6시간 규칙) 기록은 발병 직후 **우측 절단(right-truncated)** 된다(따라서 패혈증 환자의 기록 끝은 실제 퇴원이 아니라 발병 근처 절단이다). 일부 환자는 입원 시점부터 이미 양성이다(발병이 ICU 입실보다 앞섬). 윈도우/라벨 정렬은 양성 영역을 점(point) 이벤트가 아니라 발병 전 연속 블록으로 다뤄야 하고, 절단을 신호로 누수시키면 안 된다.
 
 ![first positive iculos](figures/first_positive_iculos_hist.png)
 
-## 7. Vital signs + implausible values
-| vital | min | median | mean | p90 | max | n_obs | out-of-bounds % |
+## 7. 활력징후 + 비현실적 값
+| 활력 | 최소 | 중앙값 | 평균 | p90 | 최대 | n_obs | 범위 밖 % |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | HR | 20.0 | 83.5 | 84.6 | 107.0 | 280.0 | 1,398,811 | 0.00% |
 | O2Sat | 20.0 | 98.0 | 97.2 | 100.0 | 100.0 | 1,349,474 | 0.02% |
@@ -93,20 +93,20 @@ Worst-missing (>90%): Bilirubin_direct, Fibrinogen, TroponinI, Bilirubin_total, 
 | MAP | 20.0 | 80.0 | 82.4 | 104.0 | 300.0 | 1,358,940 | 0.01% |
 | Resp | 1.0 | 18.0 | 18.7 | 25.0 | 100.0 | 1,313,875 | 0.10% |
 
-Extreme min/max exist (e.g. HR, SBP spikes) but out-of-bounds fractions are tiny → robust scaling + light clipping at physiologic bounds is enough; no aggressive cleaning.
+극단적인 최소/최대값이 존재하지만(예: HR, SBP 급등) 범위 밖 비율은 극소수 → 강건한(robust) 스케일링 + 생리적 범위에서 가벼운 클리핑이면 충분; 공격적인 정제는 불필요.
 
 ![vitals](figures/vitals_hist.png)
 
-## 8. Hospital A vs B
-| set | patients | sepsis % | median length | HR median |
+## 8. 병원 A vs B
+| set | 환자 | 패혈증 % | 체류 중앙값 | HR 중앙값 |
 |---|---:|---:|---:|---:|
-| training_setA | 20336 | 8.80% | 39h | 84 |
-| training_setB | 20000 | 5.71% | 38h | 83 |
+| training_setA | 20336 | 8.80% | 39시간 | 84 |
+| training_setB | 20000 | 5.71% | 38시간 | 83 |
 
-A and B differ in sepsis prevalence and length → site is a covariate; a future split should be **patient-grouped and ideally site-aware**.
+A와 B는 패혈증 유병률·체류 길이가 다름 → 사이트가 공변량(covariate)이다; 향후 분할은 **환자 그룹 단위 + 가능하면 사이트 인식(site-aware)** 으로 해야 한다.
 
-## Implications for the smoke pipeline
-- **Window size**: median patient length is **38h**; a window of **~8–12h** keeps the large majority of patients (97% have ≥12h) while staying short enough for real-time early warning. Longer windows (24–48h) discard many short stays — measured trade-off above.
-- **Missing strategy**: do **not** zero-fill. Labs are >90% missing; carry a **missingness mask** per feature + **forward-fill within patient** (past→future only, no leakage) for vitals; consider **dropping** the most useless ultra-sparse labs for the smoke run.
-- **Imbalance / pos_weight**: positive rows are only **1.798%** of all hours → use **`pos_weight` ≈ 55** (neg/pos ratio) as a starting point, and evaluate with **PR-AUC** + AUROC rather than accuracy.
-- **Split**: group by patient (file); keep sites in mind (Section 8).
+## 스모크 파이프라인에 대한 함의
+- **윈도우 크기**: 환자 길이 중앙값은 **38시간**; **~8–12시간** 윈도우면 대다수 환자를 유지(97%가 ≥12시간)하면서 실시간 조기경보에 충분히 짧다. 더 긴 윈도우(24–48시간)는 짧은 체류 환자를 많이 버린다 — 위에서 측정한 트레이드오프.
+- **결측 전략**: **0으로 채우지 말 것.** 검사는 >90% 결측; 피처별 **결측 마스크** + 활력징후는 환자 내 **forward-fill**(과거→미래만, 누수 없음); 스모크 실행에선 가장 쓸모없는 초희소 검사는 **드롭** 고려.
+- **불균형 / pos_weight**: 양성 행이 전체 시간의 **1.798%**뿐 → 시작점으로 **`pos_weight` ≈ 55**(음성/양성 비율) 사용, 평가는 정확도 대신 **PR-AUC** + AUROC로.
+- **분할**: 환자(파일) 단위 그룹화; 사이트도 염두에 둘 것(§8).

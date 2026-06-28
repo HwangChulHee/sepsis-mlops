@@ -1,0 +1,11 @@
+# H4d-b — Grafana dashboard provider (loads JSON from the path below).
+apiVersion: 1
+providers:
+  - name: sepsis-drift
+    orgId: 1
+    folder: sepsis
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/dashboards

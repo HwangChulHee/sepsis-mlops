@@ -19,6 +19,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from sepsis import config as C
+from sepsis.drift.window import get_window
 from sepsis.serve import metrics
 from sepsis.serve.bundle import load_bundle
 from sepsis.serve.predictor import StatefulPredictor
@@ -62,6 +63,9 @@ def predict(req: PredictRequest) -> dict:
     t0 = time.perf_counter()
     out = s["pred"].predict(req.patient_id, row)
     metrics.record(time.perf_counter() - t0, out["p"], out["alarm"], row, s["cols"])
+    # H4d-b: collect (patient_id, raw_row) for drift monitoring — separate store from the
+    # predictor's per-patient hidden state; light (no evidently). Serving behavior unchanged.
+    get_window().add(req.patient_id, row)
     return {"patient_id": req.patient_id, "p": out["p"], "alarm": out["alarm"],
             "featureset": s["bundle"].featureset}
 

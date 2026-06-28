@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "MLOps skeleton for real-time sepsis early warning (PhysioNet/CinC 2019)"
 requires-python = ">=3.12"
 dependencies = [
+    "evidently>=0.7.21",
     "fastapi>=0.138.1",
     "httpx>=0.28.1",
     "lightgbm>=4.6.0",

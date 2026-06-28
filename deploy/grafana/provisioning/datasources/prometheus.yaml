@@ -1,0 +1,8 @@
+# H4d-b — Grafana datasource (standard, no external repo). Prometheus scrapes serving /metrics.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true

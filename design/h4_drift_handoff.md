@@ -3,7 +3,6 @@
 > **설계 근거**: [`h4_drift_decisions.md`](h4_drift_decisions.md)(v2, 검토 PASS `3eb98bd`). 실행 명세로 번역.
 > **워크플로우**: [`WORKFLOW.md`](WORKFLOW.md). 자립형(인프라·도구 버전 인라인).
 > **개정 이력**
-> **개정 이력**
 > - **v2 (2026-06-28)** — 핸드오프 검토 `25d490b`의 HOLD 2건 + 비차단 반영
 >   - HOLD 1(pid 배관): 수집 훅이 `(patient_id, raw_row)`를 받도록 — app.predict가 pid 적재, window가 pid로 환자별 집계(현재 record/predict에 pid 없어 "환자당 1관측" 구현 불가했음).
 >   - HOLD 2(reference 단위 + Evidently KS 폴백): reference도 current와 **동일 환자당 요약** 단위로 산출(단위 일치 assert). Evidently `num_stattest`를 거리지표로 **명시 고정**(환자 수백이면 기본이 KS로 폴백 → 결정 3 위반 방지).

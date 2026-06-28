@@ -3,7 +3,6 @@
 > **설계 근거**: [`h4_serving_decisions.md`](h4_serving_decisions.md)(v2, 검토 PASS `b51cda6`). 실행 명세로 번역.
 > **워크플로우**: [`WORKFLOW.md`](WORKFLOW.md). 자립형(CC가 pdm-mlops 못 봄 → 인프라 전부 인라인).
 > **개정 이력**
-> **개정 이력**
 > - **v2 (2026-06-28)** — 핸드오프 검토 `b2655d7`의 HOLD 2건 + 비차단 반영
 >   - HOLD 1(API 결측 계약): pydantic 피처 `Optional[float]=None`, 누락/null→`np.nan`(0/평균 금지 — skew 진입로 차단). PASS #2에 결측 행(선두·중간) bit-동일 케이스.
 >   - HOLD 2(상태 동시성/replica): **replicas=1 + 환자별 직렬화(per-pid lock)** 기본(또는 Redis 공유저장소 옵션). PASS #4를 "동시 같은-환자 요청 무결"로 강화. 실패모드에 상태저장소 장애·out-of-order·미등록 pid 추가.

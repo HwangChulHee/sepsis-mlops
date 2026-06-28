@@ -33,6 +33,13 @@ class GRUm2m(nn.Module):
         out, _ = self.gru(x)
         return self.head(self.drop(out)).squeeze(-1)
 
+    def forward_state(self, x: torch.Tensor, h: torch.Tensor | None = None):
+        """Stateful forward for streaming (H4 serving). x:(B,T,F), h:(num_layers,B,hidden)
+        or None (zeros). Returns (logits (B,T), h_n). Causal: carrying h across calls is
+        numerically identical to re-feeding 1..t (unidirectional GRU). Use .eval()."""
+        out, h_n = self.gru(x, h)
+        return self.head(self.drop(out)).squeeze(-1), h_n
+
 
 def _train_epoch(model, data, loss_fn, opt, batch_size, seed, prog, ep, max_ep, nb):
     model.train()

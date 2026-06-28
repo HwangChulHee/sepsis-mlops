@@ -1,7 +1,7 @@
 # H4-드리프트 설계결정문서 (DDD) — covariate 드리프트 감시
 
 > **설계 근거**: H4-서빙 위. `serve/metrics.py`의 입력 피처 히스토그램·결측 카운터(covariate 드리프트 토대) + A-train 분포(H1 동결)를 기준으로 감시. 다음(H4-재학습)의 트리거를 만든다.
-> **워크플로우·출처등급**: [`WORKFLOW.md`](WORKFLOW.md). 검토(`h4_drift_review.md`) 통과 후 핸드오프로.
+> **워크플로우·출처등급**: [`WORKFLOW.md`](../../WORKFLOW.md). 검토(`h4_drift_review.md`) 통과 후 핸드오프로.
 > **상태**: 초안 — 레드팀 검토 전.
 > **개정 이력**
 > - **v2 (2026-06-28)** — review `1db0500`의 HOLD 2건 + 비차단 반영

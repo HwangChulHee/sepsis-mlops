@@ -124,19 +124,28 @@
 
 ## 7. 파일 네이밍 & 디렉토리
 
+**스테이지별 폴더**로 묶는다 — 한 H의 라이프사이클 문서(decisions → review → handoff → handoff_review)가 한 폴더에 모인다. 폴더가 단계 맥락을 주므로 파일명에 `hN_` 접두는 붙이지 않는다.
+
 ```
 design/
-├── WORKFLOW.md        # 이 문서 (규칙, 한 번 만들고 재사용)
-├── h1_decisions.md    # H1 설계결정문서(DDD)
-├── h1_review.md       # H1 검토 결과 (Claude Code 레드팀이 채움)
-├── h1_handoff.md      # H1 구현 핸드오프
-├── h2_decisions.md
-├── h2_review.md
-├── h2_handoff.md
-└── ...
+├── WORKFLOW.md          # 이 문서 (규칙, 한 번 만들고 재사용)
+├── README.md            # 인덱스 맵 (스테이지·상태·결정 한눈에)
+├── h1/
+│   ├── decisions.md     # 설계결정문서(DDD)
+│   ├── review.md        # DDD 레드팀 검토 결과
+│   ├── handoff.md       # 구현 핸드오프
+│   └── handoff_review.md # 핸드오프 레드팀 검토 결과
+├── h2/  …  (동일 4종)
+├── h3/  …
+└── h4/                  # H4는 묶음 → 하위 스테이지로 중첩
+    ├── serving/  (decisions·review·handoff·handoff_review)
+    ├── drift/    …
+    └── retrain/  …
 ```
 
-단계(`h1`)를 앞에 두어 한 H의 세 문서(decisions/review/handoff)가 알파벳순으로 붙게 한다.
+- 각 스테이지 폴더 안의 4종 문서: **decisions**(설계 정당화·단일 진실원), **review**(DDD 게이트), **handoff**(자립형 실행 명세), **handoff_review**(실행 명세 게이트).
+- 문서 간 링크는 **상대 경로**: 같은 폴더는 `decisions.md`, 다른 스테이지는 `../h2/decisions.md`, 루트 규칙은 `../WORKFLOW.md`(H4 하위는 `../../WORKFLOW.md`).
+- 새 스테이지/하위 스테이지를 추가하면 폴더 하나를 새로 만들고 4종을 채운다.
 
 ### 레포 전체에서의 위치
 

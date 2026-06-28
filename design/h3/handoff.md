@@ -1,7 +1,7 @@
 # H3 구현 핸드오프 — cross-site 평가 (B 개봉)
 
-> **설계 근거**: [`h3_decisions.md`](h3_decisions.md)(v2, 검토 PASS `8a7887f`). 실행 명세로 번역.
-> **워크플로우**: [`WORKFLOW.md`](WORKFLOW.md). 자립형이며, 검토(`h3_handoff_review.md`) 통과 후 실행.
+> **설계 근거**: [`h3_decisions.md`](decisions.md)(v2, 검토 PASS `8a7887f`). 실행 명세로 번역.
+> **워크플로우**: [`WORKFLOW.md`](../WORKFLOW.md). 자립형이며, 검토(`h3_handoff_review.md`) 통과 후 실행.
 > **개정 이력**
 > - **v2 (2026-06-28)** — 핸드오프 검토 `66f1a0f`의 HOLD 1건 + 비차단 3건 반영
 >   - HOLD: H3-c **마스크 채널 구성 순서 인라인**(mask=RAW NaN·ffill 이전 생성 → 피처 정규화 → concat, 마스크는 z-score 제외) + PASS에 **all-ones 붕괴 assert**(채널 평균==관측률). ffill 후 생성하면 전부 1이 되어 "마스크 효과 없음" 거짓 결론 → H3 산출물 무력화 방지.

@@ -1,7 +1,7 @@
 # H2 구현 핸드오프 — 학습 (utility · 트리 · GRU · 선정)
 
-> **설계 근거**: [`h2_decisions.md`](h2_decisions.md)(v2, 검토 PASS `e523b07`). 본 문서는 그 결정을 실행 명세로 번역.
-> **워크플로우**: [`WORKFLOW.md`](WORKFLOW.md). 자립형이며, 검토(`h2_handoff_review.md`) 통과 후 실행.
+> **설계 근거**: [`h2_decisions.md`](decisions.md)(v2, 검토 PASS `e523b07`). 본 문서는 그 결정을 실행 명세로 번역.
+> **워크플로우**: [`WORKFLOW.md`](../WORKFLOW.md). 자립형이며, 검토(`h2_handoff_review.md`) 통과 후 실행.
 > **개정 이력**
 > - **v2 (2026-06-28)** — 핸드오프 검토 `cec48cf`의 HOLD 3건 반영
 >   - HOLD 1: H2-a에 **utility 계산 규칙 완전 인라인** — t_sepsis 유도(`첫양성+6`), U_TP/U_FN piecewise(절편·하한클리핑·FN시작점), best/inaction 정의, **14행 기대값 표 인라인**(research/03 참조 제거 → 자립).

@@ -1,7 +1,7 @@
 # H1 구현 핸드오프 — 전처리·피처·분할
 
-> **설계 근거**: [`h1_decisions.md`](h1_decisions.md) (v4, 전 항목 PASS). 본 문서는 그 결정들을 **실행 명세**로 번역한 것이다.
-> **워크플로우**: [`WORKFLOW.md`](WORKFLOW.md). 이 핸드오프는 자립형이며, 검토(`h1_handoff_review.md`) 통과 후 실행한다.
+> **설계 근거**: [`h1_decisions.md`](decisions.md) (v4, 전 항목 PASS). 본 문서는 그 결정들을 **실행 명세**로 번역한 것이다.
+> **워크플로우**: [`WORKFLOW.md`](../WORKFLOW.md). 이 핸드오프는 자립형이며, 검토(`h1_handoff_review.md`) 통과 후 실행한다.
 > **개정 이력**
 > - **v3 (2026-06-27)** — 검토 v2(`0ec8aca`) 비차단 주의 반영: H1-b PASS#9 양성비율 허용오차 완화(통합 1.8%±0.3%p → plausible 1%~4% + train-only 산출 + pos_weight 유한·양수). setA-only A-train이 상단에 spurious 정지하던 오발 제거.
 > - **v2 (2026-06-27)** — 핸드오프 검토 `1734bdb`의 HOLD 2건 + 게이트 크리스프 권고 반영

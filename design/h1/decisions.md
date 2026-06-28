@@ -14,7 +14,7 @@
 > - **v2 (2026-06-27)** — review `901c37f`의 HOLD 3 + 추가 5 + 미결 2 반영(검사 9종, A→B 3분할, 절단 진단·이연 등).
 > - v1·v2 및 반려 사유는 git history와 `h1_review.md` 참조.
 >
-> 워크플로우·출처등급 범례: [`WORKFLOW.md`](WORKFLOW.md) 참고.
+> 워크플로우·출처등급 범례: [`WORKFLOW.md`](../WORKFLOW.md) 참고.
 
 ## 한 줄 요약
 

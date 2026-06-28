@@ -1,7 +1,7 @@
 # H4-재학습 구현 핸드오프 — watch→action + human-in-the-loop 재학습 (루프 폐쇄)
 
-> **설계 근거**: [`h4_retrain_decisions.md`](h4_retrain_decisions.md)(v2, 검토 PASS `1b0a1c8`). 실행 명세로 번역.
-> **워크플로우**: [`WORKFLOW.md`](WORKFLOW.md). 자립형. **H4 마지막 — MLOps 루프(서빙→드리프트→재학습→새 번들→서빙) 폐쇄.**
+> **설계 근거**: [`h4_retrain_decisions.md`](decisions.md)(v2, 검토 PASS `1b0a1c8`). 실행 명세로 번역.
+> **워크플로우**: [`WORKFLOW.md`](../../WORKFLOW.md). 자립형. **H4 마지막 — MLOps 루프(서빙→드리프트→재학습→새 번들→서빙) 폐쇄.**
 > **개정 이력**
 > - **v2 (2026-06-28)** — 핸드오프 검토 `00375b5`의 HOLD 1건(두 갈래) + 비차단 반영
 >   - HOLD (1) 버전드↔서빙 정합: `gru_vitals@<ts>` 버전 dir이 H4s-c 하드코딩(`gru_vitals`)을 깸 → **`gru_vitals`를 활성 버전 별칭으로 유지**(기존 서빙 미파괴), 교체/롤백 = 별칭이 가리키는 버전 전환. "기존 서빙 미파괴" assert.

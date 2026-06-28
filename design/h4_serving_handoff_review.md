@@ -64,3 +64,42 @@
 ## 다음 단계
 
 **HOLD 2건(API 결측→NaN 계약 · 상태 동시성/replica) 해소 후 재검토.** 전부 PASS 전 구현(코드·디렉토리 생성) 금지(WORKFLOW §5·§6).
+
+---
+
+## 재검토 v2
+
+- **대상**: `design/h4_serving_handoff.md` v2 (개정 이력 v2 — HOLD 2 + 비차단)
+- **검토일**: 2026-06-28
+- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 2건 해소, 비차단 반영, 신규 모순 없음. → **다음은 H4s-a 구현 착수.** (사소한 cosmetic nit 1건.)
+
+### 회귀 검증 (요청 4항목)
+
+**1. HOLD-1 (API 결측 계약) → ✅ 해소.**
+- `app.py` 계약(`h4_serving_handoff:76`): "피처 `Optional[float] = None`. **누락·null → `np.nan`**(절대 0/평균 아님 — 0이면 0-fill 위반, 평균이면 ffill 우회 → 둘 다 skew)." skew 진입로 차단.
+- PASS #2(`:63`): "**결측 행(선두·중간) 포함 케이스**로 검증, 0-fill 부재, 누락 입력이 np.nan으로 들어옴." 결측 경로가 게이트에 박힘. ✓
+
+**2. HOLD-2 (상태 동시성/replica) → ✅ 해소.**
+- predictor(`:59`): per-pid 직렬화(**per-pid lock**), 기본 **replicas=1**(in-memory), 확장 시 **Redis** 옵션 — 동시성·cross-replica 둘 다 다룸.
+- PASS #4(`:65`): "두 환자 교차 **AND 같은 환자 동시 요청에도 hidden state 무결**(per-pid lock 검증). replicas=1 전제(또는 Redis)." 순차→동시로 강화.
+- 배포 정합(`:95`): Deployment **replicas=1**(stateful in-memory 전제, 확장 Redis).
+- 실패 모드(`:117-118`): "같은 환자 동시 요청 레이스 / 상태저장소 장애 / out-of-order 시점 도착 / 미등록 pid 요청 / replicas>1에서 in-memory 상태 분리" 전부 추가. ✓
+
+**3. 비차단 → ✅ 반영.**
+- 인프라 자립(`:98`): "표준 K8s 리소스로 **본 토막에서 실제 YAML 작성**, pdm 등 외부 레포 참조·인용 금지 — 표준 기술만으로 자립." "pdm 기억" 문구 삭제. (Dockerfile/Deployment(probe→`/health`)/Service/ConfigMap 스펙 구체 → CC가 표준 YAML 생성 가능, PASS는 docker build+kubectl dry-run으로 검증.)
+- AST grep 대상(`:25`): `src/sepsis/serve/*.py` 명시.
+- frozen immutable(`:23`): "로드 후 immutable".
+- 입력분포(`:78`): "per-feature 히스토그램".
+
+**4. 신규 모순 → 없음.**
+- **replicas=1 ↔ 결정 8 K8s**: replicas=1도 정상 Deployment — 결정 8(Deployment/Service/ConfigMap)과 충돌 없음. 확장은 Redis로 문서화(프로토타입 범위 정합).
+- **replicas=1 ↔ 번들 원자성**: 독립 관심사(상태 일관성 vs 단일 run 로드), 충돌 없음.
+- **ConfigMap run 교체 ↔ replicas=1**: RUN 변경+재시작, 단일 파드가 새 번들 원자 로드. 정합.
+
+### Cosmetic nit (비차단)
+- `:5-6` "**개정 이력**" 헤더가 2줄 중복 — 한 줄 삭제(사소).
+
+### 1차 확인 (v1, 변동 없음)
+stateful==전체 재입력(단방향 GRU+점화식, `forward`가 h_n 버림→stateful forward 추가) · ffill 스트리밍==배치(`missing.py:22-35`) · 번들=단일 run(H3-b 로드) · pdm는 표준 기술로 자립 인라인 — [확인됨: 코드 대조].
+
+**결론: HOLD 0 → H4s-a(`serve/bundle.py`·`preprocess_rt.py`·`predictor.py`) 구현 착수.** cosmetic nit 1건은 구현 중 흡수.

@@ -56,30 +56,22 @@ def utility_per_timestep(labels: np.ndarray, predictions: np.ndarray) -> np.ndar
     After t_sepsis+dt_late: 0. Non-septic: predict 1 -> U_FP, predict 0 -> U_TN(0).
     """
     labels = np.asarray(labels)
-    predictions = np.asarray(predictions)
+    pred = np.asarray(predictions).astype(bool)
     n = labels.shape[0]
-    u = np.zeros(n, dtype=np.float64)
 
     t_sepsis = onset_index(labels)
-    if t_sepsis is None:  # non-septic: FP penalty on any positive prediction
-        u[predictions.astype(bool)] = U_FP
-        return u
+    if t_sepsis is None:  # non-septic: FP penalty on any positive prediction, else U_TN(0)
+        return np.where(pred, U_FP, U_TN).astype(np.float64)
 
-    for t in range(n):
-        if t > t_sepsis + DT_LATE:
-            continue  # window closed -> 0 regardless of prediction
-        off = t - t_sepsis
-        if predictions[t]:  # TP branch
-            if t <= t_sepsis + DT_OPTIMAL:
-                u[t] = max(M1 * off + B1, U_FP)   # rise, floor-clipped to U_FP (too early)
-            else:
-                u[t] = M2 * off + B2               # fall
-        else:               # FN branch
-            if t <= t_sepsis + DT_OPTIMAL:
-                u[t] = 0.0
-            else:
-                u[t] = M3 * off + B3
-    return u
+    off = np.arange(n) - t_sepsis              # offset from onset
+    rise = off <= DT_OPTIMAL                    # early/optimal region (else fall region)
+    in_window = off <= DT_LATE                  # after this -> 0 regardless of prediction
+
+    tp = np.where(rise, np.maximum(M1 * off + B1, U_FP), M2 * off + B2)  # TP: rise(clip)/fall
+    tp = np.where(in_window, tp, 0.0)
+    fn = np.where(rise, 0.0, M3 * off + B3)     # FN: 0 before optimal, then ramp down
+    fn = np.where(in_window, fn, 0.0)
+    return np.where(pred, tp, fn).astype(np.float64)
 
 
 def patient_utility(labels: np.ndarray, predictions: np.ndarray) -> float:

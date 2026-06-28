@@ -50,3 +50,30 @@ def best_iteration(model_name: str, model) -> int:
     if model_name == "xgboost":
         return int(getattr(model, "best_iteration", -1) or -1)
     return int(getattr(model, "best_iteration_", -1) or -1)
+
+
+# --- native (re)load for H3 cross-site scoring ---
+def load_booster(model_name: str, path: str):
+    """Load a native saved booster (.ubj / .txt)."""
+    if model_name == "xgboost":
+        import xgboost as xgb
+        b = xgb.Booster()
+        b.load_model(path)
+        return b
+    if model_name == "lightgbm":
+        import lightgbm as lgb
+        return lgb.Booster(model_file=path)
+    raise ValueError(f"unknown model {model_name!r}")
+
+
+def booster_predict(booster, model_name: str, X: np.ndarray, best_iter: int) -> np.ndarray:
+    """Probability of the positive class, limited to the early-stopping best iteration
+    (matches the H2-selected model)."""
+    if model_name == "xgboost":
+        import xgboost as xgb
+        rng = (0, int(best_iter) + 1) if best_iter and best_iter >= 0 else None
+        return booster.predict(xgb.DMatrix(X), iteration_range=rng).astype(np.float64)
+    if model_name == "lightgbm":
+        ni = int(best_iter) if best_iter and best_iter >= 0 else None
+        return booster.predict(X, num_iteration=ni).astype(np.float64)
+    raise ValueError(f"unknown model {model_name!r}")

@@ -1,9 +1,13 @@
-"""H4s-c — export a serving bundle from MLflow to a portable dir (for the container).
+"""H4s-c/H4r-c — export a serving bundle from MLflow to a portable VERSIONED dir.
 
 MLflow's sqlite file store records ABSOLUTE host artifact paths, so the DB is not portable
-into a container. This exports gru/<featureset> to deploy/artifacts/gru_<featureset>/
-(model.pt + pre.npz + meta.json) — a self-contained dir the image COPYs and the app loads
-via bundle.load_bundle_from_dir (no MLflow at runtime). One dir = one run = atomic bundle.
+into a container. This exports gru/<featureset> to a VERSIONED dir
+deploy/artifacts/gru_<featureset>@<version>/ (model.pt + pre.npz + meta.json + reference.npz)
+and maintains an ACTIVE ALIAS deploy/artifacts/gru_<featureset> (relative symlink → active
+version) so H4s-c serving (which hardcodes gru_<featureset>) keeps working while H4r-c can
+add new versions + roll back without overwriting the live bundle. One version dir = one
+atomic bundle (model+stats+τ+reference, same version). reference.npz is in the bundle so it
+moves/rolls back WITH the model (drift monitor reads the active alias's reference.npz).
 
     uv run python -m scripts.h4s_export_bundle               # exports vitals + vitals_labs
     uv run python -m scripts.h4s_export_bundle vitals        # just one
@@ -12,8 +16,10 @@ via bundle.load_bundle_from_dir (no MLflow at runtime). One dir = one run = atom
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -24,9 +30,26 @@ OUT_ROOT = C.ROOT / "deploy" / "artifacts"
 TRACKING = f"sqlite:///{C.ROOT}/mlflow.db"
 
 
-def export(featureset: str) -> Path:
+def set_alias(root: Path, alias: str, target_name: str) -> None:
+    """Point alias -> target_name (relative symlink), atomically when possible.
+
+    Migrates a legacy real directory at the alias path to a symlink. os.replace gives an
+    atomic swap for the symlink->symlink case (롤백/교체 원자성)."""
+    root = Path(root)
+    link = root / alias
+    tmp = root / (alias + ".swap")
+    if tmp.is_symlink() or tmp.exists():
+        tmp.unlink()
+    os.symlink(target_name, tmp)                       # relative target (same dir)
+    if link.exists() and link.is_dir() and not link.is_symlink():
+        shutil.rmtree(link)                            # migrate legacy real dir
+    os.replace(tmp, link)                              # atomic for symlink / nonexistent
+
+
+def export(featureset: str, version: str | None = None, *, link_alias: bool = True) -> Path:
     import mlflow
     from mlflow.artifacts import download_artifacts
+    from sepsis.drift import reference as R
 
     mlflow.set_tracking_uri(TRACKING)
     cl = mlflow.tracking.MlflowClient()
@@ -46,16 +69,22 @@ def export(featureset: str) -> Path:
     npz = fetch(f"preprocess/pre_{featureset}.npz")
     pt = fetch(f"model/gru_{featureset}.pt")
 
-    out = OUT_ROOT / f"gru_{featureset}"
-    if out.exists():
+    version = version or time.strftime("v%Y%m%d-%H%M%S")
+    meta["version"] = version
+    out = OUT_ROOT / f"gru_{featureset}@{version}"
+    if out.exists():                                   # re-export of THIS version only (others kept)
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(pt, out / "model.pt")
     shutil.copyfile(npz, out / "pre.npz")
     (out / "meta.json").write_text(json.dumps(meta, indent=2))
+    # reference IN the bundle (baseline = A-train), so it moves/rolls back with the model
+    R.save_reference(R.build_reference(featureset), out / "reference.npz")
+    if link_alias:
+        set_alias(OUT_ROOT, f"gru_{featureset}", out.name)
     z = np.load(out / "pre.npz")  # sanity
-    print(f"[export] gru_{featureset} -> {out.relative_to(C.ROOT)} "
-          f"(run {run_id[:8]}, input_dim={meta['input_dim']}, mu{z['mu'].shape})")
+    print(f"[export] gru_{featureset}@{version} -> {out.relative_to(C.ROOT)} "
+          f"(run {run_id[:8]}, input_dim={meta['input_dim']}, mu{z['mu'].shape}); alias gru_{featureset}")
     return out
 
 

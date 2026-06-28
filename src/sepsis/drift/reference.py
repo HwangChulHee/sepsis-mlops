@@ -47,17 +47,12 @@ def _low_card(summary: np.ndarray) -> np.ndarray:
     return out
 
 
-def build_reference(featureset: str = "vitals", *, val_frac: float = 0.2,
-                    seed: int = 42) -> Reference:
-    """Build the frozen reference from A-train (cross_site split)."""
+def build_reference_from_pids(featureset: str, pids: list[str], pid2site: dict) -> Reference:
+    """Build a reference over an arbitrary patient set (e.g. A-train+B-retrain after retrain)."""
     idx = C.featureset_indices(featureset)
     cols = C.featureset_columns(featureset)
-    manifest = cache_mod.load_manifest()
-    pid2site = dict(zip(manifest.pid, manifest.site))
-    a_train = split_mod.split_cross_site(manifest, val_frac=val_frac, seed=seed)["A_train"]
-
     rows = []
-    for pid in a_train:
+    for pid in pids:
         feats, _ = cache_mod.load_feats_labels(pid2site[pid], pid)
         rows.append(patient_last_summary(feats[:, idx].astype(np.float32)))
     summary = np.vstack(rows).astype(np.float32)           # (n_patients, F)
@@ -65,6 +60,15 @@ def build_reference(featureset: str = "vitals", *, val_frac: float = 0.2,
     return Reference(featureset=featureset, cols=cols, unit="patient_last",
                      summary=summary, missing_rate=missing_rate,
                      low_card=_low_card(summary), n_patients=summary.shape[0])
+
+
+def build_reference(featureset: str = "vitals", *, val_frac: float = 0.2,
+                    seed: int = 42) -> Reference:
+    """Build the frozen reference from A-train (cross_site split)."""
+    manifest = cache_mod.load_manifest()
+    pid2site = dict(zip(manifest.pid, manifest.site))
+    a_train = split_mod.split_cross_site(manifest, val_frac=val_frac, seed=seed)["A_train"]
+    return build_reference_from_pids(featureset, a_train, pid2site)
 
 
 def save_reference(ref: Reference, path: Path | None = None) -> Path:

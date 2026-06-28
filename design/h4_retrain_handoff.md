@@ -3,7 +3,6 @@
 > **설계 근거**: [`h4_retrain_decisions.md`](h4_retrain_decisions.md)(v2, 검토 PASS `1b0a1c8`). 실행 명세로 번역.
 > **워크플로우**: [`WORKFLOW.md`](WORKFLOW.md). 자립형. **H4 마지막 — MLOps 루프(서빙→드리프트→재학습→새 번들→서빙) 폐쇄.**
 > **개정 이력**
-> **개정 이력**
 > - **v2 (2026-06-28)** — 핸드오프 검토 `00375b5`의 HOLD 1건(두 갈래) + 비차단 반영
 >   - HOLD (1) 버전드↔서빙 정합: `gru_vitals@<ts>` 버전 dir이 H4s-c 하드코딩(`gru_vitals`)을 깸 → **`gru_vitals`를 활성 버전 별칭으로 유지**(기존 서빙 미파괴), 교체/롤백 = 별칭이 가리키는 버전 전환. "기존 서빙 미파괴" assert.
 >   - HOLD (2) reference 롤백 불일치: reference가 단일 파일 덮어쓰기 → 롤백 시 모델만 옛 버전·reference는 새 분포 → 거짓 드리프트 → **reference를 번들 버전에 키잉**(번들 안 포함, 모델과 함께 이동). 롤백 시 모델·reference 함께 복원. 실패모드에 "롤백 후 reference-모델 불일치".

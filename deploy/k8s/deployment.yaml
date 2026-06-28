@@ -1,0 +1,58 @@
+# H4s-c — serving Deployment. replicas=1 is REQUIRED: per-patient hidden state is held
+# in-memory (StatefulPredictor); >1 replica would split a patient's stream across pods and
+# break causal continuity. Scaling out needs a shared store (Redis) first (deferred).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sepsis-serving
+  labels:
+    app: sepsis-serving
+spec:
+  replicas: 1                       # in-memory per-patient state -> single replica
+  selector:
+    matchLabels:
+      app: sepsis-serving
+  template:
+    metadata:
+      labels:
+        app: sepsis-serving
+    spec:
+      containers:
+        - name: serving
+          image: sepsis-serving:h4s
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            # RUN (ConfigMap) -> SERVE_BUNDLE_DIR via $(VAR) expansion -> atomic bundle dir.
+            - name: RUN
+              valueFrom:
+                configMapKeyRef:
+                  name: sepsis-serving-config
+                  key: RUN
+            - name: SERVE_BUNDLE_DIR
+              value: "/app/deploy/artifacts/$(RUN)"
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: sepsis-serving-config
+                  key: LOG_LEVEL
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"

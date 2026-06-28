@@ -29,8 +29,13 @@ _S: dict = {}
 
 def state() -> dict:
     if "pred" not in _S:
-        fs = os.environ.get("SERVE_FEATURESET", "vitals")
-        b = load_bundle(fs)
+        # container: SERVE_BUNDLE_DIR (= /app/deploy/artifacts/$RUN, set via ConfigMap) ->
+        # exported dir, no MLflow. dev: fall back to MLflow by featureset.
+        bundle_dir = os.environ.get("SERVE_BUNDLE_DIR")
+        if bundle_dir:
+            b = load_bundle(artifacts_dir=bundle_dir)
+        else:
+            b = load_bundle(os.environ.get("SERVE_FEATURESET", "vitals"))
         _S.update(bundle=b, pred=StatefulPredictor(b), cols=C.featureset_columns(b.featureset))
     return _S
 

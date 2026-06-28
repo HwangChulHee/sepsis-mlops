@@ -7,3 +7,6 @@ mlruns/
 mlartifacts/
 mlflow.db
 *.egg-info/
+
+# H4s-c: exported serving bundles (derived from MLflow via scripts/h4s_export_bundle.py)
+deploy/artifacts/

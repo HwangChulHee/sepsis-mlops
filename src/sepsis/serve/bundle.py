@@ -41,9 +41,55 @@ def _freeze(a: np.ndarray) -> np.ndarray:
     return a
 
 
-def load_bundle(featureset: str = "vitals", *, tracking_uri: str | None = None,
-                experiment: str = "h2") -> Bundle:
-    """Atomically load the gru/<featureset> bundle from a SINGLE MLflow run."""
+def _assemble(run_id: str, meta: dict, z, state_dict) -> Bundle:
+    """Build + consistency-check a Bundle from raw pieces (shared by both loaders)."""
+    featureset = meta["featureset"]
+    input_dim = int(meta["input_dim"])
+    hp = meta["hp"]
+    model = GRUm2m(input_dim, hp["hidden"], hp["layers"], hp["dropout"])
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    mu, sigma = _freeze(z["mu"]), _freeze(z["sigma"])
+    fill_mean = _freeze(z["fill_mean"])
+    clip_lo, clip_hi = _freeze(z["clip_lo"]), _freeze(z["clip_hi"])
+
+    # --- atomicity / consistency guard (불일치 번들 = skew → 정지) ---
+    F = len(C.featureset_columns(featureset))
+    errors = []
+    if input_dim != F:
+        errors.append(f"input_dim {input_dim} != featureset size {F} (mask-OFF expects F)")
+    for name, arr in (("mu", mu), ("sigma", sigma), ("fill_mean", fill_mean),
+                      ("clip_lo", clip_lo), ("clip_hi", clip_hi)):
+        if arr.shape != (F,):
+            errors.append(f"{name} shape {arr.shape} != ({F},)")
+    if model.gru.input_size != input_dim:
+        errors.append(f"model input_size {model.gru.input_size} != input_dim {input_dim}")
+    if errors:
+        raise ValueError(f"bundle mismatch (run {run_id}): " + "; ".join(errors))
+
+    return Bundle(run_id=run_id, featureset=featureset, input_dim=input_dim,
+                  tau=float(meta["tau"]), hp=hp, mu=mu, sigma=sigma, fill_mean=fill_mean,
+                  clip_lo=clip_lo, clip_hi=clip_hi, model=model)
+
+
+def load_bundle_from_dir(artifacts_dir) -> Bundle:
+    """Load an exported bundle dir (meta.json + pre.npz + model.pt). Used in the container
+    (no MLflow). The dir IS one exported run -> atomicity is intrinsic."""
+    d = Path(artifacts_dir)
+    meta = json.loads((d / "meta.json").read_text())
+    z = np.load(d / "pre.npz")
+    state = torch.load(d / "model.pt", weights_only=True)
+    return _assemble(meta.get("run_id", str(d.name)), meta, z, state)
+
+
+def load_bundle(featureset: str = "vitals", *, artifacts_dir: str | None = None,
+                tracking_uri: str | None = None, experiment: str = "h2") -> Bundle:
+    """Load the gru/<featureset> bundle. If artifacts_dir is given, load from that exported
+    dir (container/portable); else atomically from a SINGLE MLflow run (local/dev)."""
+    if artifacts_dir is not None:
+        return load_bundle_from_dir(artifacts_dir)
+
     import mlflow
     from mlflow.artifacts import download_artifacts
 
@@ -68,33 +114,6 @@ def load_bundle(featureset: str = "vitals", *, tracking_uri: str | None = None,
     meta = json.loads(Path(fetch("preprocess.json")).read_text())
     z = np.load(fetch(f"preprocess/pre_{featureset}.npz"))
     state = torch.load(fetch(f"model/gru_{featureset}.pt"), weights_only=True)
-
-    input_dim = int(meta["input_dim"])
-    hp = meta["hp"]
-    model = GRUm2m(input_dim, hp["hidden"], hp["layers"], hp["dropout"])
-    model.load_state_dict(state)
-    model.eval()
-
-    mu, sigma = _freeze(z["mu"]), _freeze(z["sigma"])
-    fill_mean = _freeze(z["fill_mean"])
-    clip_lo, clip_hi = _freeze(z["clip_lo"]), _freeze(z["clip_hi"])
-
-    # --- atomicity / consistency guard (불일치 번들 = skew → 정지) ---
-    F = len(C.featureset_columns(featureset))
-    errors = []
     if meta["featureset"] != featureset:
-        errors.append(f"json featureset {meta['featureset']!r} != {featureset!r}")
-    if input_dim != F:
-        errors.append(f"input_dim {input_dim} != featureset size {F} (mask-OFF expects F)")
-    for name, arr in (("mu", mu), ("sigma", sigma), ("fill_mean", fill_mean),
-                      ("clip_lo", clip_lo), ("clip_hi", clip_hi)):
-        if arr.shape != (F,):
-            errors.append(f"{name} shape {arr.shape} != ({F},)")
-    if model.gru.input_size != input_dim:
-        errors.append(f"model input_size {model.gru.input_size} != input_dim {input_dim}")
-    if errors:
-        raise ValueError(f"bundle mismatch (run {run_id}): " + "; ".join(errors))
-
-    return Bundle(run_id=run_id, featureset=featureset, input_dim=input_dim,
-                  tau=float(meta["tau"]), hp=hp, mu=mu, sigma=sigma, fill_mean=fill_mean,
-                  clip_lo=clip_lo, clip_hi=clip_hi, model=model)
+        raise ValueError(f"run featureset {meta['featureset']!r} != requested {featureset!r}")
+    return _assemble(run_id, meta, z, state)

@@ -13,11 +13,13 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import torch
-from sklearn.metrics import average_precision_score
 from torch import nn
 
 from sepsis import config as C
 from sepsis.data import sequence
+
+# sklearn is imported lazily inside evaluate() so the serving image (which only needs
+# GRUm2m / forward_state) does not require scikit-learn.
 
 
 class GRUm2m(nn.Module):
@@ -69,6 +71,7 @@ def evaluate(model, data, batch_size, loss_fn=None):
 
     Padding is excluded by slicing each sequence to its real length (validity mask).
     """
+    from sklearn.metrics import average_precision_score
     model.eval()
     per_labels, per_probs, ys, ps, vlosses = [], [], [], [], []
     for i in range(0, len(data), batch_size):

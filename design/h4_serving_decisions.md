@@ -3,6 +3,12 @@
 > **설계 근거**: H2 학습 아티팩트(GRU + A 동결 전처리·τ) + H1 전처리 모듈(`src/sepsis/data/`)을 **실시간 서빙**으로. H3 누수 규칙(A 동결 전처리·τ) 연장. 인프라는 pdm-mlops 스켈레톤 재활용.
 > **워크플로우·출처등급**: [`WORKFLOW.md`](WORKFLOW.md). 검토(`h4_serving_review.md`) 통과 후 핸드오프로.
 > **상태**: 초안 — 레드팀 검토 전.
+> **개정 이력**
+> - **v2 (2026-06-28)** — review `c3396c5`의 HOLD 1건 + 출처등급 정정 반영
+>   - HOLD: 결정 1 "model·featureset 독립 노브"(불일치 번들 = train-serving skew 통로) → **run 단위 원자적 선택**(model+featureset+μ/σ·fill·clip+τ+input_dim을 한 run에서 통째 로드). PASS #2에 번들 원자성 assert.
+>   - 정정: pdm-mlops `[확인됨]`→`[우리 경험]`(CC가 pdm 레포 못 봐 1차 확인 불가). 인프라는 핸드오프에 전부 인라인.
+>   - 비차단 흡수(핸드오프): ffill 상태 NaN 초기화 / stateful forward+환자별 격리 / frozen-only AST grep / 결정 7 입력분포 메트릭 / PASS #7 docker build+kubectl dry-run.
+> - v1: 초안.
 > **H4 분할**: 서빙(본 문서) → 드리프트 → 재학습. 각각 DDD→검토→핸드오프. 의존 순서(서빙돼야 감시, 감시돼야 재학습).
 
 ## 한 줄 요약
@@ -23,13 +29,13 @@ H2 GRU를 **실시간 서빙**한다 — 환자 시점 데이터가 스트리밍
 
 ## 결정 1: 서빙 대상 모델 — GRU(기본 vitals), 설정으로 교체 가능
 
-- **결정**: 서빙 모델 = **GRU**(B cross-site 최고). 기본 피처셋 = **vitals**(B에서 vitals_labs보다 전이 우수). 단 **모델·피처셋을 설정값으로 받아 갈아끼움**(config) — 피처셋 미결이므로 인프라가 교체를 지원. H2 저장 아티팩트(state_dict + 전처리통계 + τ) 로드.
+- **결정**: 서빙 모델 = **GRU**(B cross-site 최고). 기본 run = **gru/vitals**(B에서 vitals_labs보다 전이 우수). **설정은 단일 run을 선택**하고, 그 run에서 **model+featureset+전처리통계(μ/σ·fill·clip)+τ+input_dim을 원자적으로(통째) 로드** — model·featureset을 독립 노브로 두지 않는다(독립이면 불일치 번들 = train-serving skew). 교체는 `run=gru_vitals ↔ gru_vitals_labs`처럼 run 단위. H2 아티팩트가 이미 run 단위 번들이라 자연스러움.
 - **근거 + 출처등급**:
   - GRU가 A-val·B 모두 최고(B util 0.247 vs 트리 0.055) [확인됨: reports/h3_results.md].
   - vitals가 cross-site 전이 우수(gap 0.162 < vitals_labs 0.265) [확인됨: h3_results.md].
   - 피처셋 미결 → 교체 가능 설계가 "재설정 가능한 운영환경" 메시지 [우리 결정].
 - **고려한 대안**: 모델 하드코딩(교체 불가, 미결 피처셋과 모순). 앙상블(복잡도↑, 범위 외).
-- **검토 요청 항목**: 모델/피처셋 설정 교체가 전처리·input_dim까지 일관되게 바뀌는지.
+- **검토 요청 항목**: run 선택이 model+featureset+전처리+τ+input_dim을 **동일 run에서 원자적으로** 로드하는지(불일치 번들 불가).
 
 ---
 
@@ -67,7 +73,7 @@ H2 GRU를 **실시간 서빙**한다 — 환자 시점 데이터가 스트리밍
 ## 결정 5: API 설계 — FastAPI
 
 - **결정**: **FastAPI**. 엔드포인트: `POST /predict`(시점 데이터→위험확률+알람), `GET /health`. 환자 상태는 식별자로 관리. pydantic 입력 검증.
-- **근거 + 출처등급**: FastAPI = 경량·async·pydantic 검증 [우리 결정 / pdm-mlops 자산]. 
+- **근거 + 출처등급**: FastAPI = 경량·async·pydantic 검증 [우리 결정 · pdm-mlops 경험]. 
 - **고려한 대안**: Flask(async 약함), gRPC(범위 과함).
 - **미결/옵션**: 동기/배치 엔드포인트 추가는 핸드오프.
 - **검토 요청 항목**: 입력 스키마가 피처셋 교체와 호환되는지.
@@ -87,7 +93,7 @@ H2 GRU를 **실시간 서빙**한다 — 환자 시점 데이터가 스트리밍
 ## 결정 7: 관측성 훅 — Prometheus (다음 단계 토대)
 
 - **결정**: 서빙에 **Prometheus 메트릭** 노출(요청 수·지연·예측분포·알람률 등). 드리프트·재학습이 이 위에 올라감. Grafana 연동은 H4-드리프트.
-- **근거 + 출처등급**: 관측성이 운영 본체, pdm-mlops에서 Prometheus+Grafana 구축 경험 [확인됨: pdm-mlops 자산]. 
+- **근거 + 출처등급**: 관측성이 운영 본체, pdm-mlops에서 Prometheus+Grafana 구축 경험 [우리 경험: pdm-mlops — CC 1차 확인 불가, 핸드오프 인라인]. 
 - **고려한 대안**: 로깅만(집계·알림 불가).
 - **검토 요청 항목**: 노출 메트릭이 드리프트 감시(H4-드리프트)에 충분한지.
 
@@ -96,7 +102,7 @@ H2 GRU를 **실시간 서빙**한다 — 환자 시점 데이터가 스트리밍
 ## 결정 8: 인프라 — pdm-mlops K8s 스켈레톤 재활용
 
 - **결정**: Docker 컨테이너화 + pdm-mlops의 **K8s 매니페스트 패턴 재활용**(Deployment/Service/ConfigMap). 서빙은 Deployment, 설정은 ConfigMap. minikube/로컬.
-- **근거 + 출처등급**: pdm-mlops에서 compose→K8s 전환 완료(서빙·관측성 스택) [확인됨: pdm-mlops 자산]. 도메인 이전 MLOps 시리즈의 재사용성 증명 [우리 결정 — 포트폴리오 메시지].
+- **근거 + 출처등급**: pdm-mlops에서 compose→K8s 전환 완료(서빙·관측성 스택) [우리 경험: pdm-mlops — CC 1차 확인 불가, 핸드오프 인라인]. 도메인 이전 MLOps 시리즈의 재사용성 증명 [우리 결정 — 포트폴리오 메시지].
 - **고려한 대안**: 새로 작성(재사용성 메시지 손실).
 - **미결/옵션**: 핸드오프는 자립형이라 pdm 매니페스트 패턴을 인라인 명세(CC가 pdm 레포 못 봄).
 - **검토 요청 항목**: 인프라 패턴이 자립적으로 명세됐는지(외부 레포 미참조).
@@ -111,7 +117,7 @@ H2 GRU를 **실시간 서빙**한다 — 환자 시점 데이터가 스트리밍
 ## H4-서빙 PASS 기준 (핸드오프에 박을 게이트 — 초안)
 
 1. FastAPI `/predict`·`/health` 동작, 시점 입력→위험확률+알람 응답.
-2. **train-serving 일관성**: 서빙 전처리가 학습과 동일(A 동결 μ/σ·fill·clip, 0-fill 부재) — 동일 입력에 학습 파이프라인과 bit-동일 출력.
+2. **train-serving 일관성 + 번들 원자성**: 서빙 전처리가 학습과 동일(A 동결 μ/σ·fill·clip, 0-fill 부재) — 동일 입력에 학습 파이프라인과 bit-동일 출력. **model+featureset+전처리+τ+input_dim이 동일 run 출처**(불일치 번들 불가) assert.
 3. **상태 관리 동치**: hidden-state 이어가기 == 전체 재입력(수치 일치, causal).
 4. 스트리밍 시뮬레이터가 시간순 재생, 미래 미사용.
 5. τ가 A-val 동결값(운영 데이터 재선정 없음).
@@ -122,6 +128,6 @@ H2 GRU를 **실시간 서빙**한다 — 환자 시점 데이터가 스트리밍
 
 ## 검토 상태
 
-- 초안 — 레드팀 검토 전.
-- 다음: `h4_serving_review.md` 레드팀 검토 → PASS 시 핸드오프.
-- 핵심 검토 포인트: **train-serving skew/누수**(결정 4), **상태관리 causal 동치**(결정 3), 인프라 자립 명세(결정 8).
+- v1(`c3396c5` 검토): HOLD 1건(설정 번들 원자성) + pdm 등급 정정 → **본 v2 반영.**
+- 1차 확인: hidden-state causal 동치·ffill 스트리밍 동치(NaN 초기화 전제)·정규화 미래누수 없음·아티팩트 로드 [확인됨: 코드 대조].
+- 다음: v2 재검토 → PASS 시 핸드오프.

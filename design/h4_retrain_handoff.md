@@ -3,6 +3,11 @@
 > **설계 근거**: [`h4_retrain_decisions.md`](h4_retrain_decisions.md)(v2, 검토 PASS `1b0a1c8`). 실행 명세로 번역.
 > **워크플로우**: [`WORKFLOW.md`](WORKFLOW.md). 자립형. **H4 마지막 — MLOps 루프(서빙→드리프트→재학습→새 번들→서빙) 폐쇄.**
 > **개정 이력**
+> **개정 이력**
+> - **v2 (2026-06-28)** — 핸드오프 검토 `00375b5`의 HOLD 1건(두 갈래) + 비차단 반영
+>   - HOLD (1) 버전드↔서빙 정합: `gru_vitals@<ts>` 버전 dir이 H4s-c 하드코딩(`gru_vitals`)을 깸 → **`gru_vitals`를 활성 버전 별칭으로 유지**(기존 서빙 미파괴), 교체/롤백 = 별칭이 가리키는 버전 전환. "기존 서빙 미파괴" assert.
+>   - HOLD (2) reference 롤백 불일치: reference가 단일 파일 덮어쓰기 → 롤백 시 모델만 옛 버전·reference는 새 분포 → 거짓 드리프트 → **reference를 번들 버전에 키잉**(번들 안 포함, 모델과 함께 이동). 롤백 시 모델·reference 함께 복원. 실패모드에 "롤백 후 reference-모델 불일치".
+>   - 비차단: 사람 승인 `deploy.swap(approved)` 기본값 없이 `raise`(grep 범위=신호층), 재학습 HP\*/τ **재사용**(재탐색 아님), 시뮬은 "라벨은 실제·지연만 모사", reference 갱신 순서·원자성.
 > - v1 (2026-06-28) — 초안. 검토 권고 흡수: **post-retrain cross-site 측정 불가 명시**(A+B 학습 시 미관측 제3 분포 없음 → B-holdout=in-distribution 검증, cross-site 주장 아님), human-in-loop 자동경로 0건 grep, 시뮬 범위 명문화, 검증 임계 수치화. DDD cosmetic(결정 4 중복 헤더 1줄 삭제).
 
 ---
@@ -45,7 +50,7 @@ scripts/
 
 ### 구현
 - `promote.py`: drift watch 신호(DRIFT_STATE·DATASET_DRIFT_SHARE)를 종합 → **action = "조사 권고"** 생성(예: dataset_drift_share가 기준 초과 + 지속성). **자동 재학습·교체 호출 없음** — recommendation만 반환. 사람이 보고 판단.
-- `backfill.py`: **지연 라벨 백필 시뮬레이션** — 라벨이 늦게 확정되는 구조를 모사(예: 예측 후 N시간 뒤 라벨 도착), 백필된 라벨로 **사후 성능 보조 측정**(utility/PR-AUC). **우산장수 한계 주석**: 개입 케이스 변질 보정 불가(개입 컬럼 없음), 성능은 보조일 뿐 주 트리거 아님.
+- `backfill.py`: **지연 라벨 백필 시뮬레이션** — **라벨 자체는 실제(setB의 SepsisLabel), 지연만 모사**(예: 예측 후 N시간 뒤 라벨 도착하는 구조). 백필된 라벨로 **사후 성능 보조 측정**(utility/PR-AUC). **우산장수 한계 주석**: 개입 케이스 변질 보정 불가(개입 컬럼 없음), 성능은 보조일 뿐 주 트리거 아님.
 
 ### PASS 기준 (assert)
 1. watch→action이 **조사 권고만** 반환, **자동 재학습·교체 경로 0건**(promote/backfill·retrain 모듈 AST grep: pipeline.run·deploy.swap 미호출).
@@ -60,7 +65,7 @@ scripts/
 ## H4r-b — 재학습 파이프라인 (B를 운영 데이터로)
 
 ### 구현
-- `pipeline.py`: 사람 트리거 시 **H1~H2 재사용 재학습**(배포 조합만, 예 gru/vitals — 전체 6조합 아님). **B를 운영 데이터로**: setB를 **환자 단위 B-retrain/B-holdout 분할**(예 70/30, 환자 누수 없음). 학습 데이터 = **A-train + B-retrain**. train-only 전처리 통계 재산출(A-train+B-retrain 기준). 마스크 OFF·0-fill 금지 등 H1 규칙 연장.
+- `pipeline.py`: 사람 트리거 시 **H1~H2 재사용 재학습**(배포 조합만, 예 gru/vitals — 전체 6조합 아님). **HP\*·τ는 기존 값 재사용**(재탐색 아님 — 재학습은 데이터만 바뀜, 하이퍼파라미터 탐색 다시 안 함). **B를 운영 데이터로**: setB를 **환자 단위 B-retrain/B-holdout 분할**(예 70/30, 환자 누수 없음). 학습 데이터 = **A-train + B-retrain**. train-only 전처리 통계 재산출(A-train+B-retrain 기준). 마스크 OFF·0-fill 금지 등 H1 규칙 연장.
 - `validate.py`: **B-holdout 검증** — (a) 새 데이터(B-holdout)에서 성능, (b) **A-val 무회귀**(기존 A 성능 안 까먹음). **★ in-distribution 검증임을 명시**: A+B 학습이라 미관측 제3 분포 없음 → cross-site 일반화 주장 아님. 결과에 그 한계 기록.
 
 ### PASS 기준 (assert)
@@ -78,16 +83,16 @@ scripts/
 ## H4r-c — 안전 교체 + 롤백 (배포 레이어)
 
 ### 구현
-- `scripts/h4s_export_bundle.py` **버전드 확장**: 고정 dir 덮어쓰기(rmtree) → **`gru_vitals@<timestamp>` 버전 dir** 생성. **이전 버전 미삭제(보존), 살아있는 번들 미덮어씀**. 원자 번들(model+통계+τ+input_dim 동일 run) 유지.
-- `deploy.py`: **검증 게이트 통과(H4r-b) + 사람 승인** 후에만 교체. 교체 = ConfigMap **RUN을 새 버전 dir로 전환**(원자 스왑). **롤백**: RUN을 이전 버전 dir로 되돌림(보존돼 가능). 재학습 후 **drift reference 갱신**(새 A-train+B-retrain 분포로 — 옛 기준 잔존 방지).
-- **사람 승인 시뮬레이션 체크포인트**: 교체 전 명시적 승인 단계(자동 통과 금지).
+- `scripts/h4s_export_bundle.py` **버전드 확장**: 고정 dir 덮어쓰기(rmtree) → **`gru_vitals@<timestamp>` 버전 dir** 생성. **이전 버전 미삭제(보존), 살아있는 번들 미덮어씀**. ★ **`gru_vitals`는 활성 버전 별칭으로 유지**(H4s-c가 `gru_vitals`를 하드코딩 — Dockerfile SERVE_BUNDLE_DIR·ConfigMap RUN; 별칭이 현재 활성 버전 dir을 가리킴 → 기존 서빙 미파괴). **★ drift reference를 번들에 포함**(버전 dir 안에 reference.npz) — 모델과 한 단위로 이동. 원자 번들(model+통계+τ+input_dim+**reference** 동일 버전).
+- `deploy.py`: **검증 게이트 통과(H4r-b) + 사람 승인** 후에만 교체. 교체 = **활성 별칭 `gru_vitals`를 새 버전 dir로 전환**(원자 스왑). **롤백**: 별칭을 이전 버전 dir로 되돌림 → **모델·전처리·τ·reference가 함께 복원**(번들에 reference 포함이라 정합). 별도 reference 덮어쓰기 없음(롤백 시 거짓 드리프트 방지).
+- **사람 승인 시뮬레이션 체크포인트**: `deploy.swap(approved)`가 **기본값 없이 approved=False면 raise**(자동 통과 금지). 교체 전 명시적 승인 필요.
 
 ### PASS 기준 (assert)
-1. **버전드 번들**: `gru_vitals@<ts>` 생성, **이전 버전 보존**(미삭제), **살아있는 번들 미덮어씀**.
-2. RUN 버전 전환으로 교체(원자 스왑), **롤백(RUN 이전 버전 복귀) 동작**.
-3. **검증 게이트 + 사람 승인 후에만 교체**(자동 교체 경로 0건, grep).
-4. 재학습 후 drift reference 갱신, 서빙 번들과 원자 정합(skew 없음).
-5. 교체/롤백이 번들 원자성 유지(불일치 번들 불가, H4s-a 원칙).
+1. **버전드 번들**: `gru_vitals@<ts>` 생성, **이전 버전 보존**(미삭제), **살아있는 번들 미덮어씀**. **`gru_vitals` 별칭이 활성 버전 가리킴**(H4s-c 하드코딩 미파괴 — 기존 서빙 로드 성공 assert).
+2. 별칭 전환으로 교체(원자 스왑), **롤백(별칭 이전 버전 복귀) 동작**.
+3. **검증 게이트 + 사람 승인 후에만 교체**(`approved=False`면 raise, 자동 교체 경로 0건 grep).
+4. **drift reference가 번들 버전에 포함**(reference.npz가 버전 dir 안), 교체/롤백 시 모델과 함께 이동 — **롤백 후 reference-모델 버전 일치**(거짓 드리프트 없음).
+5. 교체/롤백이 번들 원자성 유지(model+통계+τ+reference 동일 버전, 불일치 불가 — H4s-a 원칙).
 
 ### 진행
 - PASS → **H4-재학습 완료 = MLOps 루프 폐쇄.** 보고 후 멈춤.
@@ -103,9 +108,9 @@ scripts/
 - watch→action이 자동 재학습·교체 호출(human-in-loop 위반)
 - B-holdout ∩ B-retrain ≠ ∅(환자 누수) / 검증이 cross-site로 과장(in-distribution인데)
 - 재학습이 train-only 위반 / 마스크 켜짐 / 0-fill
-- 고정 dir 덮어쓰기(버전드 아님) / 살아있는 번들 파괴 / 롤백 타깃 없음
+- 고정 dir 덮어쓰기(버전드 아님) / 살아있는 번들 파괴 / 롤백 타깃 없음 / **`gru_vitals` 별칭 부재로 기존 서빙 로드 실패**
 - 검증·승인 없이 교체 / 번들 불일치(원자성 위반)
-- reference 미갱신(옛 기준 잔존)
+- reference 미갱신(옛 기준 잔존) / **롤백 후 reference-모델 버전 불일치(거짓 드리프트)**
 - 위 중 하나라도 → 정지·보고.
 
 ## 검토 요청 (h4_retrain_handoff_review.md 용)

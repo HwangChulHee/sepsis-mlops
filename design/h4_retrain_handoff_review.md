@@ -47,3 +47,41 @@
 ## 다음 단계
 
 **HOLD-1(버전 규약 ↔ 서빙 정합 + reference 버전 키잉/롤백) 해소 후 재검토.** 전부 PASS 전 구현(코드·디렉토리 생성) 금지(WORKFLOW §5·§6).
+
+---
+
+## 재검토 v2
+
+- **대상**: `design/h4_retrain_handoff.md` v2 (개정 이력 v2 — HOLD 1건 두 갈래 + 비차단)
+- **검토일**: 2026-06-29
+- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 두 갈래 모두 해소, 신규 블로킹 모순 없음. → **다음은 H4r-a 구현 착수.** (구현-완성 권고 2 + cosmetic nit 1.)
+
+### 회귀 검증 (요청 4항목)
+
+**1. HOLD 1-(1) 버전드↔서빙 (gru_vitals 활성 별칭) → ✅ 해소.**
+- `:86` "`gru_vitals`를 **활성 버전 별칭**으로 유지(H4s-c가 Dockerfile SERVE_BUNDLE_DIR·ConfigMap RUN에 gru_vitals 하드코딩 → 별칭이 활성 버전 dir 가리킴, 기존 서빙 미파괴)." 교체=별칭 전환(`:87`).
+- PASS #1(`:91`) "gru_vitals 별칭이 활성 버전 가리킴 — **기존 서빙 로드 성공 assert**", 실패모드(`:111`) "별칭 부재로 기존 서빙 로드 실패". ✓
+
+**2. HOLD 1-(2) reference 롤백 (번들 포함) → ✅ 해소.**
+- `:86` "**drift reference를 번들에 포함**(버전 dir 안 reference.npz) — 모델과 한 단위 이동. 원자 번들(model+통계+τ+input_dim+reference 동일 버전)." 롤백 시 "모델·전처리·τ·reference 함께 복원, 별도 reference 덮어쓰기 없음(거짓 드리프트 방지)"(`:87`).
+- PASS #4(`:94`) "reference가 번들 버전에 포함, 롤백 후 reference-모델 버전 일치(거짓 드리프트 없음)", PASS #5(`:95`) 원자성에 reference 포함, 실패모드(`:113`) "롤백 후 reference-모델 불일치(거짓 드리프트)". ✓
+
+**3. 비차단 → ✅ 반영.**
+- 사람 승인: `deploy.swap(approved)` 기본값 없이 `approved=False면 raise`(`:88`, PASS #3). ✓
+- 재학습 HP\*·τ **재사용**(재탐색 아님, `:68`). ✓ (검증 게이트가 reused-τ 열화를 차단하므로 안전.)
+- 시뮬: "라벨 자체는 실제(setB SepsisLabel), **지연만 모사**"(`:53`). ✓
+
+**4. 신규 모순 → 없음.**
+- **별칭+reference-in-bundle ↔ H4s-a 원자성**: `load_bundle_from_dir`는 model.pt/pre.npz/meta.json 3개만 읽음 → reference.npz 추가는 무해(서빙은 무시), 드리프트만 읽음. 같은 버전 dir = 원자성 유지. 충돌 없음.
+- **↔ H4s-c**: 별칭 gru_vitals 유지로 Dockerfile/ConfigMap/h4s_c_smoke(export→gru_{fs}) 불변 동작.
+- **watch 경계**: 재학습이 watch 신호를 읽되 자동 행동 없음(human-in-loop) — 경계 유지.
+
+### 실행 전 권고 (구현 완성 — 비차단)
+1. **드리프트가 *활성 번들의* reference를 읽도록 명시** — reference를 번들에 넣는 효과가 실제로 나려면 H4d-b 드리프트 모니터가 `data/drift/reference_*.npz`(독립 파일)가 아니라 **활성 번들 dir(gru_vitals/reference.npz)**를 로드해야 함. 안 그러면 롤백 정합이 무효(reference-in-bundle이 장식이 됨). 핸드오프에 "드리프트 reference 로드 = 활성 번들" 1줄 + PASS #4를 "드리프트가 롤백된 버전의 reference로 측정"까지 확장.
+2. **새 버전이 *실행 중 컨테이너*에 도달하는 경로 명시** — H4s-c는 번들을 이미지에 COPY(빌드 시 baked). 재학습 새 버전이 런타임 서빙에 반영되려면 **`deploy/artifacts`를 볼륨 마운트**(별칭 전환이 즉시 반영) 또는 **재-export→재빌드→재배포**. 프로토타입 방식 1줄(권장: 볼륨). 별칭은 심링크/복사 중 택1 명시(Docker COPY 심링크 보존).
+3. **(미세) τ 재선정 옵션** — reused-τ는 안전(게이트 보호)하나 재학습 모델은 보정이 달라질 수 있음 → A-val에서 τ 재선정도 고려(선택). 
+
+### Cosmetic nit (비차단)
+- `:5-6` "**개정 이력**" 헤더 2줄 중복 → 한 줄 삭제(이전과 동일 패턴, 구현 중 정리).
+
+**결론: HOLD 0 → H4r-a 구현 착수.** 권고(드리프트가 번들 reference 읽기·런타임 전달 경로)는 H4r-b/c 구현 시 흡수.

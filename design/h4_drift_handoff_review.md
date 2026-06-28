@@ -62,3 +62,38 @@
 ## 다음 단계
 
 **HOLD 2건(수집 훅 pid · reference 단위+Evidently 거리 강제) 해소 후 재검토.** 전부 PASS 전 구현(코드·디렉토리 생성) 금지(WORKFLOW §5·§6).
+
+---
+
+## 재검토 v2
+
+- **대상**: `design/h4_drift_handoff.md` v2 (개정 이력 v2 — HOLD 2건 + 비차단)
+- **검토일**: 2026-06-29
+- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 2건 해소, 비차단 반영, 신규 블로킹 모순 없음. → **다음은 H4d-a 구현 착수.** (cosmetic nit 1건.)
+
+### 회귀 검증 (요청 4항목)
+
+**1. HOLD-1 (pid 배관) → ✅ 해소.**
+- 수집 연결점이 `metrics.record` → **`app.predict`가 `(patient_id, raw_row)` 윈도우 적재**로 변경(`:19`, pid는 서빙 per-pid 식별자 재사용). `window.py`(`:79`) "patient_id로 환자별 집계(환자당 마지막값 1관측)". PASS #1(`:85`)·실패모드(`:104` "수집 훅에 pid 없음")로 강제. → **환자당 1관측 구현 가능**, 자기상관 회피 토대 확보.
+
+**2. HOLD-2 (단위 + Evidently) → ✅ 해소.**
+- reference 단위: `reference.py`(`:57`) "환자당 요약(**마지막 관측값**)으로 산출, current와 동일 단위"; 통계프레임(`:29`)·distance.py(`:58`)·PASS #1/#2(`:62-63`)에 **단위 일치 assert**. → reference/current 단위 일치.
+- Evidently 거리 강제: `detector.py`(`:80`) "`num_stattest`를 거리지표로 **명시 고정**(Wasserstein/PSI) — 환자 수백이면 기본이 KS로 폴백(n≤1000)하므로 차단". PASS #2(`:86`)·실패모드(`:104` "KS 폴백")로 강제. → 결정 3 위반(작은 윈도우 KS) 차단.
+
+**3. 비차단 → ✅ 반영.**
+- 마지막값 요약: `:29` "within-stay 변화엔 둔감함 명시". ✓
+- 단일 엔진: `:58` "운영 감지 진실원천 = Evidently 단일 엔진, distance.py는 합성검증·임계보정 전용", PASS #5(`:89`) "단일 엔진 정합". ✓
+- insufficient-data: `:79` "환자 수 부족 시 거리 강제계산 금지". ✓
+- 결측률 거리: `:58` "피처별 결측 비율 분포의 JS". ✓
+- Grafana 검증: PASS #4(`:88`) "JSON 파싱 + 필수 패널 키 검증". ✓
+
+**4. 신규 모순 → 없음.**
+- reference·current·Evidently 입력이 전부 **환자당 1관측(마지막값)**으로 일관(`:29,57,79,80`). watch 경계(라벨·성능·action 분리, `:22-25`·PASS #3·실패모드 `:108`) 유지.
+
+### Cosmetic nit (비차단)
+- `:5-6` "**개정 이력**" 헤더 2줄 중복 → 한 줄 삭제(구현 중 정리).
+
+### 1차 확인 (v1, 변동 없음)
+pid는 app.predict에 존재(`app.py:64` 미전달이었음 → v2가 적재로 해결) · Evidently n-의존 기본(≤1000 KS, `num_stattest` 오버라이드) [확인됨: 문서] · A-train 추출 `split.py:28` 가능.
+
+**결론: HOLD 0 → H4d-a(`drift/reference.py`·`distance.py`·`synthetic.py`) 구현 착수.** cosmetic nit 1건은 구현 중 흡수.

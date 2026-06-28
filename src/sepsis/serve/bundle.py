@@ -10,6 +10,8 @@ Loaded stats are made immutable (read-only) — serving never recomputes them.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +19,23 @@ import numpy as np
 import torch
 
 from sepsis import config as C
+
+
+def set_alias(root, alias: str, target_name: str) -> None:
+    """Point alias -> target_name (relative symlink), atomically when possible.
+
+    Migrates a legacy real directory at the alias path to a symlink. os.replace gives an
+    atomic swap for the symlink->symlink case (versioned 교체/롤백 원자성). Lives here (not in
+    a script) so both the export script and retrain.deploy import it from the package."""
+    root = Path(root)
+    link = root / alias
+    tmp = root / (alias + ".swap")
+    if tmp.is_symlink() or tmp.exists():
+        tmp.unlink()
+    os.symlink(target_name, tmp)                       # relative target (same dir)
+    if link.exists() and link.is_dir() and not link.is_symlink():
+        shutil.rmtree(link)                            # migrate legacy real dir
+    os.replace(tmp, link)                              # atomic for symlink / nonexistent
 from sepsis.train.gru import GRUm2m
 
 

@@ -16,7 +16,6 @@ moves/rolls back WITH the model (drift monitor reads the active alias's referenc
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sys
 import time
@@ -25,25 +24,10 @@ from pathlib import Path
 import numpy as np
 
 from sepsis import config as C
+from sepsis.serve.bundle import set_alias   # alias helper lives in the package (not here)
 
 OUT_ROOT = C.ROOT / "deploy" / "artifacts"
 TRACKING = f"sqlite:///{C.ROOT}/mlflow.db"
-
-
-def set_alias(root: Path, alias: str, target_name: str) -> None:
-    """Point alias -> target_name (relative symlink), atomically when possible.
-
-    Migrates a legacy real directory at the alias path to a symlink. os.replace gives an
-    atomic swap for the symlink->symlink case (롤백/교체 원자성)."""
-    root = Path(root)
-    link = root / alias
-    tmp = root / (alias + ".swap")
-    if tmp.is_symlink() or tmp.exists():
-        tmp.unlink()
-    os.symlink(target_name, tmp)                       # relative target (same dir)
-    if link.exists() and link.is_dir() and not link.is_symlink():
-        shutil.rmtree(link)                            # migrate legacy real dir
-    os.replace(tmp, link)                              # atomic for symlink / nonexistent
 
 
 def export(featureset: str, version: str | None = None, *, link_alias: bool = True) -> Path:

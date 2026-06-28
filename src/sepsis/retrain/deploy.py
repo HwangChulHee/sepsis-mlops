@@ -20,7 +20,7 @@ import torch
 from sepsis import config as C
 from sepsis.data import cache as cache_mod
 from sepsis.drift import reference as R
-from scripts import h4s_export_bundle as export_mod
+from sepsis.serve import bundle as bundle_mod
 
 ARTIFACTS = C.ROOT / "deploy" / "artifacts"
 
@@ -49,7 +49,7 @@ def active_version(featureset: str, *, root: Path = ARTIFACTS) -> str | None:
 
 
 def set_active(featureset: str, version_dir: Path, *, root: Path = ARTIFACTS) -> None:
-    export_mod.set_alias(Path(root), f"gru_{featureset}", Path(version_dir).name)
+    bundle_mod.set_alias(Path(root), f"gru_{featureset}", Path(version_dir).name)
 
 
 def swap(featureset: str, version_dir: Path, *, validation, approved: bool,
@@ -67,7 +67,7 @@ def swap(featureset: str, version_dir: Path, *, validation, approved: bool,
 
 def rollback(featureset: str, previous_version_name: str, *, root: Path = ARTIFACTS) -> None:
     """Point the alias back to a previous version dir name (model+stats+τ+reference revert)."""
-    export_mod.set_alias(Path(root), f"gru_{featureset}", previous_version_name)
+    bundle_mod.set_alias(Path(root), f"gru_{featureset}", previous_version_name)
 
 
 # --- drift monitor reads the reference of the ACTIVE bundle (via alias) ---

@@ -48,3 +48,32 @@
 ## 다음 단계
 
 **HOLD-1(마스크 채널 구성 순서·결합) 해소 후 재검토.** 전부 PASS 전 구현(코드·디렉토리 생성) 금지(WORKFLOW §5·§6).
+
+---
+
+## 재검토 v2
+
+- **대상**: `design/h3_handoff.md` v2 (개정 이력 v2 — HOLD 1 + 비차단 3)
+- **검토일**: 2026-06-28
+- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 해소, 정정 3건 반영, 신규 모순 없음. → **다음은 H3-b 구현 착수 가능.**
+
+### 회귀 검증 (요청 4항목)
+
+**1. HOLD (마스크 채널 순서) → ✅ 해소.**
+- H3-c 구현(`h3_handoff:78-81`)에 3단계 인라인: ① `mask=missing_mask(raw)` **ffill 이전·RAW**(`:79`, "all-ones → 거짓 결론" 경고 포함), ② 피처는 따로 `ffill→fill→clip→z-score`(`:80`), ③ `concat([정규화_피처, mask])` → 2F, **마스크 z-score 제외(0/1 유지)**(`:81`). 요청한 순서·결합 지점 그대로.
+- PASS #2(`:89`) **all-ones 붕괴 assert 추가**: "채널 평균 == 관측률(=1−결측률), **1.0이면 ffill 후 생성(붕괴)로 판정·정지**, 마스크 ∈{0,1}." → ffill-후-생성을 게이트가 잡음. ✓
+
+**2. §0 동적 가드 문구 → ✅ 정정.**
+- `:24`: "B_pids∩입력"(B가 채점 입력이라 부적합) 제거 → **정적 grep(채점 경로에서 `fit·tune·select`·정규화통계 산출 미호출) + 동적 bit-동일(μ/σ·fill·clip·τ가 A 아티팩트와 일치)**. 괄호로 "B는 채점 입력 정상, 'B로 학습/선정/재정규화 안 함'을 검증"까지 명시. H3 맥락에 정합.
+
+**3. 정정 3건 → ✅ 반영.**
+- 아티팩트 로드 경로 인라인(`:25`): GRU `load_state_dict`+`.eval()`, 트리 native load, 전처리·τ는 npz/json, **채점은 `gru.evaluate` 재사용**(eval-mode+masking 보장).
+- 공식 repo(`:50`): `physionetchallenges/evaluation-2019`. tol(`:50`): **1e-6**.
+
+**4. 신규 모순 → 없음.**
+- 마스크 순서가 H1과 정합: `missing.missing_mask(raw)`는 RAW NaN 입력(`missing.py:18` "must precede ffill")·피처별 0/1 → 2F; `collate_m2m`은 임의 F 패딩(`sequence.py`) → 정합. ✓
+- **grep "fit 미호출" ↔ H3-c 재학습 충돌 없음**: grep은 *채점 경로*에 한정(`:24` "채점 경로에서"). H3-c의 마스크 ON **재학습은 A-train/A-val만** 사용(B 아님, `:82,92`)이라 정당 — B는 최종 채점에만. 스코프가 올바름.
+- PASS 번호 일관: H3-c가 4→5개로(마스크 무결성 #2 삽입, 이후 순번 정연). H3-b 5개 유지. ✓
+
+### 결론
+HOLD 0 → **H3-b 구현 착수**(`eval/official_compat.py`·`eval/crosssite.py` + `scripts/h3b_crosssite.py`). 잔여는 없음(v1 권고 전부 흡수).

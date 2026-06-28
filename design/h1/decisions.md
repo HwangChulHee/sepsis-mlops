@@ -12,7 +12,7 @@
 >   - 결정 6: baseline 부스터를 **XGBoost + LightGBM 병행**(피처 공유, A-val로 대표 선정, B 미사용), 우승 계열(LightGBM) 정렬. many-to-many와 **평가 단위 정렬**(매 시점 lookback 요약), "slope" 표현 일반화.
 >   - 경미: 클리핑 순서·다운샘플링 기각·완결성/이상라벨 필터·2차인용 표기·medRxiv 등급 하향.
 > - **v2 (2026-06-27)** — review `901c37f`의 HOLD 3 + 추가 5 + 미결 2 반영(검사 9종, A→B 3분할, 절단 진단·이연 등).
-> - v1·v2 및 반려 사유는 git history와 `h1_review.md` 참조.
+> - v1·v2 및 반려 사유는 git history와 `design/h1/review.md` 참조.
 >
 > 워크플로우·출처등급 범례: [`WORKFLOW.md`](../WORKFLOW.md) 참고.
 
@@ -157,7 +157,7 @@
 
 ---
 
-## 핸드오프(h1_handoff.md) 강제 항목 — review v3 반영
+## 핸드오프(design/h1/handoff.md) 강제 항목 — review v3 반영
 
 핸드오프 작성 시 아래를 PASS 기준에 명시적으로 박는다:
 1. **validity mask 산출 + 평가에서 패딩 제외**: 패딩 시점을 학습 loss뿐 아니라 **평가 지표 계산에서도 제외**. 안 빼면 패딩이 "맞춘 음성"으로 세어져 지표가 가짜로 좋아진다.
@@ -171,7 +171,7 @@
 - v1(`901c37f`): HOLD 3+추가 5+미결 2 → v2 반영.
 - v2(`989ee28`): HOLD 1(마스크/ffill 순서)+경미 7 → v3 반영.
 - v3(`444b095`): 회귀 전부 해소 + 결정 4·6 1차출처 통과. **HOLD 1(결정 4(c) 단방향/우측패딩 미명시) → 본 v4에서 명문화.** slope→delta·range·variance로 특정([검증 필요] 해소). 효율을 m2m 고유 우위로 정직 한정. 핸드오프 강제 항목 3종 기록.
-- v4(`5d809b2`): DDD 재검토 전 항목 **PASS**(HOLD 0). → `h1_handoff.md` 작성·검토(v2 PASS `0ec8aca`, pos_weight 밴드 완화는 handoff v3 `48b1b56`).
+- v4(`5d809b2`): DDD 재검토 전 항목 **PASS**(HOLD 0). → `design/h1/handoff.md` 작성·검토(v2 PASS `0ec8aca`, pos_weight 밴드 완화는 handoff v3 `48b1b56`).
 
 ### ✅ H1 구현 종료 (2026-06-27)
 **네 토막 전부 PASS + 사람 체크포인트 2건 통과 → H1 종료.**

@@ -1,7 +1,7 @@
 # H4-재학습 설계결정문서 (DDD) — watch→action 승격 + human-in-the-loop 재학습
 
 > **설계 근거**: H4-서빙·드리프트 위. drift watch 신호(`drift/watch.py`)를 받아 조사·재학습 결정을 사람에게 차려주고, 트리거되면 재학습→안전 교체. **MLOps 루프를 닫는 H4 마지막 단계.**
-> **워크플로우·출처등급**: [`WORKFLOW.md`](../../WORKFLOW.md). 검토(`h4_retrain_review.md`) 통과 후 핸드오프로.
+> **워크플로우·출처등급**: [`WORKFLOW.md`](../../WORKFLOW.md). 검토(`design/h4/retrain/review.md`) 통과 후 핸드오프로.
 > **상태**: 초안 — 레드팀 검토 전.
 > **개정 이력**
 > - **v2 (2026-06-28)** — review `8589aa3`의 HOLD 2건 반영

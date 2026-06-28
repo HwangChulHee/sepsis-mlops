@@ -1,7 +1,7 @@
 # H3 설계결정문서 (DDD) — cross-site 평가 (B 개봉)
 
-> **설계 근거**: H2 산출물(6조합 학습 모델·전처리통계·τ, MLflow) 위에서 **B를 처음 펼쳐** cross-site 채점. H2 결정은 [`h2_decisions.md`](../h2/decisions.md)(완료), 결과는 [`reports/h2_results.md`].
-> **워크플로우·출처등급**: [`WORKFLOW.md`](../WORKFLOW.md). 검토(`h3_review.md`) 통과 후 핸드오프로.
+> **설계 근거**: H2 산출물(6조합 학습 모델·전처리통계·τ, MLflow) 위에서 **B를 처음 펼쳐** cross-site 채점. H2 결정은 [`design/h2/decisions.md`](../h2/decisions.md)(완료), 결과는 [`reports/h2_results.md`].
+> **워크플로우·출처등급**: [`WORKFLOW.md`](../WORKFLOW.md). 검토(`design/h3/review.md`) 통과 후 핸드오프로.
 > **개정 이력**
 > - **v2 (2026-06-28)** — review `71e47c6`의 HOLD 2건 + 정정 반영
 >   - HOLD 1: **피처셋을 B 성능으로 고르는 것은 selection-on-test**(결정 2 위반) → 부속결정 수정: B는 1회 참고 관찰, 피처셋 선택은 **A-val + H4 운영 신호**, B는 선택 기준 미진입. PASS #2에 명시.
@@ -97,4 +97,4 @@ H2에서 A로 학습한 **6조합을 B(봉인 해제)로 채점**해 cross-site 
 
 - v1(`71e47c6` 검토): HOLD 2건(featureset-on-B selection / 마스크 H3-c 이연) + 정정 → **본 v2에서 반영.**
 - 1차 확인: 공식 스크립트 동등성 가능 [확인됨], 아티팩트 충분 [확인됨], 마스크=입력채널 재학습 필요 [확인됨].
-- 다음: v2 재검토 → PASS 시 `h3_handoff.md`.
+- 다음: v2 재검토 → PASS 시 `design/h3/handoff.md`.

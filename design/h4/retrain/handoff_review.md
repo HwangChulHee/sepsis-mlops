@@ -1,6 +1,6 @@
 # 핸드오프 검토 — H4-재학습 (레드팀, 실행 명세)
 
-- **대상**: `design/h4_retrain_handoff.md` (초안)
+- **대상**: `design/h4/retrain/handoff.md` (초안)
 - **대상 commit**: `8499d23`
 - **검토일**: 2026-06-29
 - **핵심 질문**: human-in-the-loop이 코드로 강제되고, B 분할 누수 없고, cross-site 과장 없고, 버전드 교체·롤백이 실제 되는가.
@@ -52,7 +52,7 @@
 
 ## 재검토 v2
 
-- **대상**: `design/h4_retrain_handoff.md` v2 (개정 이력 v2 — HOLD 1건 두 갈래 + 비차단)
+- **대상**: `design/h4/retrain/handoff.md` v2 (개정 이력 v2 — HOLD 1건 두 갈래 + 비차단)
 - **검토일**: 2026-06-29
 - **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 두 갈래 모두 해소, 신규 블로킹 모순 없음. → **다음은 H4r-a 구현 착수.** (구현-완성 권고 2 + cosmetic nit 1.)
 

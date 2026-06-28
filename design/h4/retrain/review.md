@@ -1,6 +1,6 @@
 # 검토 — H4-재학습 (레드팀 게이트)
 
-- **대상**: `design/h4_retrain_decisions.md` (초안)
+- **대상**: `design/h4/retrain/decisions.md` (초안)
 - **대상 commit**: `b963b66`
 - **검토일**: 2026-06-29
 - **핵심 질문**: 드리프트≠성능을 올바로 다루고, human-in-the-loop을 강제하며, 안전하게 교체하고, 데이터 한계에 정직한가.
@@ -61,15 +61,15 @@
 
 ## 다음 단계
 
-**HOLD 2건(버전드 번들·롤백 / 봉인 B 재사용 누수) 해소 후 재검토.** 전부 PASS 전 `h4_retrain_handoff.md`로 가지 않는다(WORKFLOW §5).
+**HOLD 2건(버전드 번들·롤백 / 봉인 B 재사용 누수) 해소 후 재검토.** 전부 PASS 전 `design/h4/retrain/handoff.md`로 가지 않는다(WORKFLOW §5).
 
 ---
 
 ## 재검토 v2
 
-- **대상**: `design/h4_retrain_decisions.md` v2 (개정 이력 v2 — HOLD 2건)
+- **대상**: `design/h4/retrain/decisions.md` v2 (개정 이력 v2 — HOLD 2건)
 - **검토일**: 2026-06-29
-- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 2건 해소, 신규 블로킹 모순 없음. → **다음은 `h4_retrain_handoff.md`.** (cosmetic nit 1 + 정직성 권고 1.)
+- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 2건 해소, 신규 블로킹 모순 없음. → **다음은 `design/h4/retrain/handoff.md`.** (cosmetic nit 1 + 정직성 권고 1.)
 
 ### 회귀 검증 (요청 3항목)
 
@@ -92,4 +92,4 @@
 - **post-retrain cross-site 측정 불가 명시**: A·B 둘 다 학습에 들어가면 재학습 모델엔 **미관측 제3 분포가 없음** → B-holdout은 *in-distribution* 검증(새 데이터 성능+A 무회귀)이지 cross-site 일반화 *주장*이 아님을 한 줄 명시(정직성). 실운영에선 신규 데이터 홀드아웃이 이 역할.
 - (v1 권고 1·3·5 유효) human-in-loop 자동경로 0건 grep(PASS #6 이미 반영), 시뮬 범위(게이트 차단·롤백 복원), 검증 임계 수치화.
 
-**결론: HOLD 0 → `h4_retrain_handoff.md` 작성으로 진행.** cosmetic nit·권고는 핸드오프에서 흡수.
+**결론: HOLD 0 → `design/h4/retrain/handoff.md` 작성으로 진행.** cosmetic nit·권고는 핸드오프에서 흡수.

@@ -1,7 +1,7 @@
 # H3 구현 핸드오프 — cross-site 평가 (B 개봉)
 
-> **설계 근거**: [`h3_decisions.md`](decisions.md)(v2, 검토 PASS `8a7887f`). 실행 명세로 번역.
-> **워크플로우**: [`WORKFLOW.md`](../WORKFLOW.md). 자립형이며, 검토(`h3_handoff_review.md`) 통과 후 실행.
+> **설계 근거**: [`design/h3/decisions.md`](decisions.md)(v2, 검토 PASS `8a7887f`). 실행 명세로 번역.
+> **워크플로우**: [`WORKFLOW.md`](../WORKFLOW.md). 자립형이며, 검토(`design/h3/handoff_review.md`) 통과 후 실행.
 > **개정 이력**
 > - **v2 (2026-06-28)** — 핸드오프 검토 `66f1a0f`의 HOLD 1건 + 비차단 3건 반영
 >   - HOLD: H3-c **마스크 채널 구성 순서 인라인**(mask=RAW NaN·ffill 이전 생성 → 피처 정규화 → concat, 마스크는 z-score 제외) + PASS에 **all-ones 붕괴 assert**(채널 평균==관측률). ffill 후 생성하면 전부 1이 되어 "마스크 효과 없음" 거짓 결론 → H3 산출물 무력화 방지.
@@ -109,7 +109,7 @@ reports/
 - MLflow 로드 실패 / OOM(긴 시퀀스) / 비유한 점수
 - 위 중 하나라도 → 정지·보고.
 
-## 검토 요청 (h3_handoff_review.md 용)
+## 검토 요청 (design/h3/handoff_review.md 용)
 - B 누수 가드(frozen-only 격리 + grep/assert)가 실제로 강제되는지 — 최중요.
 - 공식 스크립트 입수·동등성 판정이 프로그래매틱하고 B 미개봉인지.
 - 마스크 ON/OFF 공정 통제(입력채널만 차이)가 코드로 보장되는지.

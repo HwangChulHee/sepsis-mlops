@@ -1,6 +1,6 @@
 # H4-재학습 구현 핸드오프 — watch→action + human-in-the-loop 재학습 (루프 폐쇄)
 
-> **설계 근거**: [`h4_retrain_decisions.md`](decisions.md)(v2, 검토 PASS `1b0a1c8`). 실행 명세로 번역.
+> **설계 근거**: [`design/h4/retrain/decisions.md`](decisions.md)(v2, 검토 PASS `1b0a1c8`). 실행 명세로 번역.
 > **워크플로우**: [`WORKFLOW.md`](../../WORKFLOW.md). 자립형. **H4 마지막 — MLOps 루프(서빙→드리프트→재학습→새 번들→서빙) 폐쇄.**
 > **개정 이력**
 > - **v2 (2026-06-28)** — 핸드오프 검토 `00375b5`의 HOLD 1건(두 갈래) + 비차단 반영
@@ -112,7 +112,7 @@ scripts/
 - reference 미갱신(옛 기준 잔존) / **롤백 후 reference-모델 버전 불일치(거짓 드리프트)**
 - 위 중 하나라도 → 정지·보고.
 
-## 검토 요청 (h4_retrain_handoff_review.md 용)
+## 검토 요청 (design/h4/retrain/handoff_review.md 용)
 - human-in-loop이 코드로 강제되나(자동 재학습·교체 0건 grep, 사람 승인 체크포인트).
 - B retrain/holdout 환자 단위 분리(누수 없음), 검증이 in-distribution으로 정직 표기(cross-site 과장 없음).
 - 버전드 번들이 이전 보존+살아있는 번들 미덮어씀+롤백 가능한가.

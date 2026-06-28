@@ -1,6 +1,6 @@
 # H4-서빙 구현 핸드오프 — 실시간 서빙 + 스트리밍 시뮬레이터
 
-> **설계 근거**: [`h4_serving_decisions.md`](decisions.md)(v2, 검토 PASS `b51cda6`). 실행 명세로 번역.
+> **설계 근거**: [`design/h4/serving/decisions.md`](decisions.md)(v2, 검토 PASS `b51cda6`). 실행 명세로 번역.
 > **워크플로우**: [`WORKFLOW.md`](../../WORKFLOW.md). 자립형(CC가 pdm-mlops 못 봄 → 인프라 전부 인라인).
 > **개정 이력**
 > - **v2 (2026-06-28)** — 핸드오프 검토 `b2655d7`의 HOLD 2건 + 비차단 반영
@@ -120,7 +120,7 @@ run 번들 로드 + 스트리밍 전처리(학습과 bit-동일) + stateful GRU 
 - docker build 실패 / kubectl dry-run 실패
 - 위 중 하나라도 → 정지·보고.
 
-## 검토 요청 (h4_serving_handoff_review.md 용)
+## 검토 요청 (design/h4/serving/handoff_review.md 용)
 - train-serving bit-동일·상태관리 동치 assert가 프로그래매틱한지(H4s-a #2·#3).
 - ffill 스트리밍 NaN 초기화가 배치와 동일 결과인지.
 - frozen-only AST grep이 서빙 경로를 실제 차단하는지.

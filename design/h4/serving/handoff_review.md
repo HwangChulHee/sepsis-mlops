@@ -1,6 +1,6 @@
 # 핸드오프 검토 — H4-서빙 (레드팀, 실행 명세)
 
-- **대상**: `design/h4_serving_handoff.md` (초안)
+- **대상**: `design/h4/serving/handoff.md` (초안)
 - **대상 commit**: `0e123e9`
 - **검토일**: 2026-06-28
 - **핵심 질문**: train-serving skew 없이 **causal**하게 서빙되고, 인프라가 **자립적**이며, **게이트가 작동**하는가.
@@ -69,7 +69,7 @@
 
 ## 재검토 v2
 
-- **대상**: `design/h4_serving_handoff.md` v2 (개정 이력 v2 — HOLD 2 + 비차단)
+- **대상**: `design/h4/serving/handoff.md` v2 (개정 이력 v2 — HOLD 2 + 비차단)
 - **검토일**: 2026-06-28
 - **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 2건 해소, 비차단 반영, 신규 모순 없음. → **다음은 H4s-a 구현 착수.** (사소한 cosmetic nit 1건.)
 

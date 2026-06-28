@@ -1,6 +1,6 @@
 # 검토 — H2 (레드팀 게이트)
 
-- **대상**: `design/h2_decisions.md` (초안)
+- **대상**: `design/h2/decisions.md` (초안)
 - **대상 commit**: `9e2520b`
 - **검토일**: 2026-06-28
 - **핵심 질문**: 이 결정들로 학습하면 **공정한 비교**가 되고, **평가가 올바르며**, **누수가 없는가**.
@@ -31,7 +31,7 @@
      - HP를 한 번 튜닝해 두 featureset에 고정하면 → 어느 featureset에서 튜닝하는지, 다른 featureset에 불리하지 않은지가 미정.
   2. **"모델 간 튜닝 강도 공정"이 prose뿐.** 결정 6(`:90,94`)은 "튜닝 강도 절제 + 모델 간 공정(한 모델 과탐색 금지)"이라 했지만 검증 가능한 기준이 없다 — trial 수·탐색 예산·search space 크기 미지정. 한 모델이 우연히 더 넓게 탐색되면 "공정 비교"가 무너진다(task [B]가 짚은 지점).
   3. **튜닝 objective 불일치.** 결정 5는 GRU 조기종료=A-val **loss**(`:80`), 결정 4는 selection=PR-AUC+**utility**(`:62`), 결정 7은 **utility 우선**(`:103`). 무엇을 기준으로 HP를 고르는지가 세 곳에서 다르다.
-- **근거**: `h2_decisions.md:38` vs `:90`; 변인통제 주장 `:41`; objective 분산 `:62,80,103`.
+- **근거**: `design/h2/decisions.md:38` vs `:90`; 변인통제 주장 `:41`; objective 분산 `:62,80,103`.
 - **제안**:
   - (a) **HP 튜닝 단위 명문화** — 권장: 모델별로 HP를 한 번 튜닝(예: `vitals_labs`에서)하고 **동일 HP를 두 featureset에 적용**해 featureset를 유일 변인으로 유지. 또는 "featureset+HP 동시 최적" 비교로 목적을 재정의(이 경우 결정 2의 인과 귀속 주장을 철회). **둘 중 하나를 골라 명시.**
   - (b) **탐색 예산을 수치로** — 모델당 동일 trial 수(예: N=각 20)·동일 search space로 고정해 "공정"을 assert 가능하게.
@@ -123,15 +123,15 @@
 
 ## 다음 단계
 
-**HOLD 3건(HP 정책·utility 임계값·PASS 기준) 수정 후 재검토.** 전부 PASS 전에는 `h2_handoff.md`로 가지 않는다(WORKFLOW §5).
+**HOLD 3건(HP 정책·utility 임계값·PASS 기준) 수정 후 재검토.** 전부 PASS 전에는 `design/h2/handoff.md`로 가지 않는다(WORKFLOW §5).
 
 ---
 
 ## 재검토 v2
 
-- **대상**: `design/h2_decisions.md` v2 (commit 검토 시점 `0442e4f`+v2 수정)
+- **대상**: `design/h2/decisions.md` v2 (commit 검토 시점 `0442e4f`+v2 수정)
 - **검토일**: 2026-06-28
-- **판정**: ✅ **전부 PASS — HOLD 0건.** v1 HOLD 3건 전부 해소, 출처등급 정정 정확, 신규 블로킹 모순 없음. → **다음은 `h2_handoff.md` 작성 가능.** (경미 4건은 핸드오프에서 흡수, 비차단.)
+- **판정**: ✅ **전부 PASS — HOLD 0건.** v1 HOLD 3건 전부 해소, 출처등급 정정 정확, 신규 블로킹 모순 없음. → **다음은 `design/h2/handoff.md` 작성 가능.** (경미 4건은 핸드오프에서 흡수, 비차단.)
 
 ### [1단계] 회귀 — v1 HOLD 3건 해소 검증
 
@@ -174,4 +174,4 @@
 1. **featureset 튜닝 비대칭 robustness(선택)**: HP를 `vitals_labs`에서 튜닝하는 잔존 편향이 사람 체크포인트의 피처셋 선택을 왜곡하지 않도록, 여력 시 "default-for-both" 또는 "vitals에서도 튜닝"을 보조 robustness로 1회 기록. 필수는 아님.
 2. (v1 권고 1~6 유효) 길이 버킷팅, 아티팩트 native 포맷, "A_train 통계를 A_val/B에 적용·재계산 금지" assert, unified 모드 격리 등 — 핸드오프 반영.
 
-**결론: HOLD 0 → `h2_handoff.md` 작성으로 진행.** 경미 4건·권고는 핸드오프에서 흡수(DDD 재라운드 불필요, H1 review 선례와 동일).
+**결론: HOLD 0 → `design/h2/handoff.md` 작성으로 진행.** 경미 4건·권고는 핸드오프에서 흡수(DDD 재라운드 불필요, H1 review 선례와 동일).

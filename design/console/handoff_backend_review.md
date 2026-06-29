@@ -78,3 +78,32 @@
 blocker 2건(B1·B2)은 동일 근본 원인(맨버전 vs 디렉토리명 규약 미정)에서 갈라지며, 화해·전파·archived·롤백 네 흐름을 코드 수준에서 끊는다. 둘 다 핸드오프 내부 모순(line 11이 적은 사실과 line 113·179가 충돌)이라 spec-writer/구현자가 글자대로 따르면 동작하지 않는다. HOLD — 다음 단계(spec-writer TDD) 진입 불가.
 
 > **[reviser 종합 응답]** B1·B2를 "버전 식별자 규약 = 디렉토리명 단일화" 한 절로 함께 닫고(헬퍼 `_version_dir`/`_require_consistent`), MJ1(git_commit→retrain.json)·MJ2(do_orm_execute bulk 차단 + 성공기준 테스트)·minor 3건 모두 반영. 설계부 결정 4·5·7 범위 내 구현 명세만 추가했고 새 설계 결정은 만들지 않음. 코드 대조: active_version=디렉토리명 반환(deploy.py:71-73), set_alias가 그 문자열을 심링크 타겟으로 사용(bundle.py:35), git_commit은 retrain.json만 보유(deploy.py:64) — 모두 정합 확인.
+
+---
+
+## 라운드 2 (2026-06-30, redteam) — 규약 통일 보완 재흐름추적
+
+- 대상: `design/console/handoff_backend.md` (명세부 v2, reviser 커밋 `6439b23` 반영본)
+- 핵심 질문: 디렉토리명 단일화가 화해·전파·archived·롤백 네 흐름을 실제로 닫았는가(구멍 옮김 아닌가). MJ1/MJ2/minor 정정이 코드·결정과 모순 없이 끼워졌는가.
+- **판정: PASS — blocker 0** (minor 2건 권고)
+
+근본 결론: `active_version`이 반환하는 표현(`os.readlink`=디렉토리명, deploy.py:71-73)과 `set_alias`가 심링크 타겟으로 쓰는 표현(bundle.py:35)이 양끝 모두 디렉토리명 → 규약을 디렉토리명으로 통일하면 변환 0회. 핸드오프 전 구간 grep+흐름추적: 잔존 맨버전 0, 이중접두사 0.
+
+### PASS
+- **B1 규약 통일 일관(잔존 맨버전 0)** — 맨버전 패턴 grep 매치는 `_require_consistent`의 `startswith(f"gru_{fs}@")` 소속 가드(handoff:39, 정당)와 금지 명문(handoff:43)뿐. approve(version_id/to_version)·rollback(target_version_id/to_version)·reconcile 비교·propagate 타겟 전부 디렉토리명. 경로화는 `_version_dir(version_id)=ARTIFACTS/version_id` 하나로 통일.
+- **B1 화해 거짓양성 제거** — `last.to_version`·`alias_target=active_version()` 양변 동일 표현 → 정상 승인 후 재기동 시 `gru_vitals@v3==gru_vitals@v3`, 거짓 RECONCILE 안 생김(라운드1 B1.1 해소).
+- **B1 롤백 타겟 유효** — `target_version_id`(디렉토리명)→`deploy.rollback`→`set_alias`(bundle.py:35) 상대 심링크 타겟이 존재하는 dir을 가리킴(라운드1 B1.3 해소).
+- **B2 이중접두사 제거** — `_read_meta(_version_dir(target))`=`ARTIFACTS/target`. 옛 `gru_vitals@gru_vitals@v3` 제거. `/health.run_id`와 active dir `meta.json.run_id` 둘 다 같은 active version 파생 → 서빙이 alias 따라잡으면 confirmed(라운드1 B2 해소).
+- **None 안전성** — `alias_target is None` 분기 안전 처리: 빈 시스템 무동작, alias 소실+이력 존재 시 경보만(mn3). `_version_dir(None)`/`to_version=alias_target`은 not-None 분기 안에서만 호출. propagate는 swap/rollback 직후라 alias 항상 세팅.
+- **archived 사슬 무결** — record1.to=`gru_vitals@v2`, record2.from=prev=active_version()=`gru_vitals@v2`로 링크 이어짐. 성공기준 6(`V1→V2·V2→V3`, V1→V3 오염 없음) 성립.
+- **MJ1 git_commit 출처 정정 코드 실재** — `retr=_read_retrain(version_dir)`→`git_commit=retr.get("git_commit")`. retrain.json이 git_commit 보유(deploy.py:64), RetrainResult.git_commit 필드 실재(pipeline.py:64), `_git_commit()` 채움(pipeline.py:23-34). meta.json엔 없음(deploy.py:49-52)이라 옛 NULL 문제 해소.
+- **MJ2 bulk 차단 SQLAlchemy API 정합** — `before_flush`(3-arity, INSERT 통과·dirty/deleted 차단) + `do_orm_execute`(1-arity, `is_update`/`is_delete` bulk 차단). 둘 다 SQLAlchemy 1.4+ 실 API. `session.execute(update/delete)`·`Query.update()/delete()` 포착, SELECT 미차단. 성공기준 1에 bulk 우회 테스트 추가(handoff:248).
+- **mn1/mn2/mn3 정합** — BOOTSTRAP `actor_unverified="system"`(결정1 mn1), `CONSOLE_FEATURESETS` 상수+env override, alias=None+이력 존재 시 거짓 복원 없이 경보(결정 7-2 권위 원칙).
+- **swap 복원·`.ready` 게이트 정합** — `_restore_validation` SimpleNamespace↔`getattr(no_regression)`(deploy.py:86), `no_regression`은 ValidationResult 실 필드(validate.py:39). `.ready` 마지막 원자 기록(deploy.py:65-67)이 두-파일-AND 인코딩.
+
+### minor (다음 단계 막지 않음)
+- **mn-r2-1.** `_read_meta`/`_read_retrain`가 "코드 현황(재활용 대상)"에 놓였으나 `src/`에 실존 0건(grep) — console 신규 헬퍼다. 파싱 필드 계약(deploy.py:49-52/62-64 인용)은 정확해 구현 가능하나, spec-writer가 `deploy._read_meta` 존재로 오인 않도록 "console 신규 헬퍼"로 재분류 권고.
+- **mn-r2-2.** `CONSOLE_FEATURESETS` 위치 흔들림 — handoff:189·193은 `console/config.py`, 대상 파일 목록(handoff:5)엔 config.py 부재. config.py를 목록에 추가하거나 상수를 `__init__.py`로 이동 권고.
+
+### 종합
+라운드 1 두 blocker(B1·B2)는 동일 근본에서 갈라졌고, reviser가 "버전 식별자 규약=디렉토리명 단일화" 한 절 + `_version_dir`/`_require_consistent` 헬퍼로 **구멍을 옮기지 않고 닫았다**. 네 흐름을 코드(deploy.py:71-77, bundle.py:35)와 끝까지 대조해 잔존 맨버전 0·이중접두사 0·None 미전파 안전 확인. MJ1·MJ2·minor 모두 코드·결정과 모순 없이 끼워짐. 남은 2건은 문서 분류·자립성 수준 minor. **PASS — blocker 0. spec-writer TDD 진입 가능.**

@@ -9,6 +9,7 @@ no 0-fill (H1 rules). Invoked only when a human triggers it (promote.py never ca
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -17,6 +18,20 @@ from sepsis import config as C
 from sepsis.data import cache as cache_mod, class_balance, missing, normalize, split as split_mod
 from sepsis.serve.bundle import load_bundle
 from sepsis.train import gru
+
+
+def _git_commit() -> str:
+    """Audit/MLflow-link identifier for the running code (mn1). `git rev-parse` does not
+    detect a dirty tree, and non-repo / git-absent needs a fallback. Reproducibility is the
+    `seed`'s job, NOT git_commit."""
+    try:
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
+                             text=True, check=True).stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"                       # non-repo / git absent
+    dirty = subprocess.run(["git", "status", "--porcelain"],
+                           capture_output=True, text=True).stdout.strip()
+    return sha + ("+dirty" if dirty else "")   # working tree dirty -> mark it
 
 
 def _split_b(b_pids: list[str], holdout_frac: float, seed: int) -> tuple[list[str], list[str]]:
@@ -45,6 +60,9 @@ class RetrainResult:
     epochs: int = 0
     val_loss: float = float("nan")
     mask_on: bool = False                                # H1 rule: mask OFF
+    run_id: str = ""                                     # MLflow run id (결정 3)
+    git_commit: str = ""                                 # audit/link only (mn1; repro = seed)
+    seed: int = 0                                        # B-split seed (MJ1 — reaches retrain.json)
 
 
 def retrain(featureset: str = "vitals", *, holdout_frac: float = 0.3, seed: int = 42,
@@ -88,11 +106,23 @@ def retrain(featureset: str = "vitals", *, holdout_frac: float = 0.3, seed: int 
     spw = float(class_balance.per_timestep_balance(
         [raw[p][1].astype(np.int8) for p in train_pids]).pos_weight)
 
-    res = gru.train_gru(train_data, aval_data, len(idx), hp, pos_weight=spw, seed=seed,
-                        max_epochs=max_epochs, patience=patience, batch_size=batch_size, prog=prog)
+    # Record the retrain as an MLflow run (결정 3, MJ-a): the console resolves a deep-link by
+    # run_id, so the run MUST land in the SAME sqlite store as bundle.py (single source of
+    # truth). experiment="retrain" keeps it separate from the h2 training runs; run_id is
+    # globally unique within the store, so the deep-link resolves regardless of experiment.
+    import mlflow
+    mlflow.set_tracking_uri(f"sqlite:///{C.ROOT}/mlflow.db")
+    mlflow.set_experiment("retrain")
+    with mlflow.start_run() as run:
+        res = gru.train_gru(train_data, aval_data, len(idx), hp, pos_weight=spw, seed=seed,
+                            max_epochs=max_epochs, patience=patience, batch_size=batch_size, prog=prog)
+        run_id = run.info.run_id
+        git_commit = _git_commit()
+        mlflow.log_params({"featureset": featureset, "seed": seed, **hp})
+        mlflow.log_metrics({"epochs": float(res.n_epochs), "val_loss": float(res.best_val_loss)})
 
     return RetrainResult(featureset=featureset, input_dim=len(idx), hp=hp, tau=tau, stats=stats,
                          model=res.model, b_retrain=b_retrain, b_holdout=b_holdout,
                          train_pids=train_pids, aval_raw=aval_raw, bholdout_data=bholdout_data,
                          aval_data=aval_data, epochs=res.n_epochs, val_loss=res.best_val_loss,
-                         mask_on=False)
+                         mask_on=False, run_id=run_id, git_commit=git_commit, seed=seed)

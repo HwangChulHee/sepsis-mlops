@@ -48,7 +48,7 @@ def main() -> int:
     rr = pipeline.retrain(FS, holdout_frac=0.3, seed=42, max_epochs=2, patience=2, prog=prog)
     prog.done(f"epochs={rr.epochs}")
     vr = validate.validate(rr, old)   # real: a 2-epoch model is undertrained -> gate blocks it (#3)
-    v1 = deploy.materialize(rr, "v1-retrain", root=ROOT)
+    v1 = deploy.materialize(rr, "v1-retrain", validation=vr, root=ROOT)   # MJ-b: validation 필수
     PASS_VAL = SimpleNamespace(no_regression=True)   # swap-mechanics tests (#2/#4): validation passes
     # (a real 15-epoch retrain passes — see H4r-b: new util 0.4023 vs old 0.4087)
 

@@ -41,6 +41,7 @@ class ValidationResult:
     distribution: str = ("in-distribution (model trained on A+B; no unobserved 3rd site → "
                          "NOT a cross-site generalization claim; B-holdout is in-dist to B-retrain)")
     note: str = ""
+    eps: float = 0.02  # ADDED (MJ-c) — eps actually used by the gate; persisted single source
 
 
 def validate(retrain_result, old_bundle, *, eps: float = 0.02) -> ValidationResult:
@@ -61,7 +62,7 @@ def validate(retrain_result, old_bundle, *, eps: float = 0.02) -> ValidationResu
         bholdout_util=bh_util, bholdout_prauc=bh_prauc,
         new_aval_util=new_util, old_aval_util=old_util,
         new_aval_prauc=new_prauc, old_aval_prauc=old_prauc,
-        no_regression=bool(no_reg),
+        no_regression=bool(no_reg), eps=eps,
         note=(f"A-val no-regression: new util {new_util:.4f} vs old {old_util:.4f} "
               f"(eps {eps}) -> {'OK' if no_reg else 'REGRESSED'}. "
               f"B-holdout (new data, in-dist) util {bh_util:.4f}."))

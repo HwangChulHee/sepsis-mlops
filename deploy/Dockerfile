@@ -16,8 +16,9 @@ COPY src/ /app/src/
 COPY deploy/artifacts/ /app/deploy/artifacts/
 
 # src layout: config.ROOT = parents[2] of /app/src/sepsis/config.py = /app
-ENV PYTHONPATH=/app/src \
-    SERVE_BUNDLE_DIR=/app/deploy/artifacts/gru_vitals
+# Serving resolves the active alias gru_<fs> under ARTIFACTS (default /app/deploy/artifacts).
+# The legacy SERVE_BUNDLE_DIR fixed-path env is superseded by alias unification (mn-B) — removed.
+ENV PYTHONPATH=/app/src
 
 EXPOSE 8000
 CMD ["uvicorn", "sepsis.serve.app:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -10,8 +10,10 @@ reference.npz, so rollback restores the matching baseline (no false drift).
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
+import time
 from pathlib import Path
 
 import numpy as np
@@ -25,8 +27,20 @@ from sepsis.serve import bundle as bundle_mod
 ARTIFACTS = C.ROOT / "deploy" / "artifacts"
 
 
-def materialize(retrain_result, version: str, *, root: Path = ARTIFACTS) -> Path:
-    """Write a retrained bundle to gru_<fs>@<version> (model+stats+τ+reference). No alias swap."""
+def _atomic_write_json(path: Path, obj) -> None:
+    """Write JSON atomically: body to a temp file, then os.replace onto the target. A reader
+    sees either the OLD file or the COMPLETE new file — never a torn/partial write (결정 7)."""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(obj, indent=2))
+    os.replace(tmp, path)   # atomic rename — torn read 방지
+
+
+def materialize(retrain_result, version: str, *, validation, root: Path = ARTIFACTS) -> Path:
+    """Write a retrained bundle to gru_<fs>@<version> (model+stats+τ+reference) PLUS validation.json
+    + retrain.json, finalized by a `.ready` marker (결정 1·2·7). No alias swap.
+
+    Called REGARDLESS of the validation gate (MJ-b): a REGRESSED version is still materialized so
+    the console can show it as a challenger. The gate is enforced only in swap()."""
     rr = retrain_result
     out = root / f"gru_{rr.featureset}@{version}"
     out.mkdir(parents=True, exist_ok=True)
@@ -34,12 +48,23 @@ def materialize(retrain_result, version: str, *, root: Path = ARTIFACTS) -> Path
     np.savez(out / "pre.npz", **rr.stats)
     (out / "meta.json").write_text(json.dumps(
         {"featureset": rr.featureset, "hp": rr.hp, "input_dim": rr.input_dim,
-         "tau": rr.tau, "version": version, "trained_on": "A-train+B-retrain"}, indent=2))
+         "tau": rr.tau, "version": version, "trained_on": "A-train+B-retrain",
+         "run_id": rr.run_id}, indent=2))   # ADDED — MLflow 연결 키의 단일 권위 출처(결정 4)
     # reference IN the bundle = NEW training distribution (A-train + B-retrain)
     manifest = cache_mod.load_manifest()
     pid2site = dict(zip(manifest.pid, manifest.site))
     ref = R.build_reference_from_pids(rr.featureset, rr.train_pids, pid2site)
     R.save_reference(ref, out / "reference.npz")
+
+    # --- validation.json·retrain.json 원자 co-visible 영속 + .ready AND 완성 표식 (결정 1·2·7) ---
+    val = {**dataclasses.asdict(validation),                          # eps 포함(구현 3-pre, MJ-c)
+           "validated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}  # UTC, Z 접미사(mn5)
+    rj = {"epochs": rr.epochs, "val_loss": rr.val_loss, "b_split_seed": rr.seed,
+          "n_train_pids": len(rr.train_pids), "n_b_retrain": len(rr.b_retrain),
+          "n_b_holdout": len(rr.b_holdout), "run_id": rr.run_id, "git_commit": rr.git_commit}
+    _atomic_write_json(out / "validation.json", val)
+    _atomic_write_json(out / "retrain.json", rj)
+    _atomic_write_json(out / ".ready", {"complete": True})   # 마지막 — 두 JSON 완전할 때만 노출
     return out
 
 

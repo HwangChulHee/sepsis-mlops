@@ -197,3 +197,46 @@
 
 ## 판정
 HOLD — blocker 1건(B-new, 동시성+크래시원자성 2면). blocker 0이 아니므로 명세부 진입 불가.
+
+---
+
+# 라운드 5 — 결정 7 + 보완 재흐름추적
+
+- 대상: design/console/decisions.md (v4)
+- 대상 commit: 7a705c9 (reviser 보완)
+- 검토일: 2026-06-29
+- 핵심 질문: 결정 7(직렬화 경계·alias 권위·재기동 화해)이 승인→swap→감사→전파 사슬을 실제로 닫았는가, 아니면 구멍을 옮겼는가(reconcile 경합·부트스트랩 중 승인·/health 폴링 race). 새 결정이 기존 결정과 모순되지 않는가.
+- 판정: HOLD — blocker 1건(B-r5), major 1건, minor 1건. 라운드 4 B-new의 코어(승인↔승인 동시성, ②후③전 크래시)는 닫혔으나, 보완이 새 쓰기 주체(reconcile·bootstrap-seed)를 직렬화 경계 밖에 남겨 동일 버그-클래스를 부분적으로 재생성했다.
+
+## PASS (라운드 4 blocker B-new 코어 — 실제 닫힘 확인)
+- B-new 면2(동시 승인 직렬화) 닫힘 — 결정 7-1이 read-active(prev)→swap/set_alias→audit write를 featureset 단위 단일 임계구간으로 묶음(decisions.md:173). active_version이 락 없는 readlink(deploy.py:46-48)임을 직접 확인 — 임계구간으로 감싸야 prev 갈라짐 차단. 직렬화 키=featureset도 alias 단위와 일치. scale-out 시 공유락 승격을 의존으로 식별(결정 2와 짝, decisions.md:50,173).
+- B-new 면1(크래시 원자성)의 권위 정의 닫힘 — 결정 7-2가 현재 활성 권위=FS alias, 감사=이력 권위로 분리(decisions.md:174). 결정 1(decisions.md:39,41)·결정 2 면2(decisions.md:50)와 모순 없이 일치. 순서 swap→audit + ③실패를 재기동 화해가 받침(decisions.md:176)도 일관.
+- prev 캡처 코드 정합(mn-c) — 결정 7-3(decisions.md:177)이 deploy.swap 반환 prev(deploy.py:63-65)와 롤백 사전 active_version 읽기(rollback은 prev 미반환, deploy.py:68-70)를 구분해 캡처.
+- 결정 7 코드 인용 전부 정확 / 누수 무영향(pipeline.py:22-28 등 불변).
+
+## blocker
+### B-r5. reconcile·bootstrap-seed가 직렬화 경계 밖의 제3 쓰기 주체 — "archived 도출 오염 없음" 주장이 무방비 인터리브에서 거짓
+- 항목: 결정 7-2 재기동 화해 / 결정 1 부트스트랩 seed의 경계 귀속.
+- 문제: 결정 7-1의 직렬화 임계구간은 명시적으로 "승인·롤백"에만 한정(decisions.md:173). 그러나 reconcile(action=reconcile)과 bootstrap-seed(action=bootstrap)도 같은 권위쌍(alias 읽기 + 감사 쓰기)에 쓰는 주체인데(decisions.md:42,175) 이 경계 밖에 있다. 결정 7-2는 "게이트 스냅샷은 validation.json에서 복원되므로 archived 도출이 오염되지 않는다"고 단언(decisions.md:175). 이 단언은 reconcile/seed가 승인과 상호배제된다는 전제 위에서만 참인데, 그 전제가 결정 어디에도 못 박혀 있지 않다.
+- 근거(구체 반례): 부트스트랩 reconcile이 alias=X·감사최종=Y(X≠Y, ②후③전 크래시 흔적)를 읽고 reconcile(prev=Y, target=X)를 쓰려는 순간, 동시 승인이 임계구간에서 active=X를 읽어 X→Z로 swap하고 audit(prev=X, target=Z)를 먼저 커밋(alias=Z). reconcile이 뒤늦게 쓰면 감사 이력 말미가 [..., swap X→Z, reconcile target=X]가 되어 감사상 최종 활성=X이지만 실제 alias=Z. 현재 champion은 alias=Z로 옳게 읽히나(권위=alias), archived 도출(감사 이력 기반)은 Z를 비활성으로 오판. 결정 7-2가 막았다고 선언한 오염이 재발. 라운드 4 B-new 면2와 동일 버그-클래스.
+- 왜 blocker(설계부 기준): 기법(락 종류)을 요구하는 게 아니다. 경계의 완전성(어떤 쓰기 주체가 경계 안인가)과 결정이 스스로 내건 정확성 주장("archived 오염 없음")의 정합은 설계부 몫이다. 현재 결정은 그 주장을 반증 가능한 채로 둔다.
+- 제안: 결정 7에 한 줄 — (a) 부트스트랩 reconcile/seed는 콘솔이 승인/롤백 요청을 수락하기 전에 완료(startup lifespan에서 실행 후 라우팅 개시), 또는 (b) reconcile/seed도 해당 featureset의 직렬화 임계구간 획득. 둘 중 하나의 존재만 명시(기법은 명세부). (a)를 한 줄로 명문화하면 즉시 강등 가능.
+
+> **[reviser 응답]** 해소: 결정 7-2에 **경계 완전성** 항을 신설(`decisions.md` 결정 7-2 새 불릿 + 7-1 직렬화 주체 목록 정정). reconcile·bootstrap-seed도 (alias 읽기 + 감사 쓰기)에 쓰는 제3 쓰기 주체임을 인정하고, 제안 (a)를 채택: **부트스트랩 reconcile/seed는 콘솔이 승인/롤백 요청을 수락하기 *전에* startup lifespan에서 완료하고, 그 후에야 라우팅(승인/롤백 수락)을 개시**한다. 이로써 reconcile/seed와 승인이 시간상 상호배제되어(부트스트랩=요청 수락 전) 반례의 인터리브(reconcile 뒤늦게 쓰기)가 구조적으로 불가능. "archived 오염 없음" 단언의 전제(reconcile/seed↔승인 상호배제)를 본문에 못 박아 반증 가능성을 제거. 기법(lifespan hook·라우팅 게이트)은 명세부로 명시 이관, 경계 완전성만 설계부에서 확정. 결정 7-1(승인/롤백 직렬화)·7-2(alias 권위)와 모순 없음 — 부트스트랩은 임계구간 *바깥*이 아니라 임계구간이 열리기 *전*에 끝남.
+
+## major
+### MJ-r5. 전파 확인(2-A)의 타겟이 직렬화된 연속 승인 하에서 이동 — 2-A와 결정 7이 미조정
+- 문제: 2-A는 "swap/rollback 후 /health run_id가 새 버전과 일치하는지 폴링"으로 전파 확인(decisions.md:66). 그러나 결정 7-1은 동시/연속 승인을 인정하고 직렬화(decisions.md:173). A(→V2)·B(→V3)가 임계구간을 순차 통과하면 alias·서빙은 V3로 수렴하는데, A의 확인 루프는 "새 버전=V2"를 폴링 → V2는 이미 V3에 정당히 대체됐는데 A는 V2를 영원히 "전파 대기/실패"로 표시·경보(거짓 실패). 라운드 4에서 각각 추가된 두 보완(MJ-new1 전파확인, B-new 동시성)이 서로 조정되지 않았다.
+- 완화(blocker 아님): 최종 alias·감사는 정확하고 최신 승인(B)의 폴링은 진짜 미전파를 표면화하므로 안전 속성 보존 — 거짓 실패는 대체된 승인의 표시에 국한.
+- 제안: 확인 타겟을 "그 swap의 버전"이 아니라 "현재 active_version(alias)"로 정의하면 A·B 모두 V3 수렴 시 확인됨으로 닫힌다. 한 줄 정정.
+
+> **[reviser 응답]** 해소: 결정 2-A 전파 확인 (a)의 타겟을 **"새 버전"→"현재 active_version(alias)"**로 정정(`decisions.md` 결정 2-A). swap/rollback 후 폴링 기준 = 서빙 `/health` run_id가 *그 swap이 쓴 버전*이 아니라 *현재 alias가 가리키는 active_version*과 일치하는지로 변경. 연속 승인 A(→V2)·B(→V3)에서 둘 다 alias가 수렴한 V3를 타겟으로 폴링하므로, A가 V2를 거짓 "전파 대기/실패"로 표시하지 않음(대체된 승인은 alias 권위상 정당히 V3에 양보). 진짜 미전파(서빙이 alias를 못 따라옴)는 여전히 active_version 불일치로 표면화 — 안전 속성 보존. 결정 7(alias=현재 활성 권위)과 정합: 전파 확인도 alias를 진실원천으로 따름.
+
+## minor
+### mn-r5. reconcile 레코드의 prev 의미 명시 권고
+- 결정 7-2 reconcile 레코드가 archived 도출에 대체된 버전을 남기려면 prev = 감사 최종 활성으로 채워야 한다(결정 4의 모든 레코드가 prev를 가진다는 스키마와 정합, decisions.md:95). 결정 7-2는 reconcile의 사유·actor만 적고 prev 의미를 명시하지 않음(decisions.md:175). archived 도출 보존을 위해 reconcile prev=감사최종활성임을 한 줄 명시 권고.
+
+> **[reviser 응답]** 해소: 결정 7-2 reconcile 레코드 정의에 **prev = 감사 최종 활성 레코드의 버전**임을 한 줄 명시(`decisions.md` 결정 7-2). 화해가 alias 실제 상태(target)로 감사를 맞추되, prev엔 감사상 직전 최종 활성을 채워 archived 도출(이전 활성→비활성 천이)이 보존되도록 함. 결정 4의 "모든 레코드가 prev를 가진다"(decisions.md:95) 스키마와 정합.
+
+## 판정
+HOLD — blocker 1건(B-r5). 코어는 결정 7로 실제 닫혔고 기존 결정 1·2와 권위 정의 모순도 해소. 그러나 reconcile·bootstrap-seed를 직렬화 경계 밖에 남겨 결정 7-2 자신의 "archived 오염 없음" 주장을 반증 가능하게 둠. 수정은 한 줄 규모지만 경계 완전성은 설계부에서 못 박아야 하므로 blocker. blocker 0 아니므로 명세부 진입 불가.

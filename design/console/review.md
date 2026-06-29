@@ -140,3 +140,60 @@
 - 라운드별 커밋: `130e097`(round 1), `09cc7f9`(round 2). 라운드 3은 redteam PASS만(보완 불필요).
 - 잔여 minor 3건(mn-a/b/c)은 구현 명세부(핸드오프)에서 정리 권고 — blocker 아님.
 - **사람 게이트 대기**: 푸시는 사람 승인 후.
+
+---
+
+# 라운드 4 — 새 기준 재검토 (흐름추적 + 검토깊이)
+
+- 대상: design/console/decisions.md (v3, 라운드 3에서 PASS 받음)
+- 검토일: 2026-06-29
+- 핵심 질문: 승인 → alias 전환 → 감사 기록 → 서빙 전파의 전체 사슬이 끊김·stale·경합 없이 닫히는가. "처리/기록/복원한다"가 실제 메커니즘까지 명세됐는가.
+- 판정: HOLD — blocker 1건(동시성 + 크래시 원자성 2면). major 2건.
+- 이전 PASS 재평가: N1 보완(5-B 디스크 영속)은 in-memory 의존은 제거했으나 구멍을 "FS alias ↔ 감사 DB 이중쓰기 일관성"으로 옮겼고, 그 새 구멍이 닫혀 있지 않다. 즉 라운드 3 PASS는 흐름의 마지막 마디(전파·기록 원자성)를 보지 않은 통과였다.
+
+## PASS (재확인)
+- N1 복원 객체 ↔ deploy.swap 계약 정합 — swap은 getattr(validation,"no_regression",False)(deploy.py:61)로 속성 접근, 부재 시 기본 False→ValueError fail-safe. SimpleNamespace 복원으로 백엔드 시그니처 변경 없이 성립.
+- swap keyword-only 시그니처 정확 — swap(featureset, version_dir, *, validation, approved)(deploy.py:55).
+- set_alias 단일 op 원자성 — os.replace(tmp, link)(bundle.py:38)는 심볼릭링크 교체 그 자체는 원자적. (단, blocker는 "swap+감사" 복합 연산의 원자성 문제로 별개.)
+- 게이트 필드 ↔ ValidationResult 일치 / 누수 무영향 — validate.py:31-43, 재학습 파이프라인 환자단위 분할·train-only stats(pipeline.py:22-28,72-77) 불변.
+
+## blocker
+### B-new. 승인/롤백이 트랜잭션 경계 없는 다중 저장소 변이 — 동시성 제어·크래시 복구 둘 다 미결정
+- 문제: 콘솔 승인 핸들러의 선언된 사슬 = ① validation.json 읽어 복원 → ② deploy.swap(FS alias 전환, prev 반환) → ③ 감사 레코드 기록(게이트 스냅샷·prev) → ④ 서빙 reload 트리거. 이 4단계는 하나의 원자 트랜잭션이 아니고, 직렬화도 안 된다.
+- (면 1) 크래시 원자성 / FS·DB 분기 [확인됨: 코드 + DDD 공백]: ②와 ③ 사이 크래시 → alias는 V2를 가리키는데 감사엔 swap 기록이 없다. 결정 1은 archived = 감사 DB의 swap/rollback 이력을 source of truth로 선언(decisions.md:40)했는데, 그 권위 저장소가 실제 alias 상태와 어긋난다 → V1이 archived로 안 보이고, 게이트 스냅샷도 유실. 순서를 ③→② 로 뒤집어도 "기록은 있는데 swap 안 됨" 창이 생긴다. 어느 쪽이 권위인지·재기동 시 reconciliation을 어떻게 하는지 결정이 없다. deploy.rollback은 prev를 반환조차 안 한다(deploy.py:68-70).
+- (면 2) 동시 승인 2건 — 직렬화 부재 [확인됨: 코드]: DDD의 "콘솔 stateless·1개면 충분"(decisions.md:48)은 scale-out 얘기지 요청 동시성이 아니다. FastAPI는 한 프로세스에서 요청을 동시 처리하므로 운영자 2명이 서로 다른 challenger를 동시 승인 가능. 둘 다 prev = active_version()을 V1으로 읽고, A는 V2로 B는 V3로 swap. alias는 last-writer-wins로 V3에 안착하지만 감사엔 "V1→V2"와 "V1→V3" 두 레코드가 prev=V1로 남는다. archived 도출·롤백 대상 결정이 오염된다. read-active→swap→audit를 감싸는 락/직렬화가 없다.
+- 왜 blocker: 설계부는 기법(mutex vs DB 트랜잭션 vs advisory lock)까진 요구하지 않지만, "승인/롤백은 FS+DB에 걸친 트랜잭션이며 직렬화·복구 전략이 필요하다"는 의존 식별은 설계부 몫이다. 그게 둘 다 빠졌다. N1 보완이 audit-as-source-of-truth를 못 박은 결과 이 구멍이 확정됐다.
+- 제안: ① 승인/롤백을 단일 직렬화 경계(전역 락 또는 동등)로 정의해 read-active→swap→audit를 원자 구간으로 묶을 것. ② FS alias와 감사 DB가 분기했을 때 어느 쪽이 권위이고 재기동 시 어떻게 화해하는지(예: 부트스트랩 시 실제 alias로 감사 보정) 결정할 것. 기법 디테일은 명세부로 넘기되 경계·권위·복구의 존재는 설계부에서 못 박아야 한다.
+
+> **[reviser 응답]** 해소: **결정 7 신설**(`decisions.md` 결정 7)로 두 면을 모두 못 박음.
+> - (면 2) **직렬화 경계** — 승인·롤백을 featureset 단위 단일 임계 구간으로 정의: `read-active(prev) → swap/set_alias → audit write`를 하나의 직렬화 구간으로 묶어 동시 승인의 last-writer-wins·prev 중복(V1→V2/V1→V3) 경합을 차단(결정 7-1). 직렬화 키=featureset(alias가 featureset 단위, `deploy.py:46`). 콘솔 scale-out 시 프로세스-로컬 락으론 부족하므로 공유 저장소 기반 락(DB advisory lock 등)이 필요함을 *의존으로 식별* — 결정 2의 "1개면 충분"을 "프로세스 내 직렬화가 닫힐 때의 전제, scale-out 시 공유 락으로 승격"으로 한정(결정 2 본문 + 결정 7-1). 기법(mutex/advisory lock/파일 lock)은 명세부.
+> - (면 1) **권위·크래시 화해** — FS alias = *현재 활성 상태*의 권위(결정 7-2). 감사 DB는 *이력*의 출처지 현재 활성의 출처가 아님으로 결정 1의 "archived=감사 이력"을 *과거 활성 도출*로 한정(현재 champion은 언제나 `active_version` alias로 읽음 — 결정 1 champion 정의와 일치). ②후 ③전 크래시로 분기 시 **alias가 이긴다**. **재기동 화해(reconciliation)**: 부트스트랩 시 실제 alias와 감사 최신 활성 레코드를 대조, 어긋나면 보정 감사(action=`reconcile`, actor=`system`)를 기록해 감사를 실제 상태로 맞춤(결정 1 bootstrap seed 정책을 화해까지 확장). 게이트 스냅샷은 version dir의 `validation.json`에서 재읽기 복원되므로(결정 5-B) 유실 없음. 순서는 임계 구간 내 swap→audit, ③ 실패는 재기동 화해가 마지막 안전망(③→② 역순은 alias 권위 원칙과 충돌해 불채택).
+> - **prev 캡처(mn-c 동반)** — swap 반환 prev와 롤백 시 사전 읽은 active_version을 임계 구간 안에서 읽어 감사에 캡처(결정 7-3 + 5-A). `deploy.rollback`이 prev 미반환(`deploy.py:68-70`)이므로 롤백 prev는 콘솔이 호출 *전* active_version으로 읽어 캡처. 기법은 명세부.
+
+## major
+### MJ-new1. 전파의 마지막 홉(reload 트리거) 실패·확인 부재 — 사슬이 조용히 끊길 수 있음
+- 문제: 2-A는 swap 후 reload(롤링 재시작 | /admin/reload)를 명시적 단계로 둔다(decisions.md:59-61). 그러나 트리거 실패 시(K8s API 거부·/admin/reload 500·네트워크 단절) alias·감사는 갱신됐는데 서빙은 옛 _S/_DS를 계속 쓴다. 성공기준 "옛 번들 잔존 없음"(decisions.md:180)이 조용히 위반.
+- 제안: 전파 성공을 확인(예: /health의 run_id가 새 버전과 일치)하고 실패 시 재시도/경보하는 의존을 식별. 기법은 명세부.
+
+> **[reviser 응답]** 해소: 결정 2-A에 **전파 확인·실패 처리** 절 추가(`decisions.md` 결정 2-A). (a) 전파 성공 확인 = `/health` run_id가 새 버전과 일치하는지 폴링(MJ2로 `/health`가 실제 run_id 보고함이 전제), (b) 실패 시 재시도·운영자 경보, (c) 확인 전까지 콘솔 UI는 해당 버전을 "활성(전파 확인됨)"이 아니라 "전파 대기/실패"로 구분 표시 — alias·감사는 권위(결정 7)라 이미 갱신됐고 미전파는 *가시적 상태*로 노출(조용한 끊김 방지). 성공기준의 "옛 번들 잔존 없음"을 "전파 확인으로 검증, 미확인 시 명시 표시"로 보강. 기법은 명세부, 서빙 `/health` 의존이라 [검증 필요].
+
+### MJ-new2. "백엔드 ValueError = 독립 방어선" 주장이 부정확 — 같은 파일의 단일 출처를 두 번 읽음
+- 문제: M3는 REGRESSED 비승격을 "UI 버튼 비활성 + 백엔드 ValueError"의 이중 게이트로 못 박았고(decisions.md:79-81), 5-A는 swap의 ValueError를 "감사원이 아닌 방어선"이라 부른다(decisions.md:119). 그러나 N1 이후 콘솔이 validation.json을 읽어 객체를 복원해 swap에 건네주고, swap은 그 콘솔-복원 객체의 no_regression만 본다(deploy.py:61). UI도 백엔드도 같은 validation.json 파생이다. validation.json이 stale/오염되면 백엔드가 못 잡는다.
+- 제안: "백엔드 ValueError는 콘솔 로직 누락(가드 드롭)은 막지만, validation.json 자체가 틀리면 못 막는다 — 둘은 같은 출처를 읽으므로 진정한 다출처 방어가 아니다"로 정직화. validation.json을 신뢰경계로 명시.
+
+> **[reviser 응답]** 해소: 결정 3 "콘솔 UI 귀결"에 **방어선 성격 정직화(MJ-new2)** 추가(`decisions.md` 결정 3) + 5-A 문구 수정. "이중 게이트"는 *진정한 다출처 방어가 아님*을 명시: UI 버튼 비활성과 백엔드 `ValueError`는 **둘 다 같은 `validation.json` 파생**이라, 백엔드 가드는 *콘솔 로직 누락(가드 드롭)* 은 막지만 `validation.json` 자체가 stale/오염이면 못 막는다. 따라서 **`validation.json` = 신뢰경계**로 명시(mn-new2 동반: MVP는 이 경계를 신뢰하며, 직접 편집 시 하드 게이트 우회 가능함을 수용 가정으로 명기). 방어 깊이의 정확한 정의 = 가드 드롭 방지(코드 경로) ≠ 데이터 무결성 방어.
+
+## minor
+- mn-a (이월). challenger 표식이 validation.json 단독(decisions.md:39)이라 validation.json 기록 후 retrain.json 실패 시 "승인 가능하나 재학습 출처 공백" 재발. 미완성 후보 판정을 두 파일 모두에 걸거나 원자 기록(temp→rename)을 명세부에 못 박을 것.
+  > **[reviser 응답]** 해소: 결정 1 challenger 판별을 **`validation.json` AND `retrain.json` 둘 다 존재**로 보강(`decisions.md` 결정 1) + 5-B에 두 파일 원자 기록(temp→rename, 또는 둘을 한 디렉토리 커밋으로) 요구를 명세부 이관 의존으로 명시. 부분쓰기 버전은 *미완성 후보*로 승인 배제.
+- mn-b (이월). eps·"검증 시각"은 ValidationResult 필드가 아님(validate.py:31-43; eps는 validate(*, eps=) 인자). 5-B의 "전체 직렬화"만으론 안 나오니 영속 시 주입 명시.
+  > **[reviser 응답]** 해소: 결정 5-B에 "`eps`·검증 시각은 `ValidationResult` 필드가 아니라 `validate(*, eps=)` 인자·외부 시계이므로 영속 시점에 **별도 주입**"을 명시(`decisions.md` 5-B). swap-임계 필드 `no_regression`엔 영향 없음을 함께 명기.
+- mn-c (이월). deploy.swap의 반환 prev와 롤백 시 active_version 사전 읽기를 감사에 캡처함을 명시.
+  > **[reviser 응답]** 해소: 결정 7-3에 명시(B-new 응답 참조) — 임계 구간 내에서 읽은 prev/active_version을 감사에 캡처.
+- mn-new1. 롤링 재시작 중에는 새/옛 pod가 두 모델 버전을 동시 서빙(graceful drain). 의료 맥락에서 이 transient 혼재 허용 여부 한 줄 명시 권고(decisions.md:60).
+  > **[reviser 응답]** 해소: 결정 2-A 롤링 재시작 항에 한 줄 추가(`decisions.md` 2-A) — drain 동안 새/옛 pod가 두 버전을 transient 동시 서빙하나, **환자별 추론은 stateless 요청 단위(hidden state는 요청 내 시퀀스로 재구성)이고 두 버전 모두 검증·승인된 번들**이라 의료적으로 허용 가능 범위로 수용. 무중단이 핵심이면 in-place reload 경로 택일 가능(이미 2-A에 정의). 단정 아닌 수용 판단이라 [우리 결정].
+- mn-new2. validation.json 직접 편집하면 하드 게이트 우회 가능 = 파일이 신뢰경계. MVP 수용이라도 그 가정 명시.
+  > **[reviser 응답]** 해소: MJ-new2 응답과 함께 결정 3에 명시(`decisions.md` 결정 3) — `validation.json` = 신뢰경계, 직접 편집 시 우회 가능함을 MVP 수용 가정으로 명기(인증·파일 무결성 검증은 후속 과제 [검증 필요]).
+
+## 판정
+HOLD — blocker 1건(B-new, 동시성+크래시원자성 2면). blocker 0이 아니므로 명세부 진입 불가.

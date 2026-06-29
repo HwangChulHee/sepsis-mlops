@@ -62,3 +62,29 @@
 핵심 swap 사슬(결정 1)·서빙 전파(결정 5·6)·식별 오염(결정 4)은 코드 대조상 닫힌다. 그러나 콘솔이 백엔드에 명시적으로 건 두 파일 원자·완전 영속 의존(mn-a / 교차단계 의존 line 218)이 결정으로도 명세부 위임으로도 부재하여(B1) 콘솔의 완성-기준·감사 무결성 전제가 백엔드에서 지탱되지 않는다. 추가로 seed 출처 오식별(MJ1)은 통과한 상위 콘솔 문서보다 부정확하고, 전파 확인 식별자 미스매치(MJ2)가 사슬 마지막 홉에 남는다. blocker 1건이므로 HOLD.
 
 > **[reviser 종합 응답]** 라운드 1 보완: blocker B1(신설 결정 7 — 두 파일 원자 co-visible 영속·AND 완성 표식, 성공 기준 교정) + major 2건(MJ1 seed 출처를 코드 현실·콘솔 5-B와 일치, MJ2 전파 확인 식별자 네임스페이스 일치) + minor 4건(mn1 헤드라인 수치 명시, mn2 run_id 단일 출처, mn3 dev 폴백 superseded, mn4 줄범위 교정·rollback 대칭화 교차참조) 모두 반영. 기법은 일관되게 명세부로 위임(설계부 깊이 유지).
+
+---
+
+## 라운드 2 — 결정 7 + MJ1·MJ2 보완 재흐름추적
+
+- 대상: `design/console-prep/decisions.md` (설계부 v2, 라운드 1 보완 후)
+- 대상 commit: `398d878`
+- 검토일: 2026-06-29
+- 핵심 질문: 결정 7(두 파일 원자 co-visible)이 사슬을 실제로 닫았는가 아니면 구멍을 옮겼는가 + MJ1/MJ2 교정이 기존 결정·콘솔 문서와 모순 없이 끼워졌는가
+- **판정: PASS — blocker 0 (minor 3)**
+
+### PASS
+- **결정 7 — 두 파일 AND 완성표식이 부분가시화 창을 실제로 닫음** (decisions.md:94-103). materialize가 dir+번들 4파일을 일찍 생성(deploy.py:33-42), validation.json은 validate 이후에만(validate.py:46). 콘솔 스캐너가 이 창에 끼어들어도 결정 7-1(line 99) "둘 중 하나라도 없는 dir=미완성 후보" → 거짓 challenger 불가. torn(둘 다 존재·하나 잘림)도 line 99가 미완성 후보로 배제. "dir-무JSON=미완성 / dir-양JSON완전=challenger / dir-한쪽or torn=미완성" 세 상태만 콘솔이 봄 — 구멍이 옮겨가지 않음.
+- **결정 7 — 원자성 단위 모호성은 설계부 위반 아님** (decisions.md:102). 디렉토리 커밋 단위·완성 마커·temp→rename·fsync를 명세부로 명시 위임. 설계부는 결과(co-visible·AND·torn 배제)를 못 박고 단위 기법은 위임 — 검토깊이 정합.
+- **결정 7 — 번들 파일 원자성은 전이적으로 안전**. swap은 승인 후에만(deploy.py:59-65), 승인은 두 JSON AND 후에만, 두 JSON은 materialize 완료 후 기록(콘솔 5-B order). "두 JSON 존재"가 model.pt/pre.npz/meta.json/reference.npz 완료를 전이 보장 → swap 시점 torn 번들 읽을 창 없음. order 고정에서 따라옴 — 설계 공백 아님.
+- **MJ1 — seed 출처 교정이 코드·콘솔과 정합** (decisions.md:43,52,55). seed가 retrain() 인자일 뿐 RetrainResult 필드 아님(pipeline.py:31-47)·materialize 도달 불가(deploy.py:28) 반영, 결정 3 주입 대상을 run_id·git_commit·seed 3종으로 확장 → 콘솔 5-B line 137과 동일. 단일 출처 원칙(seed→retrain.json 감사, run_id→meta.json 권위+retrain.json 사본) 유지, 결정 2·4와 무충돌.
+- **MJ2 — 식별자 네임스페이스 일치가 사슬 마지막 홉을 닫음** (decisions.md:67). 전파 확인=`/health.run_id` ↔ 현재 alias 타겟 dir의 meta.json.run_id 비교(active_version 문자열 아님). 서빙이 새 alias를 못 따라오면 옛 run_id ≠ 현재 타겟 run_id로 불일치 표면화. 콘솔 2-A MJ-r5 뉘앙스(타겟=현재 alias)도 보존 — 연속 승인 A(→V2)·B(→V3) V3 수렴 시 둘 다 확인됨.
+- **누수 불변 보존** (decisions.md:123). 결정 1~7은 영속·reload·메타데이터만 건드리고 split·stats·fill 로직 불변(pipeline.py:61-77).
+
+### minor (단독으로 막지 않음)
+- **mn-r2-1.** 콘솔 2-A 본문 리터럴 "active_version과 일치"(console/decisions.md:66)는 여전히 느슨 — console-prep 결정 4가 meta.json.run_id 의미로 정확히 재해석해 백엔드 계약은 닫혔으나, 콘솔 명세부 진입 시 2-A 문구를 "타겟 dir의 meta.json.run_id"로 교정 권고. (console-prep이 콘솔 문서 편집 불가라 비블로킹.)
+- **mn-r2-2.** validation.json 헤드라인 수치 인용 줄범위 off-by-one(decisions.md:28 "validate.py:34-38" → 실제 35-38, :34는 bholdout_prauc). 주장 정확, 범위 시작만 한 줄 어긋남.
+- **mn-r2-3.** git_commit 런타임 취득의 재현성 질문이 미해결 검토요청으로 남음(decisions.md:58). git rev-parse는 감사·링크용이지 학습 재현(그건 seed)이 아니므로 재현성 무영향 — 이 구분을 한 줄 못 박으면 검토요청 닫힘.
+
+### 종합
+라운드 1 blocker B1은 결정 7로 구멍이 옮겨가지 않고 닫혔다 — AND 완성표식·co-visible·torn 배제가 백엔드 교차단계 의존으로 명문화됐고, materialize↔validate 부분가시화 창에 스캐너가 끼어드는 경로는 "두 JSON AND" 마커로 모두 미완성 후보로 흡수된다. 원자성 단위는 명세부 위임으로 적절. MJ1(seed)은 코드·콘솔 5-B와 일치, MJ2(식별자)는 meta.json.run_id 비교로 마지막 홉 닫고 콘솔 MJ-r5 뉘앙스 보존. 코드 대조상 모든 인용 일치(off-by-one 1건 minor). **blocker 0 → 설계부 통과(PASS), 명세부로 진행 가능.**

@@ -217,7 +217,12 @@ def get_version_detail(fs: str, version: str) -> dict: ...  # GET /console/versi
   ]
 }
 ```
-- **버킷 판정**: `champion` = `active_version(fs)` 타겟(alias 권위, DB 추정 아님). `challenger` = `.ready` 있고 비활성. `incomplete` = `.ready` 없음. `archived` = 감사 `last_active` 이력상 과거 활성이었으나 현재 비활성·비challenger. 동률 시 우선순위 champion > archived > challenger > incomplete.
+- **버킷 판정 (상호배타 — 우선순위 순으로 첫 매치)**: 한 버전은 정확히 한 버킷. 아래 순서로 판정하고 첫 매치에서 멈춘다(`champion > archived > challenger > incomplete`):
+  1. `champion` = `active_version(fs)` 타겟(= 현재 alias, FS 권위; 감사 DB 추정 아님).
+  2. `archived` = 현재 비활성(=champion 아님)이고 감사 `last_active` 이력상 **과거에 활성이었던** 적이 있다. **`.ready` 유무와 무관** — 과거 활성 이력이 challenger 조건(`.ready`+비활성)보다 우선하므로, 한때 챔피언이었던 버전은 `.ready`가 남아 있어도 `archived`다(되돌아갈 수 있는 롤백 후보로 표시).
+  3. `challenger` = `.ready` 있고 비활성이며 **과거 활성 이력 없음**(= 한 번도 배포된 적 없는 신규 후보).
+  4. `incomplete` = `.ready` 없음(영속 미완성).
+  - 이로써 옛 정의의 "비challenger" 순환을 제거: archived가 challenger보다 먼저 판정되므로 "ready한 과거 챔피언"은 archived로 확정된다.
 
 **`get_version_detail(fs, version)` 응답 (상세 — 펼친 패널용)**:
 ```json

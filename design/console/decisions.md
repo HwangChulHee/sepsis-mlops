@@ -1,0 +1,171 @@
+# Console 설계결정문서 (DDD) — 운영 콘솔 (R1~R3)
+
+> **설계 근거**: H4 운영 레이어(서빙·드리프트·재학습)가 만든 백엔드(`deploy.py`·`validate.py`·`bundle.py`)를 **사람이 조작하는 운영 콘솔**로 노출. 모델을 *만드는* 건 코드+MLflow(콘솔 밖), 콘솔은 *운영*(배포 승인·버전·감사)만.
+> **워크플로우·출처등급**: [`WORKFLOW.md`](../WORKFLOW.md). 검토(`design/console/review.md`) 통과 후 구현 명세부로.
+> **상태**: 설계부 v2 — 레드팀 라운드 1 blocker 2건 + major 4건 반영. 구현 명세부는 blocker 0 확정 후 이어붙임.
+> **개정 이력**
+> - v1: 초안 (설계부).
+> - v2: 레드팀 라운드 1 반영 — B1(alias 전파 메커니즘 결정·서빙 1점 범위 편입), B2(MLflow 연결 키 = meta.json.run_id, 교차단계 의존 명시 + 정직한 폴백), M1(SQLAlchemy 허위 `[확인됨]` 강등), M2(롤백 승인·감사 정책), M3(REGRESSED 비승격 = 하드 게이트 명시), M4(actor 미검증 입력으로 정직화·규제 주장 완화).
+
+## 한 줄 요약
+
+H4가 만든 버전 관리·검증 게이트·롤백 백엔드를, **champion-challenger 운영 콘솔** 하나로 사람이 조작하게 한다. R1(배포 승인)·R2(버전·롤백)·R3(감사)를 "버전 리스트 → 클릭 → 상세+액션+감사" 한 화면에 통합. **추론(stateful)과 콘솔(stateless)은 독립 앱으로 분리**(scale-out 로드맵). 실험·수치 상세는 재구현하지 않고 MLflow로 링크. **운영 본체 — 모델 성능이 아니라 운영 설계가 차별점**(Epic 실패 vs TREWS 교훈).
+
+## 범위 / 범위 외
+
+| 범위 (console) | 범위 외 |
+|---|---|
+| 배포 승인 UI(게이트 표시 + 승인/기각) | 모델 학습·재학습 *로직* (코드로, 콘솔 밖) |
+| 버전 리스트·활성 표시·롤백 UI | 실험 추적·수치 비교 (MLflow Tracking) |
+| 감사 추적(승인·교체·롤백 기록) | 점진적 배포(canary/blue-green/shadow) |
+| 콘솔 백엔드 API(기존 함수 노출) | 서빙 프레임워크 도입(Triton/Seldon/KServe — ADR 참고) |
+| Grafana 운영 패널 2개(SLO·헬스) | 멀티 병원·멀티 모델 |
+| **서빙 활성 버전 전파**(alias 기반 로딩 + 재로드 트리거) — B1로 편입, 예측 *로직*은 불변 | 인증/SSO·신원 검증 (M4 후속, 미검증 actor로 시작) |
+
+> **v2 범위 변경(B1)**: 원래 "서빙 수정 = 범위 외"였으나, 레드팀이 alias 스왑이 실행 중 서빙에 전파되지 않음을 지적(B1). 콘솔의 핵심 가치(운영 일관성)를 코드로 지탱하려면 서빙의 **버전 소스를 alias로 바꾸고 재로드 경로를 추가**하는 최소 변경이 불가피하다. 이 1점만 범위에 편입하되, 예측/추론 로직·환자별 상태 처리는 콘솔이 절대 건드리지 않는다(환자 안전 분리 원칙 유지).
+
+---
+
+## 결정 1: 통합 콘솔 — champion-challenger, 리스트→클릭→상세
+
+- **결정**: R1·R2·R3를 화면 3개로 나누지 않고 **하나의 콘솔**로 통합한다. 구조 = 상단 활성(champion) 상태바 → 버전 리스트(champion/challenger/archived) → 행 클릭 시 상세 펼침(번들·게이트·액션·감사·MLflow 링크). champion-challenger는 업계 표준 프레이밍.
+- **근거 + 출처등급**:
+  - 버전 리스트→클릭→상세 pane은 Seldon/BentoML 대시보드 표준 패턴 [확인됨: 벤치마크].
+  - R1·R2·R3가 모두 "버전을 대상으로 한 운영 행위"라 한 패턴으로 흡수됨 [우리 결정].
+- **고려한 대안**: 화면 3개 분리(중복 네비게이션, 같은 버전을 세 곳에서). 기각.
+- **champion/challenger/archived 도출 기준** (m3 — 백엔드엔 "challenger" 개념이 없음 [확인됨: deploy.py는 active alias + 버전 디렉토리만 안다]). 콘솔이 다음 규칙으로 *파생*한다 [우리 결정]:
+  - **champion** = 현재 alias가 가리키는 버전 (`deploy.active_version(fs)`, `deploy.py:46`).
+  - **challenger** = 자재화(materialize)되어 `gru_<fs>@<v>` 디렉토리로 존재하고, validation 결과가 있으나 아직 활성이 아닌 버전.
+  - **archived** = 과거에 champion이었다가 교체/롤백으로 비활성이 된 버전 — **출처 = 감사 저장소의 swap/rollback 이력**(파일시스템엔 "과거 활성" 표시가 없으므로 감사 DB가 source of truth).
+- **검토 요청 항목**: 한 화면 통합이 R1·R2·R3 기능을 빠짐없이 담는지.
+
+---
+
+## 결정 2: 서빙 앱 / 콘솔 앱 분리 (독립 앱 2개)
+
+- **결정**: 추론 서빙(`src/sepsis/serve/app.py`)과 운영 콘솔을 **독립 앱 2개**로 둔다. 추론은 stateful(환자별 hidden state)·scale-out 대상·환자 안전 직결, 콘솔은 stateless·1개면 충분·사람이 자주 조작. **공유 자원 = 번들 저장소(active alias) + 감사/상태 DB.**
+- **근거 + 출처등급**:
+  - 추론이 stateful이라 scale-out 시 replica 복제 대상인데, 콘솔이 같이 복제되면 승인/롤백이 pod마다 흩어져 활성 버전이 불일치 [우리 결정, K8s scale-out 로드맵].
+  - 콘솔 변경이 추론(환자 안전)을 건드릴 위험 제거 [우리 결정].
+- **고려한 대안**: 한 앱 통합 + `/console` router 격리(단순하나, scale-out 시 분리 강제). scale-out 로드맵이 실재하므로 처음부터 분리.
+
+### 2-A: alias 변경의 서빙 전파 메커니즘 (B1 — 핵심 일관성 주장 지탱)
+
+- **레드팀이 드러낸 단절** [확인됨]: 서빙은 alias를 읽지도 핫리로드하지도 않는다. (1) 번들을 모듈 전역 `_S`에 **한 번 로드 후 영구 캐시**, 재로드 트리거 없음(`app.py:34-44`). (2) 컨테이너 경로는 alias가 아니라 ConfigMap이 주입한 **고정 `SERVE_BUNDLE_DIR`($RUN 디렉토리)** 를 읽음(`app.py:38-40`). drift baseline도 `_DS`에 영구 캐시(`app.py:97-110`). → 콘솔이 `deploy.swap`/`rollback`으로 심볼릭링크를 바꿔도 실행 중 pod는 옛 번들을 계속 쓴다. "alias = 단일 조정점"이 실제 로딩 경로와 단절.
+- **결정 (근본 해소)** [우리 결정]: 활성 버전의 **단일 진실원천(source of truth) = alias `gru_<fs>`** 로 통일하고, 두 가지를 결정한다.
+  1. **서빙 버전 소스를 alias로 변경** — 컨테이너 서빙이 읽는 경로를 고정 `$RUN`이 아니라 alias `gru_<fs>`(→ 현재 버전 디렉토리로 심볼릭링크)로 바꾼다. ConfigMap은 더 이상 특정 `$RUN`을 핀하지 않고 alias 경로만 가리킨다. 이로써 dev(MLflow)·컨테이너(export dir) 양쪽이 *같은 활성 표식*을 본다. (서빙 1점 변경 — 범위표 v2 참고.)
+  2. **전파(실행 중 pod 반영) = 명시적 단계** — alias 교체는 *디스크의 활성 표식*만 바꿀 뿐 메모리 캐시 `_S`/`_DS`는 갱신하지 않는다. 따라서 콘솔 swap/rollback은 alias 갱신 **후** 서빙 재로드를 *명시적으로 트리거*한다:
+     - **프로덕션(K8s) = 롤링 재시작** [우리 결정]. 콘솔이 서빙 Deployment에 rolling restart를 트리거(예: `kubectl.kubernetes.io/restartedAt` 어노테이션 패치)한다. 새 pod가 갱신된 alias를 fresh 로드, 옛 pod는 graceful drain. 모델 *버전* 교체이므로 옛 GRU의 hidden state를 새 모델로 이어쓰면 안 되며, 재시작에 따른 **상태 리셋은 버전 교체 시 올바른 동작**이다(혼용이 오히려 skew). 콘솔에 필요한 권한 = 해당 Deployment 재시작용 **좁은 RBAC**(patch deployment만).
+     - **dev/로컬(K8s 없음) = 재로드 엔드포인트** [우리 결정]. 서빙에 `POST /admin/reload`(루프백/관리 토큰 가드)를 추가, `_S`/`_DS`를 alias 기준으로 재초기화. 콘솔이 swap/rollback 후 호출.
+  3. 콘솔은 **예측/추론 로직과 환자별 상태 처리를 건드리지 않는다** — 추가되는 것은 (a) alias 기반 번들 소스, (b) 재로드 진입점뿐. 환자 안전 분리 원칙 유지.
+- **미해결로 정직히 남기는 부분** [검증 필요]:
+  - 프로덕션 전파를 *롤링 재시작*으로 할지 *in-place `/admin/reload`*로 할지의 최종 택일은 배포 환경(K8s 유무·무중단 요구·drain 정책)에 종속 — 운영 배포 시점에 확정. 본 DDD는 두 경로를 모두 정의하되 K8s 기본값을 롤링 재시작으로 제안.
+  - 콘솔이 K8s API에 접근하기 위한 정확한 RBAC role/binding과 네트워크 정책은 인프라 결정 — 구현 명세부 또는 별도 ADR에서 확정.
+- **검토 요청 항목**: alias 단일 진실원천 + (롤링 재시작 | reload 엔드포인트) 전파가 "콘솔 swap → 실행 중 서빙 반영"을 실제로 닫는지, 그리고 서빙 1점 변경이 환자 안전 분리를 깨지 않는지.
+
+---
+
+## 결정 3: 검증 게이트 표시 — 수치 크게 + 판정 보조
+
+- **결정**: 배포 승인 화면에서 `validate.py`가 생성하는 게이트 결과를 **수치를 주인공으로 크게, 판정(PASS/REGRESSED)을 보조 신호로** 표시. 사람이 수치를 보고 판단하되 판정이 주의를 환기.
+- **게이트 실체** (`validate.py` `ValidationResult`):
+  - **B-holdout 성능** — 새 운영 데이터(B holdout)에서 util/PR-AUC [확인됨: validate.py].
+  - **A-val 무회귀** — `새 util ≥ 옛 util − eps(0.02)`. = catastrophic forgetting 체크. 각자 자기 stats로 채점 [확인됨: validate.py].
+  - **cross_site_claim = false** — 통과/실패가 아닌 **정직성 플래그**. "A+B 학습이라 in-distribution이지 cross-site 일반화 아님" [확인됨: validate.py].
+- **두 게이트의 성격 구분 (M3·m2 — 혼동 금지)** [확인됨: 코드]:
+  - **하드 게이트 = A-val 무회귀 하나뿐.** `no_regression`이 PASS/REGRESSED를 가르는 유일한 판정이며(`validate.py:59`), `deploy.swap`은 `no_regression=False`면 **사람이 승인해도** `ValueError`로 거부한다(`deploy.py:61-62`). 즉 **REGRESSED 버전은 비승격(non-promotable)** 이다 — catastrophic forgetting 방지를 *자문이 아니라 강제*로 둔 의도된 설계.
+  - **B-holdout 성능 = informational 신호**(통과 임계값 없음). `validate.py`에 B-holdout 임계 판정이 없으므로(m2) 콘솔은 B-holdout을 "게이트"가 아니라 *참고 수치*로 표시한다. PASS/REGRESSED를 B-holdout에 결부시키지 않는다.
+- **콘솔 UI 귀결 (M3)** [우리 결정]: 승인 화면은 두 단을 분리한다 — (1) **검증 게이트(자동·하드)**: REGRESSED면 승인 버튼 자체를 비활성화하고 "A-val 회귀로 백엔드가 swap을 거부함"을 표시(승인해도 실패하므로). (2) **사람 승인**: PASS 후보에 대해서만 활성. 백엔드에 REGRESSED 우회 경로는 없으며, 만약 향후 오버라이드가 필요하면 `deploy.swap` 코드 변경이 따로 필요(현 범위 밖, [검증 필요]).
+- **근거 + 출처등급**: 최종 판단은 사람 몫(human-in-the-loop)이라 수치 투명성이 우선, 판정은 안전망 [우리 결정].
+- **검토 요청 항목**: 표시할 게이트 항목이 `ValidationResult`의 실제 필드와 일치하는지(코드가 source of truth).
+
+---
+
+## 결정 4: 감사 저장소 — SQLAlchemy ORM, DB 교체 가능
+
+- **결정**: 승인·교체·롤백 이벤트를 영구 기록하는 감사 저장소를 **SQLAlchemy ORM**으로 신규 구현. SQLite로 시작, **PostgreSQL로 교체 가능**하게 추상화. 기록 항목: 시각·행위(approve/swap/rollback)·대상 버전·featureset·행위자·근거·게이트 결과 스냅샷.
+- **근거 + 출처등급 (M1 — 허위 `[확인됨]` 강등)**:
+  - ~~레포가 이미 SQLAlchemy 사용 [확인됨: 메모리·코드].~~ **정정**: `src/` 전체에 `sqlalchemy`/`create_engine`/`declarative_base`/`sessionmaker` 사용처 **0건**(grep 확인). MLflow가 의존성으로 SQLAlchemy를 *전이적으로* 끌어올 뿐, 우리 코드는 직접 쓰지 않는다. → **SQLAlchemy ORM 채택은 신규 의존 도입 [우리 결정]**이다.
+  - 다만 **sqlite를 저장 백엔드로 쓰는 패턴은 레포에 실재** — `serve/bundle.py:115`가 MLflow tracking을 `sqlite:///{ROOT}/mlflow.db`로 쓴다 [확인됨: bundle.py:115]. "sqlite 파일 DB"는 기존 패턴이나, "SQLAlchemy ORM 계층"은 우리가 새로 더하는 것임을 구분한다.
+  - 의료 규제 정합성: 감사 추적의 *구조*(불변 append 로그·행위/대상/시각·게이트 스냅샷)는 규제 기조와 정렬되나, **규제 수준의 행위자 귀속은 인증이 전제**다(M4 참조). 따라서 "의료 규제 직결"은 *구조 정렬*로 한정하고, 검증된 귀속은 후속 과제로 둔다 [우리 결정].
+- **행위자(actor) 출처 (M4 — 미검증 입력으로 정직화)** [우리 결정]:
+  - 현 MVP에는 **인증/SSO·신원 검증이 범위에 없다**(범위표 v2). 따라서 `actor` 필드는 MVP에서 **운영자가 제출하는 미검증(unverified) 입력**이다. 이를 감사 스키마에 `actor_unverified`로 명시 표기하고, 콘솔/문서 어디에서도 "검증된 신원"으로 주장하지 않는다.
+  - 향후 SSO/OIDC 연동 시를 위해 스키마에 `verified_subject`(검증된 주체 식별자) 컬럼을 예약하되 MVP에선 null. 인증 도입은 명시적 후속 과제 [검증 필요].
+- **고려한 대안**: 평면 로그 파일(쿼리·교체 어려움). 기각.
+- **검토 요청 항목**: 감사 기록 시점(승인/롤백 엔드포인트 내부에서 자동 기록되는지) — 결정 5에서 API 경계 강제로 확정.
+
+---
+
+## 결정 5: 백엔드 재활용 — 기존 함수를 `/console` API로 노출
+
+- **결정**: 버전·검증·배포 로직을 재구현하지 않고 **기존 함수를 API로 노출**만 한다.
+  - `deploy.active_version(featureset)` → 활성 버전 조회 [확인됨: deploy.py:46]
+  - `validate.*` → 게이트 결과 [확인됨: validate.py]
+  - `deploy.swap(featureset, version_dir, *, validation, approved)` → 승인 시 교체. **`approved is not True`면 `PermissionError`**, **`validation.no_regression=False`면 `ValueError`**(둘 다 raise) [확인됨: deploy.py:55,59-62]. `validation`·`approved`는 **keyword-only**(`*` 뒤)이므로 API는 키워드로 호출해야 한다(m1) [확인됨: deploy.py:55].
+  - `deploy.rollback(featureset, previous_version_name)` → 롤백 [확인됨: deploy.py:68]
+  - `bundle.set_alias` → 원자 스왑(`os.replace`) [확인됨: bundle.py:38].
+- **버전 단위 주의**: `active_version`이 **featureset 단위**다 [확인됨: deploy.py:46]. 콘솔의 버전 리스트도 featureset 단위로 표현해야 백엔드와 정합.
+
+### 5-A: 롤백의 승인·감사 정책 (M2 — 백엔드가 우회·무감사)
+
+- **레드팀 지적** [확인됨]: `deploy.rollback`은 approval/validation 체크 없이 곧장 `set_alias`만 호출하고 감사 훅이 없다(`deploy.py:68-70`). 롤백도 활성 버전을 바꾸는 "교체"인데 승인·감사가 비어 있다.
+- **결정 (정책 확정)** [우리 결정]:
+  - **롤백 = 승인 게이트 적용 + 감사 필수.** 콘솔에서 롤백은 swap과 동일하게 사람 승인을 요구하고, 반드시 감사에 기록한다(성공 기준 "모든 롤백이 감사에 기록됨"을 실제로 강제).
+  - **롤백에는 validation 게이트를 적용하지 않는다 (의도)**: 롤백 대상은 *과거에 이미 champion으로 검증·승인되었던* 버전이다. 인시던트 복구 중 재검증을 강제하면 회복을 막는 역효과. 따라서 "승인 + 감사"는 요구하되 `no_regression` 재검증은 요구하지 않는다.
+  - **강제 지점 = 콘솔 API 경계** [우리 결정]: 백엔드 `deploy.rollback`엔 승인/감사 훅이 없으므로, 콘솔 API가 `deploy.rollback` 호출 *전에* (1) 승인 여부 확인 → 없으면 거부, (2) 감사 레코드 기록을 강제한다. swap도 동일하게 API 경계에서 감사를 기록한다(deploy.swap이 PermissionError로 막아주는 건 방어선이지 감사원이 아님).
+  - **방어 심화(교차단계 권고, [검증 필요])**: 직접 `deploy.rollback` 호출이 API를 우회할 수 있으므로, H4r에 `deploy.rollback`도 `swap`처럼 `*, approved: bool` 가드를 추가하고 prev를 반환하도록 대칭화할 것을 권고. 이는 콘솔 단계가 아닌 H4r 코드 변경이라 본 DDD에선 권고로만 남긴다.
+- **근거 + 출처등급**: H4가 검증·승인·롤백 *기본 동작*은 구현, 콘솔은 노출 + **승인/감사 강제 경계** 계층 [확인됨: 코드 / 우리 결정].
+- **검토 요청 항목**: 노출하려는 엔드포인트가 실제 함수 시그니처(keyword-only 포함)와 맞는지. `swap`의 `approved`·`validation` 인자가 API에서 어떻게 채워지는지. 롤백 승인/감사가 API 경계에서 빠짐없이 강제되는지.
+
+---
+
+## 결정 6: 실험·수치 상세는 MLflow 링크 (중복 방지)
+
+- **결정**: "어떻게 만들었나"(피처·학습 데이터·git commit·실험 수치 비교)는 콘솔에 재구현하지 않고 **MLflow Tracking으로 링크**. 콘솔은 "운영 상태·행위"에만 집중.
+- **근거 + 출처등급**: MLflow UI가 runs table·detail·git version·params/metrics를 이미 제공 [확인됨: MLflow 문서]. 재구현은 중복 [우리 결정].
+
+### 6-A: 연결 키와 재학습 버전의 출처 (B2 — 재학습 버전에 MLflow run이 없음)
+
+- **레드팀이 드러낸 단절** [확인됨]: 콘솔이 다루는 champion/challenger = *재학습 산출* 버전인데, 여기엔 MLflow run 자체가 없다. (1) `retrain/pipeline.py` 전체에 `mlflow` import·`start_run` 0건, `RetrainResult`에 `run_id` 없음(`pipeline.py:31-47`). (2) `deploy.materialize()`가 쓰는 `meta.json`엔 `featureset, hp, input_dim, tau, version, trained_on`만 있고 **`run_id`·git commit 없음**(`deploy.py:35-37`). → 재학습 버전 디렉토리(`gru_<fs>@<v>`)에서 MLflow run으로 잇는 키가 없다. MLflow 실험엔 H2/H3 run만 있다.
+- **결정 (연결 키 확정 + 정직한 폴백)** [우리 결정]:
+  1. **연결 키 = `meta.json`의 `run_id`(+`git_commit`)** — 버전 디렉토리당 1개. 콘솔은 이 키를 읽어 MLflow deep-link(`<tracking_uri>/#/experiments/.../runs/<run_id>`)를 만든다.
+  2. **재학습 경로에 run_id 기록을 요구 (교차단계 의존)** — H4r의 재학습/자재화 경로가 MLflow run을 남기고 `materialize()`가 `meta.json`에 `run_id`·`git_commit`을 박도록 **보강**해야 한다. 이는 콘솔 단계가 아닌 H4r 코드 변경이므로 **교차단계 의존**으로 명시하며 [검증 필요]로 둔다(콘솔 구현 전 H4r 보강이 선행되어야 재학습 버전 링크가 성립).
+  3. **H4r 보강 전까지의 폴백(정직)** [우리 결정]: `meta.json.run_id`가 있으면 MLflow 링크, **없으면 죽은 링크를 만들지 않고** 콘솔이 `meta.json`(featureset·hp·tau·trained_on)을 직접 표시한다. 더해 재학습 상세(epochs·val_loss·B-split seed·train_pids 요약)는 *승인 시점에 감사 스냅샷*으로 캡처해 콘솔이 그곳에서 보여준다(결정 4의 "게이트 결과 스냅샷"을 재학습 출처로 확장). 즉 재학습 버전의 출처는 — MLflow가 비면 — *감사 DB + meta.json*이 보유한다.
+  4. **적용 범위 명확화**: 결정 6의 깔끔한 MLflow 링크는 **run_id를 가진 버전**(H2 베이스라인, 그리고 H4r 보강 후의 재학습 버전)에 성립한다. run_id가 없는 기존 재학습 버전은 (3)의 폴백을 쓴다.
+- **검토 요청 항목**: 연결 키 = `meta.json.run_id` 정의가 H4r 보강과 정합하는지, run_id 부재 시 폴백(감사+meta)이 출처 공백 없이 닫는지.
+
+---
+
+## 만들 것 / 안 만들 것
+
+**만듦 (신규)**
+1. 감사 저장소 (SQLAlchemy ORM, DB 교체 가능)
+2. 콘솔 앱 + `/console` API (versions·validate·approve·rollback·audit — 기존 함수 노출)
+3. React 통합 콘솔 (champion-challenger 와이어프레임 구현)
+4. Grafana 패널 2개 (G3 서빙 SLO, G4 헬스 — 메트릭은 존재, 패널만)
+
+**안 만듦 (재활용/제외)**
+- `validate.py`·`deploy.py`·`bundle.py` 함수 (그대로 노출)
+- 실험 추적·수치 (MLflow 링크)
+- 점진적 배포·서빙 프레임워크 (규모상 제외, ADR 참고)
+
+---
+
+## 성공 기준 (초안 — 검토 후 확정)
+
+- 승인 없이는 교체 불가(`swap`의 `approved is not True` → `PermissionError`)가 API에서도 강제됨.
+- **REGRESSED(=`no_regression=False`) 버전은 승인해도 비승격** — 승인 UI가 이를 반영(버튼 비활성)하고 백엔드도 `ValueError`로 거부함(M3, 이중 게이트 명시).
+- **롤백도 승인 게이트 + 감사 필수**, 단 validation 재검증은 면제(과거 검증된 버전으로의 복귀) — API 경계에서 강제(M2).
+- 롤백 시 모델·전처리·τ·drift reference가 함께 복원됨(번들 원자성).
+- **콘솔 swap/rollback이 실행 중 서빙에 실제로 전파됨** — alias 갱신 후 (K8s 롤링 재시작 | dev `/admin/reload`)으로 `_S`/`_DS` 재로드, 옛 번들 잔존 없음(B1).
+- 모든 승인·교체·롤백이 감사 저장소에 기록됨(actor는 MVP에서 미검증 입력으로 명시 — M4).
+- **재학습 버전의 출처가 공백 없이 추적됨** — `meta.json.run_id` 있으면 MLflow 링크, 없으면 감사 스냅샷+meta.json 폴백(B2).
+- 콘솔의 버전 표현이 `deploy.py`의 featureset 단위와 정합.
+- 추론 앱과 콘솔 앱이 분리되어, 콘솔 작업이 추론 경로를 블로킹하지 않음.
+
+### 교차단계 의존 (콘솔 구현 전 선행 또는 병행 확인 — [검증 필요])
+- **H4s(서빙)**: 버전 소스를 alias 기반으로 + 재로드 경로(`/admin/reload` 또는 롤링 재시작 훅) — B1.
+- **H4r(재학습/자재화)**: MLflow run 로깅 + `meta.json`에 `run_id`·`git_commit` 기록 — B2. (선행 안 되면 결정 6 폴백으로 동작.)
+- **H4r(deploy)**: `deploy.rollback`에 `approved` 가드·prev 반환 대칭화 — M2 방어 심화(권고).
+
+> **구현 명세부(어떻게)는 이 설계부가 검토를 통과한 뒤 이어붙인다** — 엔드포인트 입출력 스키마, 감사 테이블 스키마, React 컴포넌트 구조, 파일 경로.

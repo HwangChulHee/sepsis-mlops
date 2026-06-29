@@ -188,18 +188,23 @@ async def lifespan(app):
     yield                                             # ── 이후에야 라우팅 개시 ──
 
 def _reconcile_or_seed(fs: str):
-    alias_target = deploy.active_version(fs)          # FS = 현재 활성 권위(결정 7-2)
+    alias_target = deploy.active_version(fs)          # FS = 현재 활성 권위(결정 7-2), 디렉토리명 or None
     last = audit.last_active(fs)
     if last is None and alias_target is not None:
         # 콜드스타트: 콘솔 이전부터 champion 존재 → seed 1건(mn1)
         audit.append(event_type="BOOTSTRAP", featureset=fs,
-                     from_version=None, to_version=alias_target, reason="cold-start seed")
+                     from_version=None, to_version=alias_target,
+                     actor_unverified="system", reason="cold-start seed")   # actor=system(결정 1 mn1)
     elif alias_target is not None and last.to_version != alias_target:
         # ②후 ③전 크래시 흔적 또는 콘솔 밖 수동 변경: 감사를 실제 alias로 끌어올림
+        # 비교 양변 모두 디렉토리명이라 정상 승인 후 거짓 RECONCILE 없음(B1)
         audit.append(event_type="RECONCILE", featureset=fs,
                      from_version=last.to_version,     # prev = 감사상 직전 최종 활성(archived 도출 보존, mn-r5)
-                     to_version=alias_target,          # target = 실제 alias
+                     to_version=alias_target,          # target = 실제 alias(디렉토리명)
                      actor_unverified="system", reason="bootstrap reconcile")
+    elif alias_target is None and last is not None:
+        # 심링크 소실 + 감사 이력 존재(mn3): 없는 champion을 감사로 날조하지 않는다(거짓 복원 금지).
+        _alert_missing_alias(fs)                       # 경보만, 감사 append 없음(결정 7-2 권위 원칙)
 ```
 
 - **alias = 현재 활성 권위, DB = 이력 (결정 7-2)**: 분기 시 alias가 이긴다. 화해는 감사를 alias 상태로 끌어올리되 `from_version`엔 감사상 직전 최종 활성을 채워 archived 도출(이전 활성→비활성 천이)을 보존한다.

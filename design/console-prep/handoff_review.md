@@ -79,5 +79,34 @@
 > **[reviser 응답 — mn4]** 해소: 코드 현황의 RetrainResult "있음" 목록에 `aval_raw·bholdout_data·aval_data` 추가(handoff.md:9, pipeline.py:42-44).
 >
 > **[reviser 응답 — mn5]** 해소: `validated_at`를 UTC로 — `time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())`(Z 접미사로 UTC 명시, handoff.md 구현 3).
-</content>
-</invoke>
+
+---
+
+## 라운드 2 (redteam) — B1 보완 재흐름추적
+
+- 대상: `design/console-prep/handoff.md` (명세부, reviser 커밋 `e63ec08` 반영본)
+- 검토일: 2026-06-29
+- 핵심 질문: B1 보완이 reload→drift 사슬을 실제로 닫았는가(구멍을 옮기지 않았는가) + MJ-c eps 필드 추가가 설계부 결정 1~7 범위 내 구현인가 + MJ-a/b/d/e·minor가 코드·기존 결정과 모순 없이 끼워졌는가
+- **판정: PASS (blocker 0)** — major 0 / minor 2
+
+### 흐름추적 결과 (B1 reload→drift, end-to-end)
+핸드오프가 부르는 심볼을 전부 1차 코드와 대조했고, 사슬은 닫혔다.
+- **심볼 실재**: `R.load_reference(version_dir/"reference.npz")`는 `reference.py:83` `np.load(path)`로 .npz 파일 경로를 받음(B1-2 교정 정확). `synthetic.calibrate(ref, window_n=, n_trials=)`는 `synthetic.py:56` 시그니처와 일치. `load_bundle_from_dir`는 `bundle.py:95` 실재. 임포트는 mn3가 `load_bundle_from_dir`·`threading`만 추가 — 정확.
+- **(a) thr 재캘리브 비폭주**: `drift_state()`는 `if "ref" not in _DS`일 때만 `_load_all` 호출. `state()`가 먼저 `_load_all`을 돌리면 `_DS["ref"]`가 차 있어 재캘리브 안 함 → 캘리브는 **프로세스 부팅당 1회 + /admin/reload당 1회**. n_trials 300 비용은 lock 안·재바인딩 전이라 리더 비블로킹(4c). 정합·성능 문제 없음.
+- **(b) 원자 재바인딩 일관**: `_load_all`이 lock 안에서 `new_s`·`new_ds` 완성 후 `global _S,_DS; _S=new_s; _DS=new_ds`로 1회씩 재바인딩. 두 재바인딩 사이 창에 `_S=new`/`_DS=old`가 잠깐 갈리지만 **어느 단일 엔드포인트도 _S·_DS를 동시에 읽지 않음**(/predict=_S만 app.py:64-73, /drift=_DS만 app.py:117-122) → 인트라-리퀘스트 스큐 불가. clear/update가 아닌 재바인딩이라 리더가 잡은 옛 dict는 절대 변이 안 됨(완전 스냅샷). MJ-d 논증 건전.
+- **스큐 종결**: reload 시 `_S`·`_DS` 모두 `_resolve_alias(fs)`가 해석한 동일 version_dir에서 파생 → 결정 6의 모델↔reference 동일버전 충족.
+
+### PASS (근거)
+- **B1 reload↔drift 정합** — `_DS` 스키마(ref·thr·min_patients)가 살아있는 `drift_endpoint` 읽기 계약(app.py:118·120·121)과 정확히 일치, `drift_state()`가 `state()`와 동일 `_load_all` 경로로 라우팅돼 옛 `SERVE_BUNDLE_DIR`/`build_reference` 죽은 경로 superseded. 라운드1 B1의 세 단절(스키마·인자타입·baseline 소스) 모두 닫힘.
+- **MJ-c (eps 필드) 설계부 범위 내** — `decisions.md:28`이 validation.json에 eps를 명시 요구, `:32`가 "eps는 ValidationResult 필드 아님→영속 시 별도 주입"을 이미 못 박음, `:102·125`가 직렬화 기법을 명세부 위임. 따라서 `ValidationResult.eps` 필드 추가는 **새 설계 결정이 아니라 결정 1의 충실한 구현**. default(=0.02) 맨 뒤 추가 → 데이터클래스 유효, 기존 호출부(SimpleNamespace) 무영향. asdict가 eps 자동 포함→영속 eps==게이트 eps.
+- **MJ-a** — `set_tracking_uri(sqlite:///{C.ROOT}/mlflow.db)`가 bundle.py:115 동일 스토어와 일치→run_id 조회 가능. retrain() 내 load_bundle의 "h2" experiment 읽기와 충돌 없음.
+- **MJ-b** — 유일 호출부 `h4r_c_smoke.py:51` 갱신 명세, vr은 직전 validate 결과로 실재. "게이트 무관 항상 materialize, 강제는 swap에서만" 불변 명시.
+- **MJ-e** — 기본값 `C.ROOT/deploy/artifacts`가 deploy.py:25와 동일. 컨테이너 ROOT=/app라 alias 정확 해석.
+- **누수 불변** — split/stats/fill·환자단위 B분할·mask OFF 불변(pipeline.py:22-28,61-86).
+
+### minor (다음 단계 막지 않음)
+- **mn-A.** 부팅 시 동시 첫 요청(/predict·/drift)이 빈 상태로 도착하면 lock 밖 lazy 체크 때문에 두 스레드가 각각 `_load_all`→n_trials=300 캘리브 2회(순차). 정확성 무해(둘 다 동일 version_dir, 마지막 재바인딩 승), 부팅 1회성 낭비뿐. lock 내 idempotent 더블체크 1줄 권고.
+- **mn-B.** `deploy/Dockerfile:20`의 `SERVE_BUNDLE_DIR` env가 死 변수로 잔존(새 코드가 무시). C.ROOT=/app라 같은 경로 해석돼 무해. 배포 매니페스트 갱신 시 제거 권고(handoff 범위 외 "배포 매니페스트 [검증 필요]"에 흡수).
+
+### 판정
+**PASS — blocker 0.** 라운드1 B1은 reload→drift 사슬을 끝까지 닫았고 구멍을 옮기지 않았다. MJ-c는 결정 1이 이미 요구한 eps 영속의 구현이지 새 설계 결정이 아니다. MJ-a/b/d/e·minor 모두 코드·기존 결정과 모순 없이 끼워졌다. 남은 2건은 정확성 무해한 minor. **명세부 검토 통과 — 다음 단계(spec-writer TDD) 진입 가능.**

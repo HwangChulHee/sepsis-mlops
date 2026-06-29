@@ -2,10 +2,11 @@
 
 > **설계 근거**: H4 운영 레이어(서빙·드리프트·재학습)가 만든 백엔드(`deploy.py`·`validate.py`·`bundle.py`)를 **사람이 조작하는 운영 콘솔**로 노출. 모델을 *만드는* 건 코드+MLflow(콘솔 밖), 콘솔은 *운영*(배포 승인·버전·감사)만.
 > **워크플로우·출처등급**: [`WORKFLOW.md`](../WORKFLOW.md). 검토(`design/console/review.md`) 통과 후 구현 명세부로.
-> **상태**: 설계부 v2 — 레드팀 라운드 1 blocker 2건 + major 4건 반영. 구현 명세부는 blocker 0 확정 후 이어붙임.
+> **상태**: 설계부 v3 — 레드팀 라운드 2 신규 blocker N1 + major/minor 반영. 구현 명세부는 blocker 0 확정 후 이어붙임.
 > **개정 이력**
 > - v1: 초안 (설계부).
 > - v2: 레드팀 라운드 1 반영 — B1(alias 전파 메커니즘 결정·서빙 1점 범위 편입), B2(MLflow 연결 키 = meta.json.run_id, 교차단계 의존 명시 + 정직한 폴백), M1(SQLAlchemy 허위 `[확인됨]` 강등), M2(롤백 승인·감사 정책), M3(REGRESSED 비승격 = 하드 게이트 명시), M4(actor 미검증 입력으로 정직화·규제 주장 완화).
+> - v3: 레드팀 라운드 2 반영 — **N1**(게이트결과·재학습상세를 version dir에 영속 = `validation.json`+`retrain.json`, swap 복원 경로 명시 → 결정 5-B 신설, 결정 1 challenger 디스크 표식·결정 4/6-A 스냅샷 실데이터화), MJ1(reload alias 1회 해석·동시 로드·로드 중 swap 배제), MJ2(run_id 부재 시 `/health` 식별 오염 — N1/B2로 해소), mn1(archived 콜드스타트 시드 정책), mn2(6-A 폴백 문구 한정).
 
 ## 한 줄 요약
 
@@ -35,8 +36,9 @@ H4가 만든 버전 관리·검증 게이트·롤백 백엔드를, **champion-ch
 - **고려한 대안**: 화면 3개 분리(중복 네비게이션, 같은 버전을 세 곳에서). 기각.
 - **champion/challenger/archived 도출 기준** (m3 — 백엔드엔 "challenger" 개념이 없음 [확인됨: deploy.py는 active alias + 버전 디렉토리만 안다]). 콘솔이 다음 규칙으로 *파생*한다 [우리 결정]:
   - **champion** = 현재 alias가 가리키는 버전 (`deploy.active_version(fs)`, `deploy.py:46`).
-  - **challenger** = 자재화(materialize)되어 `gru_<fs>@<v>` 디렉토리로 존재하고, validation 결과가 있으나 아직 활성이 아닌 버전.
+  - **challenger** = 자재화(materialize)되어 `gru_<fs>@<v>` 디렉토리로 존재하고, **`validation.json`이 그 디렉토리에 영속되어 있으며**(결정 5-B / N1) 아직 활성이 아닌 버전. → "validation 결과가 있다"의 디스크 표식 = `validation.json` 파일 존재. **`validation.json`이 없는 버전 디렉토리는 *미완성 후보*로 분류**(자재화는 됐으나 게이트 미통과/미기록 → 승인 대상에서 제외, "검증 대기"로 표시). 이로써 challenger 판별이 in-memory가 아니라 파일시스템에서 결정된다.
   - **archived** = 과거에 champion이었다가 교체/롤백으로 비활성이 된 버전 — **출처 = 감사 저장소의 swap/rollback 이력**(파일시스템엔 "과거 활성" 표시가 없으므로 감사 DB가 source of truth).
+- **archived 콜드스타트 (mn1)** [우리 결정]: 감사 DB가 비어 있는 1일차에는 과거 champion 이력이 없어 현재 champion 외 버전이 archived로 보이지 않는다. **시드 정책**: 콘솔 부트스트랩 시 현재 alias가 가리키는 champion을 1건 *seed audit 레코드*(action=`bootstrap`, actor=`system`)로 기록해 "현재 활성"의 출처를 감사에도 남긴다. 콘솔 도입 *이전*의 과거 swap 이력은 감사 DB에 소급 복원할 수 없으므로(파일시스템에 표식 없음), 1일차 archived 목록은 비어 있는 것이 정상임을 UI에 명시한다(거짓 복원 금지). 이후 모든 교체/롤백이 감사에 누적되며 archived가 채워진다.
 - **검토 요청 항목**: 한 화면 통합이 R1·R2·R3 기능을 빠짐없이 담는지.
 
 ---
@@ -58,8 +60,9 @@ H4가 만든 버전 관리·검증 게이트·롤백 백엔드를, **champion-ch
      - **프로덕션(K8s) = 롤링 재시작** [우리 결정]. 콘솔이 서빙 Deployment에 rolling restart를 트리거(예: `kubectl.kubernetes.io/restartedAt` 어노테이션 패치)한다. 새 pod가 갱신된 alias를 fresh 로드, 옛 pod는 graceful drain. 모델 *버전* 교체이므로 옛 GRU의 hidden state를 새 모델로 이어쓰면 안 되며, 재시작에 따른 **상태 리셋은 버전 교체 시 올바른 동작**이다(혼용이 오히려 skew). 콘솔에 필요한 권한 = 해당 Deployment 재시작용 **좁은 RBAC**(patch deployment만).
      - **dev/로컬(K8s 없음) = 재로드 엔드포인트** [우리 결정]. 서빙에 `POST /admin/reload`(루프백/관리 토큰 가드)를 추가, `_S`/`_DS`를 alias 기준으로 재초기화. 콘솔이 swap/rollback 후 호출.
   3. 콘솔은 **예측/추론 로직과 환자별 상태 처리를 건드리지 않는다** — 추가되는 것은 (a) alias 기반 번들 소스, (b) 재로드 진입점뿐. 환자 안전 분리 원칙 유지.
+- **reload 원자성 — `_S`/`_DS` 분리 lazy-load 스큐 방지 (MJ1)** [확인됨: app.py 분리 캐시 / 검증 필요]: 고정 `$RUN`을 가변 alias로 바꾸면 `_S`(첫 `/predict` 시 로드)와 `_DS`(첫 `/drift` 시 로드)가 *다른 시점*에 alias를 해석해 모델↔drift reference가 서로 다른 버전을 가리키는 스큐(거짓 드리프트)가 생길 수 있고, `load_bundle_from_dir`는 model+stats+reference 비원자 로드라 로드 도중 swap이 일어나면 혼합 번들이 만들어질 수 있다. → 구현 명세부에서 reload 규약을 못박는다: (i) **reload는 alias 타겟을 1회만 해석**해 그 *고정된 버전 dir*에서 `_S`·`_DS`를 **함께(동일 버전)** 로드, (ii) **로드 중 swap 배제**(reload와 alias 교체를 락/순서로 직렬화 — alias 갱신 → 그 다음 reload), (iii) 첫 요청 lazy-load도 같은 해석 시점을 쓰도록 부팅 시 eager 로드 또는 공유 해석 캐시를 둔다. 서빙 코드 변경이라 [검증 필요].
 - **미해결로 정직히 남기는 부분** [검증 필요]:
-  - 프로덕션 전파를 *롤링 재시작*으로 할지 *in-place `/admin/reload`*로 할지의 최종 택일은 배포 환경(K8s 유무·무중단 요구·drain 정책)에 종속 — 운영 배포 시점에 확정. 본 DDD는 두 경로를 모두 정의하되 K8s 기본값을 롤링 재시작으로 제안.
+  - 프로덕션 전파를 *롤링 재시작*으로 할지 *in-place `/admin/reload`*로 할지의 최종 택일은 배포 환경(K8s 유무·무중단 요구·drain 정책)에 종속 — 운영 배포 시점에 확정. 본 DDD는 두 경로를 모두 정의하되 K8s 기본값을 롤링 재시작으로 제안. (프로덕션 롤링 재시작 경로는 새 pod가 부팅 시 alias를 1회 해석해 fresh 로드하므로 MJ1 스큐가 구조적으로 없음 — in-place reload 경로에서만 위 (i)~(iii) 규약이 필요.)
   - 콘솔이 K8s API에 접근하기 위한 정확한 RBAC role/binding과 네트워크 정책은 인프라 결정 — 구현 명세부 또는 별도 ADR에서 확정.
 - **검토 요청 항목**: alias 단일 진실원천 + (롤링 재시작 | reload 엔드포인트) 전파가 "콘솔 swap → 실행 중 서빙 반영"을 실제로 닫는지, 그리고 서빙 1점 변경이 환자 안전 분리를 깨지 않는지.
 
@@ -84,6 +87,7 @@ H4가 만든 버전 관리·검증 게이트·롤백 백엔드를, **champion-ch
 ## 결정 4: 감사 저장소 — SQLAlchemy ORM, DB 교체 가능
 
 - **결정**: 승인·교체·롤백 이벤트를 영구 기록하는 감사 저장소를 **SQLAlchemy ORM**으로 신규 구현. SQLite로 시작, **PostgreSQL로 교체 가능**하게 추상화. 기록 항목: 시각·행위(approve/swap/rollback)·대상 버전·featureset·행위자·근거·게이트 결과 스냅샷.
+- **게이트 스냅샷 출처 (N1 — in-memory 아님)** [우리 결정]: 승인 시점 캡처하는 "게이트 결과 스냅샷"의 데이터 원천은 **version dir의 `validation.json`/`retrain.json`**(결정 5-B로 영속)이다. 즉 콘솔은 휘발성 `ValidationResult`를 들고 있을 필요 없이, 승인 대상 버전 dir에서 영속 파일을 읽어 그 사본을 감사 레코드에 박는다. 영속 파일이 없는 버전(=미완성 후보)은 애초에 승인 대상이 아니므로 빈 스냅샷이 기록될 일이 없다.
 - **근거 + 출처등급 (M1 — 허위 `[확인됨]` 강등)**:
   - ~~레포가 이미 SQLAlchemy 사용 [확인됨: 메모리·코드].~~ **정정**: `src/` 전체에 `sqlalchemy`/`create_engine`/`declarative_base`/`sessionmaker` 사용처 **0건**(grep 확인). MLflow가 의존성으로 SQLAlchemy를 *전이적으로* 끌어올 뿐, 우리 코드는 직접 쓰지 않는다. → **SQLAlchemy ORM 채택은 신규 의존 도입 [우리 결정]**이다.
   - 다만 **sqlite를 저장 백엔드로 쓰는 패턴은 레포에 실재** — `serve/bundle.py:115`가 MLflow tracking을 `sqlite:///{ROOT}/mlflow.db`로 쓴다 [확인됨: bundle.py:115]. "sqlite 파일 DB"는 기존 패턴이나, "SQLAlchemy ORM 계층"은 우리가 새로 더하는 것임을 구분한다.
@@ -117,6 +121,20 @@ H4가 만든 버전 관리·검증 게이트·롤백 백엔드를, **champion-ch
 - **근거 + 출처등급**: H4가 검증·승인·롤백 *기본 동작*은 구현, 콘솔은 노출 + **승인/감사 강제 경계** 계층 [확인됨: 코드 / 우리 결정].
 - **검토 요청 항목**: 노출하려는 엔드포인트가 실제 함수 시그니처(keyword-only 포함)와 맞는지. `swap`의 `approved`·`validation` 인자가 API에서 어떻게 채워지는지. 롤백 승인/감사가 API 경계에서 빠짐없이 강제되는지.
 
+### 5-B: 게이트 결과·재학습 상세의 version dir 영속 + swap 복원 경로 (N1 — in-memory 의존 제거)
+
+- **레드팀이 드러낸 단절** [확인됨: 코드]: version dir에 영속되는 것은 `model.pt`·`pre.npz`·`meta.json`(4필드: `featureset/hp/input_dim/tau/version/trained_on`)·`reference.npz`뿐이다(`deploy.py:33-42`). `validate()`는 in-memory `ValidationResult` dataclass를 반환할 뿐 디스크에 쓰지 않고(`validate.py:60`), `RetrainResult`의 재학습 상세(`epochs`·`val_loss`·`b_retrain`/`b_holdout`/`train_pids`)도 어디에도 저장되지 않으며(`pipeline.py:31-47`) `seed`·`run_id`·`git_commit`은 결과 객체에조차 없다. → **콘솔이 시간 분리된 materialized dir만 보는 시점엔 `ValidationResult`가 이미 사라졌다.** 그런데 `deploy.swap(...)`은 `validation` 인자를 요구하고 `getattr(validation,"no_regression",False)`를 본다(`deploy.py:55,61`). 즉 콘솔 핵심 액션(승인→swap)이 디스크만으로는 **재구성 불가**이고, 결정 1 challenger 도출·결정 4 게이트 스냅샷·결정 6-A 폴백이 모두 "그 시점에 데이터가 손에 있다"는 성립 불가 가정 위에 있었다.
+
+- **결정 (근본 해소 — 디스크를 단일 진실원천으로)**:
+  1. **`validation.json`을 version dir에 영속 (교차단계 의존 H4r, [검증 필요])** — `validate()` 직후(또는 `materialize()`가 `validation`을 받아) `gru_<fs>@<v>/validation.json`에 `ValidationResult` 전체를 직렬화한다: `no_regression`(하드 게이트), `bholdout_util`/`bholdout_prauc`(informational), `new_aval_util`/`old_aval_util`/`new_aval_prauc`/`old_aval_prauc`, `eps`, `cross_site_claim`, `distribution`, `note`, 그리고 검증 시각. 이 파일 존재 = 결정 1의 challenger 디스크 표식.
+  2. **`retrain.json`을 version dir에 영속 (교차단계 의존 H4r, [검증 필요])** — 재학습 상세를 `gru_<fs>@<v>/retrain.json`에 기록: `epochs`·`val_loss`·`b_split_seed`·`train_pids` 요약(개수 + 해시/요약, 전체 pid 리스트는 길면 별 파일)·`b_retrain`/`b_holdout` 개수·`run_id`·`git_commit`. → 결정 6-A의 폴백(감사+meta가 아니라 *version dir의 retrain.json*)이 실제 데이터를 갖게 됨. **코드 현실 주석**: `RetrainResult`에 현재 `seed`/`run_id`/`git_commit` 필드가 없으므로(`pipeline.py:31-47`) H4r 보강 시 이 3개를 결과에 추가하거나 `materialize()` 호출부에서 주입해야 한다 — 콘솔 밖 코드 변경이라 [검증 필요].
+  3. **swap 복원 경로 (콘솔 단계, 백엔드 변경 불필요)** [우리 결정]: 콘솔 승인 API는 승인 대상 버전 dir의 `validation.json`을 읽어 **`SimpleNamespace`(또는 동등 객체)로 복원**한 뒤 `deploy.swap(fs, version_dir, validation=<복원객체>, approved=True)`로 호출한다. `deploy.swap`이 `getattr(validation,"no_regression",...)`로 속성 접근을 하므로(dict가 아닌) 객체 래핑이 필요하며, 이는 콘솔 API 한 줄로 충족된다 — **백엔드 시그니처 변경 없이** in-memory 의존이 제거된다.
+  4. **자재화·검증 순서 고정** [우리 결정]: 콘솔이 버전을 challenger로 인지하려면 dir에 `validation.json`이 있어야 하므로, H4r 정규 플로우 = `retrain() → materialize()(dir 생성) → validate() → validation.json/retrain.json을 같은 dir에 기록`. `validation.json`이 없는 dir은 결정 1대로 *미완성 후보*(승인 불가)로 표시.
+
+- **이로써 동시에 닫히는 것**: (a) 결정 5 승인→swap이 디스크만으로 재구성 가능(복원 경로), (b) 결정 1 challenger 판별이 파일 존재로 결정, (c) 결정 4 게이트 스냅샷이 `validation.json`이라는 실데이터를 승인 시점에 손에 쥠, (d) 결정 6-A 폴백이 `retrain.json` 실데이터로 출처 공백을 메움.
+- **미해결로 정직히 남기는 부분** [검증 필요]: `validation.json`/`retrain.json` 영속과 `RetrainResult`의 `seed`/`run_id`/`git_commit` 추가는 모두 **콘솔 밖 H4r 코드 변경**이다. 본 DDD는 이 영속을 교차단계 의존으로 선행 요구하며, 미선행 시 해당 버전은 *미완성 후보*로만 보이고 승인이 불가능하다(거짓 승인 금지). 직렬화 스키마 버전·`train_pids` 대용량 처리(전체 리스트 vs 해시)는 구현 명세부에서 확정.
+- **검토 요청 항목**: `validation.json` 복원 객체가 `deploy.swap`의 `getattr` 접근과 정합하는지, 영속 시점(validate 직후)이 challenger 가시성 타이밍과 일치하는지.
+
 ---
 
 ## 결정 6: 실험·수치 상세는 MLflow 링크 (중복 방지)
@@ -130,9 +148,11 @@ H4가 만든 버전 관리·검증 게이트·롤백 백엔드를, **champion-ch
 - **결정 (연결 키 확정 + 정직한 폴백)** [우리 결정]:
   1. **연결 키 = `meta.json`의 `run_id`(+`git_commit`)** — 버전 디렉토리당 1개. 콘솔은 이 키를 읽어 MLflow deep-link(`<tracking_uri>/#/experiments/.../runs/<run_id>`)를 만든다.
   2. **재학습 경로에 run_id 기록을 요구 (교차단계 의존)** — H4r의 재학습/자재화 경로가 MLflow run을 남기고 `materialize()`가 `meta.json`에 `run_id`·`git_commit`을 박도록 **보강**해야 한다. 이는 콘솔 단계가 아닌 H4r 코드 변경이므로 **교차단계 의존**으로 명시하며 [검증 필요]로 둔다(콘솔 구현 전 H4r 보강이 선행되어야 재학습 버전 링크가 성립).
-  3. **H4r 보강 전까지의 폴백(정직)** [우리 결정]: `meta.json.run_id`가 있으면 MLflow 링크, **없으면 죽은 링크를 만들지 않고** 콘솔이 `meta.json`(featureset·hp·tau·trained_on)을 직접 표시한다. 더해 재학습 상세(epochs·val_loss·B-split seed·train_pids 요약)는 *승인 시점에 감사 스냅샷*으로 캡처해 콘솔이 그곳에서 보여준다(결정 4의 "게이트 결과 스냅샷"을 재학습 출처로 확장). 즉 재학습 버전의 출처는 — MLflow가 비면 — *감사 DB + meta.json*이 보유한다.
-  4. **적용 범위 명확화**: 결정 6의 깔끔한 MLflow 링크는 **run_id를 가진 버전**(H2 베이스라인, 그리고 H4r 보강 후의 재학습 버전)에 성립한다. run_id가 없는 기존 재학습 버전은 (3)의 폴백을 쓴다.
-- **검토 요청 항목**: 연결 키 = `meta.json.run_id` 정의가 H4r 보강과 정합하는지, run_id 부재 시 폴백(감사+meta)이 출처 공백 없이 닫는지.
+  3. **H4r 보강 전까지의 폴백(정직)** [우리 결정]: `meta.json.run_id`가 있으면 MLflow 링크, **없으면 죽은 링크를 만들지 않고** 콘솔이 `meta.json`(featureset·hp·tau·trained_on)을 직접 표시한다. 더해 재학습 상세(epochs·val_loss·B-split seed·train_pids 요약)는 **version dir의 `retrain.json`**(결정 5-B / N1으로 영속됨)에서 읽어 표시하고, *승인 시점*엔 그 내용을 감사 스냅샷으로도 캡처한다(결정 4의 "게이트 결과 스냅샷"을 재학습 출처로 확장). 즉 재학습 버전의 출처는 — MLflow가 비면 — *version dir의 `validation.json`+`retrain.json`*이 1차로 보유하고, 승인 이벤트는 그 스냅샷을 감사 DB에 사본으로 남긴다.
+     - **문구 한정 (mn2)**: N1 영속 결정 *이전*에는 version dir에 `meta.json` 4필드뿐이라 "감사+meta가 출처를 보유한다"는 과대 표현이었다. 폴백이 실데이터를 갖는 것은 **결정 5-B의 `validation.json`/`retrain.json` 영속이 선행될 때**에 한한다. 영속이 미선행이면 해당 버전은 결정 1대로 *미완성 후보*(승인 불가)이므로, 출처 공백이 있는 버전은 애초에 승인·운영 대상이 되지 않는다 — 공백을 덮지 않고 *대상에서 배제*하는 방식으로 닫는다.
+  4. **적용 범위 명확화**: 결정 6의 깔끔한 MLflow 링크는 **run_id를 가진 버전**(H2 베이스라인, 그리고 H4r 보강 후의 재학습 버전)에 성립한다. run_id가 없는 버전은 (3)의 폴백(`validation.json`/`retrain.json` + meta.json)을 쓴다.
+  5. **`/health` run_id 식별 오염 차단 (MJ2)** [확인됨: bundle.py:102 / 검증 필요]: `load_bundle_from_dir`는 `meta.get("run_id", str(d.name))`로 폴백하므로(`bundle.py:102`), 재학습 번들 meta에 `run_id`가 없으면 `/health`의 `run_id`가 alias명(`gru_vitals`)으로 표시되어 식별이 무의미해진다. (2)의 H4r 보강(`meta.json`에 `run_id`·`git_commit` 기록)이 **이 표면 식별까지 동시에 해소**한다 — `meta.json.run_id`가 채워지면 `/health`도 실제 run_id를 보고한다. H4r 보강은 콘솔 밖 코드 변경이라 [검증 필요].
+- **검토 요청 항목**: 연결 키 = `meta.json.run_id` 정의가 H4r 보강과 정합하는지, run_id 부재 시 폴백(version dir 영속 파일 + meta)이 출처 공백 없이 닫는지, `/health` 식별이 run_id 기록으로 정상화되는지.
 
 ---
 
@@ -159,13 +179,16 @@ H4가 만든 버전 관리·검증 게이트·롤백 백엔드를, **champion-ch
 - 롤백 시 모델·전처리·τ·drift reference가 함께 복원됨(번들 원자성).
 - **콘솔 swap/rollback이 실행 중 서빙에 실제로 전파됨** — alias 갱신 후 (K8s 롤링 재시작 | dev `/admin/reload`)으로 `_S`/`_DS` 재로드, 옛 번들 잔존 없음(B1).
 - 모든 승인·교체·롤백이 감사 저장소에 기록됨(actor는 MVP에서 미검증 입력으로 명시 — M4).
-- **재학습 버전의 출처가 공백 없이 추적됨** — `meta.json.run_id` 있으면 MLflow 링크, 없으면 감사 스냅샷+meta.json 폴백(B2).
+- **게이트 결과·재학습 상세가 version dir에 영속됨** — `gru_<fs>@<v>/validation.json`(no_regression·B-holdout/A-val 수치)과 `retrain.json`(epochs·val_loss·seed·train_pids 요약·run_id·git_commit)이 디스크에 존재해, 콘솔이 in-memory 결과 없이 승인→swap·challenger 도출·게이트 스냅샷을 디스크만으로 수행함. `validation.json` 없는 dir은 *미완성 후보*로 승인 배제(N1).
+- **콘솔 swap이 디스크에서 `validation`을 복원해 호출됨** — `validation.json` → 복원 객체 → `deploy.swap(..., validation=객체, approved=True)`, 백엔드 시그니처 변경 없이 `getattr(no_regression)` 정합(N1).
+- **재학습 버전의 출처가 공백 없이 추적됨** — `meta.json.run_id` 있으면 MLflow 링크, 없으면 version dir의 `validation.json`/`retrain.json`(+승인 시 감사 스냅샷) 폴백(B2/N1).
 - 콘솔의 버전 표현이 `deploy.py`의 featureset 단위와 정합.
 - 추론 앱과 콘솔 앱이 분리되어, 콘솔 작업이 추론 경로를 블로킹하지 않음.
+- **archived 콜드스타트가 거짓 복원 없이 처리됨** — 부트스트랩 seed 감사 1건으로 현재 champion 출처 기록, 콘솔 이전 과거 이력은 비어 있음을 UI에 명시(mn1).
 
 ### 교차단계 의존 (콘솔 구현 전 선행 또는 병행 확인 — [검증 필요])
-- **H4s(서빙)**: 버전 소스를 alias 기반으로 + 재로드 경로(`/admin/reload` 또는 롤링 재시작 훅) — B1.
-- **H4r(재학습/자재화)**: MLflow run 로깅 + `meta.json`에 `run_id`·`git_commit` 기록 — B2. (선행 안 되면 결정 6 폴백으로 동작.)
+- **H4s(서빙)**: 버전 소스를 alias 기반으로 + 재로드 경로(`/admin/reload` 또는 롤링 재시작 훅) — B1. 재로드는 alias 1회 해석·`_S`/`_DS` 동시 로드·로드 중 swap 배제 규약 적용 — MJ1.
+- **H4r(재학습/자재화)**: (1) MLflow run 로깅 + `meta.json`에 `run_id`·`git_commit` 기록 — B2/MJ2(`/health` 식별까지 해소). (2) **`validate()` 직후/`materialize()`가 version dir에 `validation.json`+`retrain.json` 영속** — N1. (3) `RetrainResult`에 `seed`/`run_id`/`git_commit` 필드 추가(현재 미존재, `pipeline.py:31-47`) 또는 `materialize()` 호출부 주입 — N1. (선행 안 되면 해당 버전은 *미완성 후보*로 승인 배제.)
 - **H4r(deploy)**: `deploy.rollback`에 `approved` 가드·prev 반환 대칭화 — M2 방어 심화(권고).
 
 > **구현 명세부(어떻게)는 이 설계부가 검토를 통과한 뒤 이어붙인다** — 엔드포인트 입출력 스키마, 감사 테이블 스키마, React 컴포넌트 구조, 파일 경로.

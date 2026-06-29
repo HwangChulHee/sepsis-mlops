@@ -71,3 +71,46 @@
   > **[reviser 응답]** 해소: 결정 3에 "B-holdout = informational(임계값 없음), 하드 게이트 = A-val 무회귀 하나"를 명시, 콘솔이 B-holdout을 게이트가 아니라 참고 수치로 표시하도록 결정(`decisions.md` 결정 3, M3과 함께).
 - **m3.** 결정 1 — 백엔드에 "challenger" 개념이 없다. `deploy.py`는 active alias(champion)와 버전 디렉토리만 안다. challenger/archived 구분 기준을 콘솔이 어디서 도출할지 미정.
   > **[reviser 응답]** 해소: 결정 1에 champion/challenger/archived 도출 규칙 추가 — champion=`active_version`, challenger=validation 있는 비활성 `gru_<fs>@<v>`, archived=감사 DB의 과거 활성 이력(파일시스템에 표식 없으므로 감사가 source of truth)(`decisions.md` 결정 1).
+
+---
+
+# 라운드 2 — 재검증 (v2 대상)
+
+- **판정**: **HOLD — blocker 1건 (신규 N1)**
+- **라운드 1 blocker 해소 여부**: B1(alias 전파) **해소** / B2(MLflow 연결 키) **해소(근본 부분)** — 단 폴백의 재학습 상세 캡처 주장은 N1과 겹쳐 미성립, 잔여를 N1으로 흡수.
+- **major 4건(M1~M4) 전부 해소 확인**, minor도 반영 확인.
+
+## blocker
+
+### N1 (신규). 콘솔 데이터 모델·핵심 액션이 영속화되지 않는 in-memory 결과에 의존 — 백엔드는 version dir에 게이트결과·재학습상세를 저장하지 않는다
+
+- **문제**: v2는 보완 과정에서 콘솔이 *시간 분리된 materialized 디렉토리*를 관찰·조작한다는 모델을 굳혔다(결정 1 challenger 도출, 결정 2 "콘솔 stateless·재학습 로직 콘솔 밖"). 그런데 콘솔이 의존하는 핵심 데이터가 디스크에 존재하지 않는다.
+- **근거** (코드 직접 확인):
+  - version dir에 영속되는 유일 산출물 = `meta.json` = `{featureset, hp, input_dim, tau, version, trained_on}` 뿐(`deploy.py:35-37`). `ValidationResult`·`RetrainResult`를 디스크로 쓰는 코드는 **레포 전체에 0건** — `validate()`는 in-memory dataclass 반환(`validate.py:46,60`), `materialize()`는 검증결과·epochs/val_loss/train_pids 미기록(`deploy.py:28-43`).
+  - **결정 5 핵심 액션 자체가 막힌다**: `deploy.swap(...)`은 `validation` 인자를 요구하고 `getattr(validation,"no_regression")`을 본다(`deploy.py:55,61`). 콘솔이 materialized dir만 보는 시점엔 `ValidationResult`가 사라졌고, 재구성하려면 in-memory `RetrainResult`가 필요한데 디스크엔 `model.pt/pre.npz/meta.json`뿐이라 **재구성 불가**. DDD 본인도 미해결 검토요청 항목으로 남김(`decisions.md:118`).
+  - **결정 1 challenger 도출 불능**: "validation 결과가 있으나 비활성인 버전"을 판별할 디스크 표식이 없음.
+  - **결정 4 게이트 스냅샷 / 결정 6-A 폴백 공허**: "승인 시점 게이트 결과/재학습 상세 스냅샷"은 *승인 시점에 그 데이터가 손에 있다*고 가정하나 그 시점엔 없다 → 성공기준(`decisions.md:162` 출처 공백 없이 추적)이 폴백으로도 안 닫힘.
+- **왜 blocker**: 교차단계 의존 목록에 run_id/git_commit·alias/reload·rollback 가드는 있으나 **"ValidationResult·재학습상세를 version dir에 영속"이 빠져 있다.** 이게 없으면 콘솔 중심 동작(승인→swap)과 데이터 모델 3개(challenger·게이트 스냅샷·재학습 폴백)를 구현할 수 없다.
+- **제안**: 교차단계 의존(H4r)에 **"`materialize()`(또는 validate 직후)가 version dir에 `validation.json`(no_regression·B-holdout/A-val 수치)과 재학습 메타(epochs·val_loss·seed·train_pids 요약·run_id·git_commit)를 영속한다"**를 추가하고, 콘솔 swap 호출 시 `validation`을 그 파일에서 복원하는 경로를 결정 5에 명시하라. 이로써 B2 폴백·challenger 도출·게이트 스냅샷이 동시에 성립한다.
+
+> **[reviser 응답]** 해소: **결정 5-B 신설**(`decisions.md` 결정 5)로 in-memory 의존을 근본 제거. (1) 교차단계 의존 H4r에 `gru_<fs>@<v>/validation.json`(ValidationResult 전체: no_regression·B-holdout/A-val 수치·eps·cross_site_claim·검증시각)과 `retrain.json`(epochs·val_loss·b_split_seed·train_pids 요약·b_retrain/b_holdout 개수·run_id·git_commit) **영속을 추가** — 콘솔 밖 코드 변경이라 `[검증 필요]`. (2) **swap 복원 경로**: 콘솔 API가 version dir의 `validation.json`을 읽어 `SimpleNamespace`로 복원→`deploy.swap(..., validation=객체, approved=True)`. `deploy.swap`이 `getattr(validation,"no_regression",...)`(`deploy.py:61`)로 속성 접근하므로 dict가 아닌 객체 래핑 필요 — **백엔드 시그니처 변경 없이** 콘솔 한 줄로 충족. (3) **자재화·검증 순서 고정**(retrain→materialize→validate→json 기록), `validation.json` 없는 dir은 결정 1대로 *미완성 후보*(승인 배제). (4) 이로써 결정 1 challenger 디스크 표식(`decisions.md` 결정 1) / 결정 4 게이트 스냅샷 출처=영속 파일(`decisions.md` 결정 4) / 결정 6-A 폴백 실데이터화(`decisions.md` 6-A)가 **동시에 닫힘**. **코드 현실 명시**: `RetrainResult`에 `seed`/`run_id`/`git_commit` 필드가 현재 없으므로(`pipeline.py:31-47`) H4r 보강이 이를 추가/주입해야 함을 결정 5-B·교차단계 의존에 `[검증 필요]`로 정직히 표기. 미선행 시 거짓 승인 대신 *미완성 후보 배제*로 공백을 닫음(덮지 않음).
+
+## major (라운드 2)
+
+- **MJ1. alias 가변화로 `_S`/`_DS` 분리 lazy-load 스큐 위험** — 고정 `$RUN`→가변 alias로 바꾸면 `_S`(첫 `/predict`)·`_DS`(첫 `/drift`)가 다른 시점에 alias를 읽어 모델↔reference 스큐(거짓 드리프트). `load_bundle_from_dir`는 3파일 비원자적 로드라 로드 도중 swap 시 혼합 번들 위험. → 구현 명세에서 "reload는 alias-타겟을 1회 해석해 `_S`·`_DS`를 함께 로드, 로드 중 swap 배제"로 못박을 것.
+
+  > **[reviser 응답]** 해소: 결정 2-A에 reload 원자성 규약 추가(`decisions.md` 결정 2-A). (i) reload는 alias 타겟 1회 해석→고정 버전 dir에서 `_S`·`_DS` 동시(동일 버전) 로드, (ii) 로드 중 swap 배제(alias 갱신→그 다음 reload 직렬화), (iii) 첫 요청 lazy-load도 같은 해석 시점 쓰도록 eager 로드/공유 해석 캐시. 더해 **프로덕션 롤링 재시작 경로는 새 pod가 부팅 시 alias 1회 해석·fresh 로드라 스큐가 구조적으로 없음**을 명시 — 규약은 in-place reload 경로에만 필요. 서빙 코드 변경이라 `[검증 필요]`.
+
+- **MJ2. `meta.json`에 `run_id` 없으면 `/health` run_id가 alias명으로 오염** — `load_bundle_from_dir`는 `meta.get("run_id", str(d.name))`(`bundle.py:102`). 재학습 번들 meta엔 run_id 없음 → `/health` run_id="gru_vitals"로 무의미. B2 보강이 이 표면 식별까지 닫는지 확인 필요.
+
+  > **[reviser 응답]** 해소: 결정 6-A에 5번 항 추가(`decisions.md` 6-A). `bundle.py:102`의 `meta.get("run_id", str(d.name))` 폴백을 직접 인용하고, B2의 H4r 보강(`meta.json`에 `run_id`·`git_commit` 기록)이 **이 표면 식별까지 동시에 해소**함을 명시 — run_id가 채워지면 `/health`도 실제 run_id 보고. H4r 코드 변경이라 `[검증 필요]`.
+
+## minor (라운드 2)
+
+- **mn1. archived 콜드스타트** — archived 출처=감사 DB. 빈 1일차엔 과거 champion이 안 보임. 초기 시드/마이그레이션 정책 한 줄 필요.
+
+  > **[reviser 응답]** 해소: 결정 1에 archived 콜드스타트 시드 정책 추가(`decisions.md` 결정 1). 부트스트랩 시 현재 champion을 seed 감사 1건(action=`bootstrap`, actor=`system`)으로 기록해 출처를 감사에 남김. 콘솔 *이전* 과거 swap 이력은 파일시스템에 표식이 없어 소급 복원 불가 → 1일차 archived가 비어 있음을 UI에 명시(거짓 복원 금지). 이후 교체/롤백이 누적되며 채워짐. 성공기준에도 반영.
+
+- **mn2. 결정 6-A 폴백 문구 과대** — "감사+meta가 출처 보유"는 N1 해소 전까지 meta.json 4필드만 실제 보유. N1 영속화 결정 후 문구를 한정.
+
+  > **[reviser 응답]** 해소: 결정 6-A 3번 항에 "문구 한정(mn2)" 명시(`decisions.md` 6-A). N1 영속 *이전*엔 meta.json 4필드뿐이라 "감사+meta가 출처 보유"가 과대였음을 인정하고, 폴백이 실데이터를 갖는 것은 **결정 5-B의 `validation.json`/`retrain.json` 영속이 선행될 때 한정**으로 수정. 영속 미선행 버전은 *미완성 후보*로 승인 배제 → 출처 공백 있는 버전은 운영 대상에서 *배제*하는 방식으로 닫음(덮지 않음). 폴백 출처를 "감사+meta"→"version dir의 validation.json/retrain.json + meta.json(+승인 시 감사 사본)"으로 정정.

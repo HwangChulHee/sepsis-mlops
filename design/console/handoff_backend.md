@@ -1,0 +1,214 @@
+# Console 구현 핸드오프 A (명세부) — 백엔드: 감사 ORM + `/console` API + 트랜잭션 경계
+
+> **전제**: `design/console/decisions.md`(설계부) 2라운드 검토 통과. 본 문서는 결정 4·5·5-A·5-B·6-A·7의 *구현 방법*을 자립형으로 명세한다. 설계 근거는 decisions.md 참조.
+> **워크플로우**: 검토(`handoff_backend_review.md`) 통과 → spec-writer TDD → 구현. 프론트(React)·관측(Grafana)은 **핸드오프 B**(별도 문서).
+> **대상 파일(신규)**: `src/sepsis/console/{__init__.py, audit.py, service.py, api.py}`. **재활용(변경 없음)**: `retrain/deploy.py`, `retrain/validate.py`, `serve/bundle.py`.
+> **선행(교차단계, 이미 닫힘)**: console-prep으로 `validation.json`·`retrain.json`·`.ready` 영속, `meta.json.run_id`, 서빙 `/admin/reload`·`/health.run_id`가 모두 구현됨 — 본 핸드오프는 그 위에 얹는다.
+> **상태**: 명세부 v1 (레드팀 미검토).
+
+## 코드 현황 (구현 시작점 — 재활용 대상의 실제 시그니처)
+
+- `deploy.active_version(featureset, *, root=ARTIFACTS) -> str | None` (deploy.py:71): alias가 가리키는 **버전 디렉토리명** 반환(`os.readlink`, 락 없음). alias 없으면 None.
+- `deploy.swap(featureset, version_dir, *, validation, approved, root=ARTIFACTS) -> str | None` (deploy.py:80): `approved is not True`면 `PermissionError`, `validation.no_regression` falsy면 `ValueError`. 통과 시 alias 전환 후 **이전 활성 버전명**(prev) 반환. `validation`·`approved`는 **keyword-only**.
+- `deploy.rollback(featureset, previous_version_name, *, root=ARTIFACTS) -> None` (deploy.py:93): alias만 되돌림. **승인 가드·prev 반환·감사 훅 없음**(API 경계가 보강).
+- `bundle.set_alias(root, alias, target_name)` (bundle.py:24): 상대 심링크 `os.replace` 원자 스왑.
+- `ValidationResult`(validate.py:31): `bholdout_util·bholdout_prauc·new_aval_util·old_aval_util·new_aval_prauc·old_aval_prauc·no_regression·cross_site_claim·distribution·note·eps`. swap이 보는 하드 게이트 = `no_regression`(bool).
+- 서빙 `GET /health`(app.py:105) → `{"status","run_id","featureset","input_dim"}`. `run_id` = 활성 번들 `meta.json.run_id`(console-prep로 실제 run_id 보고).
+- 서빙 `POST /admin/reload`(console-prep) → alias 재해석, `_S`/`_DS` 재로드.
+- `ARTIFACTS = C.ROOT / "deploy" / "artifacts"` (deploy.py:27). version dir = `gru_<fs>@<version>`, 완성 표식 = `.ready` 존재.
+
+---
+
+## 구현 1: 감사 저장소 (SQLAlchemy ORM) — `console/audit.py`
+
+결정 4. **신규 의존**(레포 `src/`에 SQLAlchemy 직접 사용 0건 — MLflow 전이 의존일 뿐, M1). SQLite 시작, PostgreSQL 교체 가능하게 engine URL만 주입.
+
+### 스키마 (단일 테이블 `audit_events`)
+
+```python
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    id            = Column(Integer, primary_key=True)            # 자동 증가
+    ts            = Column(DateTime, nullable=False)             # UTC, 전용칸(검색)
+    event_type    = Column(String, nullable=False)              # 전용칸(검색): APPROVE|ROLLBACK|RECONCILE|BOOTSTRAP
+    featureset    = Column(String, nullable=False)              # 전용칸: 직렬화 키 단위(deploy.py:71)
+    gate_passed   = Column(Boolean, nullable=True)              # 전용칸(검색): no_regression. ROLLBACK/RECONCILE/BOOTSTRAP은 NULL
+    from_version  = Column(String, nullable=True)               # prev(이전 활성), 콜드스타트 BOOTSTRAP은 NULL
+    to_version    = Column(String, nullable=False)              # 대상(새 활성)
+    run_id        = Column(String, nullable=True)               # 메모상자: MLflow 링크 키(박제). 없으면 NULL
+    git_commit    = Column(String, nullable=True)               # 메모상자
+    gate_snapshot = Column(JSON,   nullable=True)               # 메모상자: validation.json 통째 사본(박제)
+    actor_unverified = Column(String, nullable=False, default="operator")  # M4: 미검증 입력 명시
+    verified_subject = Column(String, nullable=True)            # M4: SSO/OIDC 예약, MVP는 NULL
+    reason        = Column(String, nullable=False, default="")  # 자유 텍스트(롤백 사유 등)
+```
+
+- **전용칸 vs 메모상자 (핑퐁 확정)**: 자주 필터·검색하는 `ts`·`event_type`·`gate_passed`는 컬럼으로, 나머지 게이트 수치(`bholdout_util` 등)는 `gate_snapshot` JSON에 통째 박제. `validation.json` 스키마가 바뀌어도 감사가 안 깨진다.
+- **게이트 스냅샷 출처 = 디스크 (N1)**: 휘발성 `ValidationResult`가 아니라 **승인 대상 version dir의 `validation.json`을 읽어 그 사본**을 박는다(결정 4·5-B). `.ready` 없는 dir은 애초에 승인 대상이 아니라 빈 스냅샷이 생길 일 없음.
+- **`actor` = 미검증 입력 (M4)**: MVP에 인증 없음. 필드명을 `actor_unverified`로 둬 "검증된 신원" 오주장 방지. `verified_subject`는 SSO 도입용 예약 컬럼(MVP NULL).
+
+### append-only 강제 (불변)
+
+의료 감사는 정정·삭제가 신뢰 붕괴. **application 레벨에서 UPDATE/DELETE 차단** — 정정도 새 레코드 추가로만.
+
+```python
+# ORM 이벤트 훅으로 mutation 차단(예시 — 정확한 훅 등록 기법은 구현 재량)
+from sqlalchemy import event
+@event.listens_for(Session, "before_flush")
+def _block_mutation(session, ctx, _):
+    if session.dirty or session.deleted:
+        raise PermissionError("audit_events is append-only (no UPDATE/DELETE)")
+```
+
+### 인터페이스 (서비스 계층이 부르는 얇은 API)
+
+```python
+class AuditStore:
+    def __init__(self, url: str = "sqlite:///console_audit.db"): ...   # engine/sessionmaker
+    def append(self, **fields) -> AuditEvent: ...                      # 단일 INSERT, ts 미지정시 utcnow
+    def last_active(self, featureset: str) -> AuditEvent | None: ...   # 최근 APPROVE/ROLLBACK/RECONCILE/BOOTSTRAP 1건
+    def query(self, *, event_type=None, gate_passed=None,
+              since=None, until=None, featureset=None) -> list[AuditEvent]: ...  # 전용칸 필터
+```
+
+- `last_active`는 화해(구현 3)와 `/audit` 최신 상태 표시의 공통 헬퍼. **현재 활성의 권위는 DB가 아니라 alias**임에 유의(결정 7-2) — `last_active`는 *감사상* 최종 활성일 뿐.
+
+---
+
+## 구현 2: `/console` API (FastAPI, 5 엔드포인트) — `console/api.py` + `console/service.py`
+
+결정 5. **얇은 어댑터** — `deploy`/`validate`/`bundle` 함수를 호출만, 로직 재구현 0. API(`api.py`)는 HTTP 표면, 직렬화·감사·복원의 실제 로직은 서비스 계층(`service.py`)에 둬 테스트 가능하게 분리.
+
+### 읽기 3개
+
+| 엔드포인트 | 동작 | 출처 |
+|---|---|---|
+| `GET /console/versions?fs=vitals` | version dir 스캔 → `champion`(=alias 타겟) / `challenger`(`.ready` 있고 비활성) / `incomplete`(`.ready` 없음) / `archived`(과거 활성, 감사 이력) 분류 | **FS가 권위**: champion = `active_version()`. archived 도출 = 감사 `last_active` 이력 |
+| `GET /console/versions/{version}?fs=vitals` | 그 dir의 `validation.json`·`retrain.json`·`meta.json` 읽어 게이트 수치 + 재학습 상세 + MLflow deep-link | 읽기 전용. `meta.json.run_id` 있으면 링크, 없으면 폴백 표시(6-A) |
+| `GET /console/audit?event_type=&gate_passed=&since=` | `AuditStore.query` 전용칸 필터 | DB |
+
+- **버전 단위 = featureset (결정 5)**: `active_version`이 featureset 단위라 모든 엔드포인트가 `fs` 파라미터를 받는다. champion 판정은 항상 `deploy.active_version(fs)`(alias)로 — 감사 DB로 추정하지 않는다.
+- **MLflow deep-link (6-A)**: `meta.json.run_id`가 있으면 `<tracking_uri>/#/experiments/.../runs/<run_id>`. 없으면 죽은 링크 만들지 말고 `validation.json`/`retrain.json` 내용을 직접 표시.
+
+### 쓰기 2개 — 직렬화 경계 + 감사 강제 (결정 5-A·7)
+
+두 쓰기 모두 **featureset 단위 임계 구간** 안에서 `read-active(prev) → 백엔드 호출 → audit` 순서로 실행. 임계 구간은 동시 승인 2건의 prev 갈라짐을 차단(결정 7-1).
+
+```python
+# service.py — featureset 단위 락(콘솔 1프로세스 전제 → 프로세스-로컬 락)
+_LOCKS: dict[str, threading.Lock] = defaultdict(threading.Lock)
+
+def approve(fs: str, version: str, *, actor: str, reason: str = "") -> dict:
+    version_dir = ARTIFACTS / f"gru_{fs}@{version}"
+    _require_ready(version_dir)                       # .ready 없으면 422 — 미완성 후보 승인 거부
+    val = _restore_validation(version_dir)            # validation.json → SimpleNamespace (5-B)
+    snap = _read_gate_snapshot(version_dir)           # validation.json 사본(박제용)
+    meta = _read_meta(version_dir)                    # run_id·git_commit
+    with _LOCKS[fs]:                                  # ── 임계 구간 시작(결정 7-1) ──
+        prev = deploy.active_version(fs)              # 임계 구간 안에서 prev 읽기(mn-c)
+        deploy.swap(fs, version_dir, validation=val, approved=True)   # ② 미승인/REGRESSED면 raise
+        ev = audit.append(event_type="APPROVE", featureset=fs,
+                          gate_passed=bool(snap.get("no_regression")),
+                          from_version=prev, to_version=version,
+                          run_id=meta.get("run_id"), git_commit=meta.get("git_commit"),
+                          gate_snapshot=snap, actor_unverified=actor, reason=reason)  # ③
+    # ── 임계 구간 끝 ── (서빙 전파는 구간 밖, 아래 전파 확인)
+    propagation = _propagate_and_confirm(fs)          # /admin/reload | 롤링 재시작 + /health 폴링
+    return {"event_id": ev.id, "prev": prev, "active": version, "propagation": propagation}
+
+def rollback(fs: str, target_version: str, *, actor: str, reason: str = "") -> dict:
+    # 5-A: 롤백도 승인+감사 필수, 단 validation 재검증 면제(과거 검증된 버전 복귀)
+    with _LOCKS[fs]:
+        prev = deploy.active_version(fs)              # 롤백 prev = 사전 읽기(deploy.rollback이 prev 미반환, mn-c)
+        deploy.rollback(fs, target_version)            # validation 게이트 없음(의도)
+        ev = audit.append(event_type="ROLLBACK", featureset=fs, gate_passed=None,
+                          from_version=prev, to_version=target_version,
+                          actor_unverified=actor, reason=reason)
+    propagation = _propagate_and_confirm(fs)
+    return {"event_id": ev.id, "prev": prev, "active": target_version, "propagation": propagation}
+```
+
+- **swap 복원 경로 (5-B)**: `_restore_validation`은 `validation.json`을 읽어 `SimpleNamespace(**data)`로 래핑. `deploy.swap`이 `getattr(validation,"no_regression",...)`로 속성 접근하므로 dict가 아닌 객체 필요. **백엔드 시그니처 변경 없음.**
+- **이중 게이트 (M3)**: REGRESSED(`no_regression=False`) 버전은 (a) UI가 승인 버튼 비활성(핸드오프 B), (b) 백엔드 `deploy.swap`이 `ValueError`로 거부 — 양쪽에서 막힘. API는 `ValueError`를 422로 변환.
+- **순서 = swap(②) → audit(③) (결정 7-2)**: ③ 실패는 부팅 화해(구현 3)가 받친다. 역순(기록 먼저)은 "기록 있는데 swap 안 됨" 창을 만들어 alias 권위와 충돌하므로 금지.
+- **`deploy.rollback` 직접 호출 우회 (5-A 방어 심화)**: H4r에 `approved` 가드를 더하는 건 콘솔 밖 변경이라 권고로만 둠. 콘솔은 사전 `active_version` 읽기로 prev를 감사에 캡처해 우회.
+
+---
+
+## 구현 3: 부트스트랩 화해·seed + 전파 확인 — `console/service.py` (lifespan)
+
+결정 7-1·7-2, 결정 2-A. **요청 수락 *전에*** alias↔감사를 화해하고, 쓰기 후 서빙 전파를 확인한다.
+
+### (a) 부트스트랩: 화해/seed 후 라우팅 개시 (결정 7-1 경계 완전성)
+
+FastAPI `lifespan`에서 라우팅 게이트가 열리기 전에 실행 → 화해/seed가 승인과 인터리브되는 버그-클래스(B-r5) 구조적 차단.
+
+```python
+@asynccontextmanager
+async def lifespan(app):
+    for fs in CONSOLE_FEATURESETS:                    # 예: ["vitals"]
+        _reconcile_or_seed(fs)                        # ↓ 요청 수락 전 완료
+    yield                                             # ── 이후에야 라우팅 개시 ──
+
+def _reconcile_or_seed(fs: str):
+    alias_target = deploy.active_version(fs)          # FS = 현재 활성 권위(결정 7-2)
+    last = audit.last_active(fs)
+    if last is None and alias_target is not None:
+        # 콜드스타트: 콘솔 이전부터 champion 존재 → seed 1건(mn1)
+        audit.append(event_type="BOOTSTRAP", featureset=fs,
+                     from_version=None, to_version=alias_target, reason="cold-start seed")
+    elif alias_target is not None and last.to_version != alias_target:
+        # ②후 ③전 크래시 흔적 또는 콘솔 밖 수동 변경: 감사를 실제 alias로 끌어올림
+        audit.append(event_type="RECONCILE", featureset=fs,
+                     from_version=last.to_version,     # prev = 감사상 직전 최종 활성(archived 도출 보존, mn-r5)
+                     to_version=alias_target,          # target = 실제 alias
+                     actor_unverified="system", reason="bootstrap reconcile")
+```
+
+- **alias = 현재 활성 권위, DB = 이력 (결정 7-2)**: 분기 시 alias가 이긴다. 화해는 감사를 alias 상태로 끌어올리되 `from_version`엔 감사상 직전 최종 활성을 채워 archived 도출(이전 활성→비활성 천이)을 보존한다.
+- **콜드스타트 (mn1)**: 감사 이력이 비었는데 champion이 있으면 거짓 복원 없이 seed 1건만. 콘솔 이전 과거 이력은 비어 있음을 UI에 명시(핸드오프 B).
+
+### (b) 전파 확인 폴링 (결정 2-A MJ-new1)
+
+alias·감사는 이미 권위로 갱신됐고, 서빙 메모리 반영은 별개 홉이라 실패할 수 있다. **숨기지 말고 가시 상태로 노출**.
+
+```python
+def _propagate_and_confirm(fs: str, *, timeout_s=10, interval_s=0.5) -> str:
+    _trigger_reload(fs)                               # dev: POST /admin/reload | prod: K8s 롤링 재시작
+    target = deploy.active_version(fs)                # ★ 타겟 = 현재 alias(그 swap의 버전 아님, MJ-r5)
+    target_run_id = _read_meta(ARTIFACTS / f"gru_{fs}@{target}").get("run_id")
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if _get_health(fs).get("run_id") == target_run_id:    # /health.run_id == 현재 alias의 run_id
+            return "confirmed"
+        time.sleep(interval_s)
+    return "pending"                                  # 실패 시 재시도·경보(채널은 명세부), UI는 "전파 대기/실패"
+```
+
+- **타겟 = 현재 alias (MJ-r5)**: 연속 승인 A(→V2)·B(→V3)가 순차 통과하면 alias·서빙은 V3로 수렴. 타겟을 "그 swap의 버전(V2)"으로 두면 A 폴링이 정당히 대체된 V2를 영원히 실패 표시. 현재 alias로 정의하면 둘 다 V3 수렴 시 confirmed.
+- **`/health.run_id` 비교 (MJ2)**: alias명(`gru_vitals`) 문자열이 아니라 **현재 alias 타겟 dir의 `meta.json.run_id`**와 비교. console-prep가 `/health`에 실제 run_id를 보고하게 했으므로 성립.
+- **확인 전 UI 표시**: confirmed 전까지 "활성(전파 확인됨)"이 아니라 "전파 대기/실패"로 구분 표시(핸드오프 B 계약).
+
+---
+
+## 성공 기준 (spec-writer TDD 대상)
+
+테스트 위치: `tests/console/`(신규). conftest는 임시 ARTIFACTS·인메모리/임시 sqlite로 격리(console-prep 관습 따름).
+
+1. **감사 append-only**: `audit.append`로 INSERT는 되나, 기존 레코드 UPDATE/DELETE 시도는 `PermissionError`. `ts`는 UTC.
+2. **감사 스키마**: APPROVE 레코드에 `gate_snapshot`이 version dir `validation.json`의 사본으로 박히고, `gate_passed`가 `no_regression`과 일치. `actor_unverified` 기본값 존재, `verified_subject`는 NULL.
+3. **versions 분류**: `.ready` 있는 비활성 = challenger, 없으면 incomplete, `active_version` 타겟 = champion. champion 판정이 alias(FS)에서 나오고 감사 DB 추정이 아님.
+4. **approve 경로**: `.ready` 없는 version 승인 시 422(미완성 거부). `validation.json` → SimpleNamespace 복원으로 `deploy.swap` 호출이 `getattr(no_regression)` 정합. REGRESSED 버전은 422(`ValueError` 변환). 성공 시 prev·active 반환 + 감사 1건.
+5. **rollback 경로**: validation 재검증 없이 실행되나 **승인+감사는 필수**(감사 1건, `event_type=ROLLBACK`, `gate_passed=NULL`). 롤백 prev = 사전 `active_version` 캡처(mn-c).
+6. **직렬화(면 2)**: 같은 featureset 동시 approve 2건이 직렬화돼 둘째가 갱신된 active를 prev로 읽음(prev 갈라짐 없음). 감사에 `V1→V2`·`V2→V3`로 남고 `V1→V3` 오염 없음.
+7. **화해(면 1)**: alias가 감사 `last_active`와 다른 상태로 부팅 시 `RECONCILE` 레코드 1건이 `from=감사최종·to=실제alias`로 기록되고, archived 도출이 보존됨. 콜드스타트(감사 빔+champion 존재)는 `BOOTSTRAP` seed 1건. **화해/seed가 라우팅 개시 전 완료**(lifespan 순서).
+8. **전파 확인**: `_propagate_and_confirm`이 `/health.run_id == 현재 alias run_id`면 confirmed, 타임아웃이면 pending. 타겟이 "그 swap 버전"이 아니라 "현재 alias"임(연속 승인 시 옛 버전 거짓 실패 없음, MJ-r5).
+9. **누수 불변**: 콘솔 계층이 환자 단위 B 분할·train-only stats·0-fill 금지·mask OFF를 건드리지 않음(노출·기록 계층 한정).
+
+## 범위 외 (명시)
+
+- React 통합 콘솔·Grafana 패널 → **핸드오프 B**.
+- 다중 프로세스/replica 직렬화(공유 저장소 락) → 콘솔 1프로세스 전제. scale-out 시 DB advisory lock/파일 lock으로 승격(결정 7-1 의존 식별). 본 핸드오프는 프로세스-로컬 락.
+- 정확한 K8s RBAC·롤링 재시작 매니페스트 → 배포환경 종속 `[검증 필요]`. dev는 `/admin/reload` 경로로 테스트.
+- 인증/SSO·`verified_subject` 채움 → 후속 과제(M4). MVP는 `actor_unverified`.
+- `deploy.rollback`의 `approved` 가드 대칭화 → H4r 코드 변경, 권고만(5-A). 콘솔은 사전 active 읽기로 우회.

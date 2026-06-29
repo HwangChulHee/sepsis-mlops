@@ -242,9 +242,9 @@ def test_detail_mlflow_link_null_when_no_run_id(console):
 
 
 # =====================================================================================
-# ===== archived 버킷 보강 (handoff "버킷 판정" 절, :220-225 — 갱신된 archived 규약) =====
+# ===== archived 버킷 보강 (handoff "버킷 판정" 절, :262-267 — 갱신된 archived 규약) =====
 # =====================================================================================
-# 확정 규약(handoff:220-225, 직접 읽고 따름) — 상호배타·우선순위 첫 매치:
+# 확정 규약(handoff:262-267, 직접 읽고 따름) — 상호배타·우선순위 첫 매치:
 #     champion > archived > challenger > incomplete
 #   1. champion   = active_version(fs) 타겟(현재 alias, FS 권위).
 #   2. archived   = 현재 비활성이고 감사 last_active 이력상 **과거에 활성이었던** 적 있음.
@@ -252,25 +252,27 @@ def test_detail_mlflow_link_null_when_no_run_id(console):
 #   3. challenger = .ready 있고 비활성이며 **과거 활성 이력 없음**(신규 후보).
 #   4. incomplete = .ready 없음.
 #
-# [검증 필요] 감사 이력 표현(과거 활성)의 비교 키가 핸드오프 내부에서 불일치한다:
-#   - service.approve 는 to_version=version(=맨버전 라벨, handoff:112).
-#   - _reconcile_or_seed / BOOTSTRAP 은 to_version=alias_target(=deploy.active_version 반환=dir명,
-#     handoff:159/164). dir명은 'gru_<fs>@<label>' 형태.
-#   같은 "과거 활성" 사실을 한쪽은 맨버전, 한쪽은 dir명으로 기록한다 → archived 도출 비교 키가
-#   모호. 아래 *권위* 테스트(test_archived_after_supersede_via_approve_twice 등)는
-#   **service.approve 를 직접 2회 호출**해 구현이 실제로 쓰는 키로 이력을 만들므로 키-표현
-#   가정을 우회한다(approve 가 기록한 그 키로 classify 가 비교하면 일치). 별도의 직접-삽입
-#   테스트(test_archived_via_direct_audit_append)는 맨버전 라벨을 가정하고 [검증 필요] 로 남긴다.
+# 감사 이력의 비교 키 = **버전 디렉토리명**으로 단일화(B1 복원, handoff:22-42/148/162).
+#   - service.approve 는 to_version=version_id(=디렉토리명 'gru_<fs>@<v>', handoff:148).
+#   - _reconcile_or_seed / BOOTSTRAP 도 to_version=alias_target(=deploy.active_version 반환
+#     =디렉토리명, handoff:191/204). 양쪽이 같은 디렉토리명 표현이라 archived 도출 비교 키가
+#   어긋나지 않는다(맨버전 단독 금지 — _require_consistent 가 'gru_<fs>@' 접두 없으면 ValueError).
+#   따라서 아래 권위 테스트(approve 직접 호출)와 직접-삽입 변형 모두 **디렉토리명**으로 이력을
+#   구성한다. approve 헬퍼는 console.mk 가 돌려준 version_id(=디렉토리명)를 approve 에 넘긴다.
 
 
 def _approve(console, fs, label):
     """version dir 를 만들고 service.approve 로 활성화(=감사 to_version 기록).
 
-    approve 가 swap 으로 alias 를 그 버전으로 바꾸고 APPROVE 감사 1건(to_version)을 남긴다.
-    이후 다른 버전을 approve 하면 이 버전은 '비활성 + 과거 활성 이력' = archived 후보가 된다.
+    B1 복원: approve 의 버전 인자는 **버전 디렉토리명**(version_id='gru_<fs>@<label>')이다.
+    console.mk(label) 이 (version_id, dir) 를 돌려주므로 그 version_id 를 approve 에 넘긴다
+    (맨버전 라벨을 넘기면 _require_consistent 가 ValueError 로 거부, handoff:37-39).
+    approve 가 swap 으로 alias 를 그 버전으로 바꾸고 APPROVE 감사 1건(to_version=version_id,
+    디렉토리명)을 남긴다. 이후 다른 버전을 approve 하면 이 버전은 '비활성 + 과거 활성 이력'
+    = archived 후보가 된다.
     """
     version_id, d = console.mk(label, ready=True)
-    console.service.approve(fs, label, actor="operator")
+    console.service.approve(fs, version_id, actor="operator")
     return version_id, d
 
 
@@ -278,9 +280,9 @@ def _approve(console, fs, label):
 def test_archived_after_supersede_via_approve_twice(console):
     """old 를 승인해 챔피언으로 올렸다가 new 로 교체 → old 는 비활성+과거활성 = archived.
 
-    setup: service.approve 2회(권위 경로 — approve 가 직접 to_version 을 기록하므로
-    감사 키-표현 가정을 우회). [검증 필요] 선행: service.approve 가 swap+감사 append 수행
-    (handoff:101-117), _propagate_and_confirm 는 fixture 에서 confirmed 스텁.
+    setup: service.approve 2회(권위 경로 — approve 가 직접 to_version=디렉토리명을 기록).
+    [검증 필요] 선행: service.approve 가 swap+감사 append 수행(handoff:135-150),
+    _propagate_and_confirm 는 fixture 에서 confirmed 스텁.
     """
     fs = "vitals"
     _approve(console, fs, "old")    # alias = gru_vitals@old (한때 챔피언)
@@ -295,12 +297,12 @@ def test_archived_after_supersede_via_approve_twice(console):
 
 
 # ===== A2. archived 가 challenger 보다 우선 — .ready 있어도 과거활성이면 archived =====
-# (박을것 #2, 핵심 회귀 방지; handoff:222/225 "ready 한 과거 챔피언은 archived 로 확정") =====
+# (박을것 #2, 핵심 회귀 방지; handoff:264/267 "ready 한 과거 챔피언은 archived 로 확정") =====
 def test_archived_takes_priority_over_challenger_even_with_ready(console):
     """old: .ready=True(승인됐으니 당연) + 과거 활성 → challenger 가 아니라 archived.
 
     이게 옛 "비challenger 순환"을 깬 지점이다: archived 가 challenger 보다 먼저 판정되므로
-    '.ready 가 남아 있는 과거 챔피언'은 archived 로 확정된다(handoff:225). 같은 스캔에
+    '.ready 가 남아 있는 과거 챔피언'은 archived 로 확정된다(handoff:267). 같은 스캔에
     이력 없는 신규 ready 후보(cand)를 함께 둬 priority 가 갈리는 지점을 박는다.
     """
     fs = "vitals"
@@ -382,20 +384,18 @@ def test_buckets_mutually_exclusive_all_four(console):
 def test_archived_via_direct_audit_append(console):
     """approve 경로 대신 감사 레코드를 직접 삽입해 '과거 활성' 이력을 구성한 archived.
 
-    [검증 필요] 셋업 방식: 핸드오프가 'archived 도출 = 감사 last_active 이력'(handoff:86/222)
-    이라 했으나, 직접 append 시 to_version 의 표현(맨버전 vs dir명)을 못 박았다. approve 관습
-    (handoff:112, to_version=맨버전 라벨)과 기존 conftest 테스트(to_version="other")에 맞춰
-    **맨버전 라벨**로 가정한다. 만약 구현이 archived 비교를 dir명 기준으로 한다면 이 테스트는
-    GREEN 으로 전환되지 않으며, 이는 감사 to_version 키-표현 불일치(approve=맨버전 /
-    reconcile=dir명, handoff:112 vs :159/164)라는 설계 결함의 신호다.
+    B1 복원으로 키-표현 확정: 핸드오프 전 구간의 감사 to_version 은 **버전 디렉토리명**
+    'gru_<fs>@<v>' 단일 표현이다(approve handoff:148, reconcile/bootstrap handoff:191/204).
+    따라서 직접 append 도 디렉토리명(arch_id='gru_vitals@arch')으로 '과거 활성' 이력을 박는다
+    — 더는 맨버전 가정이 아니다. classify 의 archived 도출 비교가 같은 디렉토리명 기준이므로
+    일치한다.
     """
     fs = "vitals"
     champ_id, _ = console.mk("champ", ready=True)
     arch_id, _ = console.mk("arch", ready=True)     # 비활성 + .ready 보유
-    # 감사상 'arch 가 한때 활성이었음' 기록(과거 APPROVE)
-    # [검증 필요] 선행: to_version=맨버전 라벨 가정(approve 관습 handoff:112)
+    # 감사상 'arch 가 한때 활성이었음' 기록(과거 APPROVE) — to_version=디렉토리명(B1)
     console.store.append(event_type="APPROVE", featureset=fs,
-                         from_version=None, to_version="arch", gate_passed=True)
+                         from_version=None, to_version=arch_id, gate_passed=True)
     console.fd.set_active(fs, champ_id)             # 현재 alias = champ → arch 는 비활성
 
     rows = _rows_by_version(console.service.list_versions(fs))

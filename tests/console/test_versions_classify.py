@@ -239,3 +239,168 @@ def test_detail_mlflow_link_null_when_no_run_id(console):
 
     detail = console.service.get_version_detail(fs, "champ")
     assert detail["mlflow_link"] is None, "run_id 없으면 mlflow_link=null 이어야(6-A 폴백, handoff:238)"
+
+
+# =====================================================================================
+# ===== archived 버킷 보강 (handoff "버킷 판정" 절, :220-225 — 갱신된 archived 규약) =====
+# =====================================================================================
+# 확정 규약(handoff:220-225, 직접 읽고 따름) — 상호배타·우선순위 첫 매치:
+#     champion > archived > challenger > incomplete
+#   1. champion   = active_version(fs) 타겟(현재 alias, FS 권위).
+#   2. archived   = 현재 비활성이고 감사 last_active 이력상 **과거에 활성이었던** 적 있음.
+#                   **.ready 유무 무관** — 한때 챔피언이던 버전은 .ready 가 남아 있어도 archived.
+#   3. challenger = .ready 있고 비활성이며 **과거 활성 이력 없음**(신규 후보).
+#   4. incomplete = .ready 없음.
+#
+# [검증 필요] 감사 이력 표현(과거 활성)의 비교 키가 핸드오프 내부에서 불일치한다:
+#   - service.approve 는 to_version=version(=맨버전 라벨, handoff:112).
+#   - _reconcile_or_seed / BOOTSTRAP 은 to_version=alias_target(=deploy.active_version 반환=dir명,
+#     handoff:159/164). dir명은 'gru_<fs>@<label>' 형태.
+#   같은 "과거 활성" 사실을 한쪽은 맨버전, 한쪽은 dir명으로 기록한다 → archived 도출 비교 키가
+#   모호. 아래 *권위* 테스트(test_archived_after_supersede_via_approve_twice 등)는
+#   **service.approve 를 직접 2회 호출**해 구현이 실제로 쓰는 키로 이력을 만들므로 키-표현
+#   가정을 우회한다(approve 가 기록한 그 키로 classify 가 비교하면 일치). 별도의 직접-삽입
+#   테스트(test_archived_via_direct_audit_append)는 맨버전 라벨을 가정하고 [검증 필요] 로 남긴다.
+
+
+def _approve(console, fs, label):
+    """version dir 를 만들고 service.approve 로 활성화(=감사 to_version 기록).
+
+    approve 가 swap 으로 alias 를 그 버전으로 바꾸고 APPROVE 감사 1건(to_version)을 남긴다.
+    이후 다른 버전을 approve 하면 이 버전은 '비활성 + 과거 활성 이력' = archived 후보가 된다.
+    """
+    version_id, d = console.mk(label, ready=True)
+    console.service.approve(fs, label, actor="operator")
+    return version_id, d
+
+
+# ===== A1. archived 분류 — 과거 활성 + 현재 비활성 → archived (박을것 #1, handoff:222) =====
+def test_archived_after_supersede_via_approve_twice(console):
+    """old 를 승인해 챔피언으로 올렸다가 new 로 교체 → old 는 비활성+과거활성 = archived.
+
+    setup: service.approve 2회(권위 경로 — approve 가 직접 to_version 을 기록하므로
+    감사 키-표현 가정을 우회). [검증 필요] 선행: service.approve 가 swap+감사 append 수행
+    (handoff:101-117), _propagate_and_confirm 는 fixture 에서 confirmed 스텁.
+    """
+    fs = "vitals"
+    _approve(console, fs, "old")    # alias = gru_vitals@old (한때 챔피언)
+    _approve(console, fs, "new")    # alias = gru_vitals@new → old 는 비활성
+
+    rows = _rows_by_version(console.service.list_versions(fs))
+    # new = 현재 alias = champion
+    assert rows["new"]["bucket"] == "champion", f"현재 alias 가 champion 아님: {rows['new']}"
+    # old = 비활성 + 감사상 과거 활성 → archived (롤백 후보)
+    assert rows["old"]["bucket"] == "archived", \
+        f"과거 활성·현재 비활성 버전이 archived 아님: {rows['old']}"
+
+
+# ===== A2. archived 가 challenger 보다 우선 — .ready 있어도 과거활성이면 archived =====
+# (박을것 #2, 핵심 회귀 방지; handoff:222/225 "ready 한 과거 챔피언은 archived 로 확정") =====
+def test_archived_takes_priority_over_challenger_even_with_ready(console):
+    """old: .ready=True(승인됐으니 당연) + 과거 활성 → challenger 가 아니라 archived.
+
+    이게 옛 "비challenger 순환"을 깬 지점이다: archived 가 challenger 보다 먼저 판정되므로
+    '.ready 가 남아 있는 과거 챔피언'은 archived 로 확정된다(handoff:225). 같은 스캔에
+    이력 없는 신규 ready 후보(cand)를 함께 둬 priority 가 갈리는 지점을 박는다.
+    """
+    fs = "vitals"
+    _approve(console, fs, "old")    # 과거 챔피언, 여전히 .ready 보유
+    _approve(console, fs, "new")    # 현재 챔피언
+    console.mk("cand", ready=True)  # 신규 후보: .ready 있고 비활성, 과거 활성 이력 없음
+
+    rows = _rows_by_version(console.service.list_versions(fs))
+    # 핵심: old 는 .ready 가 살아 있는데도 challenger 가 아니라 archived
+    assert rows["old"]["ready"] is True, "과거 챔피언 old 의 .ready 가 사라짐(전제 붕괴)"
+    assert rows["old"]["bucket"] == "archived", \
+        f".ready 있는 과거 챔피언이 archived 로 확정되지 않음(우선순위 회귀): {rows['old']}"
+    assert rows["old"]["bucket"] != "challenger", \
+        ".ready+과거활성 인데 challenger 로 샘(archived>challenger 우선순위 위반 — 옛 순환 부활)"
+    # 대조: 과거 활성 이력 없는 신규 ready 후보는 challenger
+    assert rows["cand"]["bucket"] == "challenger", \
+        f"이력 없는 신규 ready 후보가 challenger 아님: {rows['cand']}"
+
+
+# ===== A3. challenger 는 과거 활성 없음 한정 (박을것 #3, handoff:223) =====
+def test_challenger_requires_no_past_active_history(console):
+    """challenger = .ready 있고 비활성이며 과거 활성 이력 '없음'.
+
+    같은 조건(.ready+비활성)이라도 과거 활성 이력이 있으면 archived 로 가야 하므로,
+    challenger 는 '한 번도 배포된 적 없는' 버전에만 부여돼야 한다.
+    """
+    fs = "vitals"
+    _approve(console, fs, "old")    # 과거 활성 → archived 가 되어야(challenger 아님)
+    _approve(console, fs, "new")    # 현재 챔피언
+    console.mk("fresh", ready=True)  # 과거 활성 이력 전무한 신규 ready 후보
+
+    rows = _rows_by_version(console.service.list_versions(fs))
+    # 신규 후보만 challenger
+    assert rows["fresh"]["bucket"] == "challenger", \
+        f"과거활성 없는 ready-비활성이 challenger 아님: {rows['fresh']}"
+    # 과거 활성 이력 있는 ready-비활성은 challenger 로 분류되면 안 됨
+    assert rows["old"]["bucket"] != "challenger", \
+        "과거 활성 이력 있는 ready-비활성이 challenger 로 샘(challenger 는 과거활성 없음 한정)"
+    assert rows["old"]["bucket"] == "archived"
+
+
+# ===== A4. 상호배타 — 한 버전은 정확히 한 버킷, 네 버킷 동시 공존 (박을것 #4, handoff:220) =====
+def test_buckets_mutually_exclusive_all_four(console):
+    """champion·archived·challenger·incomplete 가 한 스캔에 공존, 각자 정확히 한 버킷.
+
+    우선순위 첫 매치(champion>archived>challenger>incomplete)가 각 버전을 정확히 하나로
+    가른다. 버전 행이 중복되지 않고(버전당 1행), 기대 매핑과 정확히 일치해야 한다.
+    """
+    fs = "vitals"
+    _approve(console, fs, "arch")    # 과거 챔피언 → 교체되면 archived
+    _approve(console, fs, "champ")   # 현재 챔피언
+    console.mk("chal", ready=True)   # ready+비활성+이력없음 → challenger
+    console.mk("inc", ready=False)   # .ready 없음 → incomplete
+
+    payload = console.service.list_versions(fs)
+    versions = [row["version"] for row in payload["versions"]]
+    # 버전당 정확히 1행(중복 분류 없음)
+    assert len(versions) == len(set(versions)), f"버전 행 중복(상호배타 위반): {versions}"
+    assert set(versions) == {"arch", "champ", "chal", "inc"}, \
+        f"스캔된 버전 집합 불일치: {set(versions)}"
+
+    rows = {row["version"]: row for row in payload["versions"]}
+    expected = {
+        "champ": "champion",
+        "arch": "archived",
+        "chal": "challenger",
+        "inc": "incomplete",
+    }
+    for ver, want in expected.items():
+        assert rows[ver]["bucket"] == want, \
+            f"{ver} 버킷이 {want} 아님(우선순위 첫 매치 위반): {rows[ver]['bucket']}"
+    # 각 행의 bucket 은 단일 문자열(한 버전=한 버킷)이며 정의된 4종 중 하나
+    for ver, row in rows.items():
+        assert row["bucket"] in {"champion", "archived", "challenger", "incomplete"}, \
+            f"{ver} 의 bucket 이 정의된 4종 밖: {row['bucket']}"
+
+
+# ===== A5. archived 직접-삽입 변형 — 감사 레코드 직접 append (박을것 #1 대안 셋업) =====
+def test_archived_via_direct_audit_append(console):
+    """approve 경로 대신 감사 레코드를 직접 삽입해 '과거 활성' 이력을 구성한 archived.
+
+    [검증 필요] 셋업 방식: 핸드오프가 'archived 도출 = 감사 last_active 이력'(handoff:86/222)
+    이라 했으나, 직접 append 시 to_version 의 표현(맨버전 vs dir명)을 못 박았다. approve 관습
+    (handoff:112, to_version=맨버전 라벨)과 기존 conftest 테스트(to_version="other")에 맞춰
+    **맨버전 라벨**로 가정한다. 만약 구현이 archived 비교를 dir명 기준으로 한다면 이 테스트는
+    GREEN 으로 전환되지 않으며, 이는 감사 to_version 키-표현 불일치(approve=맨버전 /
+    reconcile=dir명, handoff:112 vs :159/164)라는 설계 결함의 신호다.
+    """
+    fs = "vitals"
+    champ_id, _ = console.mk("champ", ready=True)
+    arch_id, _ = console.mk("arch", ready=True)     # 비활성 + .ready 보유
+    # 감사상 'arch 가 한때 활성이었음' 기록(과거 APPROVE)
+    # [검증 필요] 선행: to_version=맨버전 라벨 가정(approve 관습 handoff:112)
+    console.store.append(event_type="APPROVE", featureset=fs,
+                         from_version=None, to_version="arch", gate_passed=True)
+    console.fd.set_active(fs, champ_id)             # 현재 alias = champ → arch 는 비활성
+
+    rows = _rows_by_version(console.service.list_versions(fs))
+    assert rows["champ"]["bucket"] == "champion"
+    assert rows["arch"]["bucket"] == "archived", \
+        f"감사상 과거 활성·현재 비활성 버전이 archived 아님: {rows['arch']}"
+    assert rows["arch"]["bucket"] != "challenger", \
+        ".ready 있어도 과거 활성이면 archived 여야(challenger 아님)"

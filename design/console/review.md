@@ -114,3 +114,29 @@
 - **mn2. 결정 6-A 폴백 문구 과대** — "감사+meta가 출처 보유"는 N1 해소 전까지 meta.json 4필드만 실제 보유. N1 영속화 결정 후 문구를 한정.
 
   > **[reviser 응답]** 해소: 결정 6-A 3번 항에 "문구 한정(mn2)" 명시(`decisions.md` 6-A). N1 영속 *이전*엔 meta.json 4필드뿐이라 "감사+meta가 출처 보유"가 과대였음을 인정하고, 폴백이 실데이터를 갖는 것은 **결정 5-B의 `validation.json`/`retrain.json` 영속이 선행될 때 한정**으로 수정. 영속 미선행 버전은 *미완성 후보*로 승인 배제 → 출처 공백 있는 버전은 운영 대상에서 *배제*하는 방식으로 닫음(덮지 않음). 폴백 출처를 "감사+meta"→"version dir의 validation.json/retrain.json + meta.json(+승인 시 감사 사본)"으로 정정.
+
+---
+
+# 라운드 3 — 최종 재검증 (v3 대상)
+
+- **판정**: **PASS — blocker 0건** ✅ 루프 정상 종료, 구현 명세부 진입 가능.
+- **N1 해소 여부**: **해소** — (a) 5-B 복원 경로가 `deploy.swap`의 `getattr(validation,"no_regression",False)` 계약(`deploy.py:55,61`)과 정합, 백엔드 시그니처 변경 없이 디스크만으로 swap 재구성 성립(getattr 기본값 False라 속성 부재 시 ValueError로 fail-safe). (b) `RetrainResult`에 seed/run_id/git_commit 부재(`pipeline.py:31-47`)를 회피 없이 H4r 교차단계 의존으로 정직히 표기(`seed`는 `retrain(seed=42)` 인자로 실재 → b_split_seed 기록 실현 가능). (c) 폴백이 validation.json 없는 dir을 *미완성 후보*로 **승인 배제**해 출처 공백을 말이 아니라 대상 집합 제한으로 실제로 닫음.
+- **MJ1**(reload 원자성): 결정 2-A에 (i)alias 1회 해석·(ii)로드 중 swap 배제·(iii)eager 공유 캐시로 규약화, 서빙 코드 변경이라 `[검증 필요]`로 명세부 이관 — 설계 게이트에서 수용.
+- **MJ2**(run_id 표면 오염): `bundle.py:102` `meta.get("run_id", str(d.name))` 인용, H4r meta.json run_id 기록이 `/health` 식별까지 동시 해소 — 정합 확인.
+- **신규 blocker**: 없음.
+- **누수 4종**: 무영향 — v3 변경분이 디스크 영속/표시 계층에 한정, 재학습 파이프라인의 환자단위 분할·train-only stats·0-fill 금지·mask OFF 불변.
+
+## minor (명세부 정리 권고 — 단독으로 막지 않음)
+
+- **mn-a. challenger 표식이 validation.json 단독에 묶여 retrain.json 부분쓰기에 취약** — 미완성 후보 판정을 validation.json 하나에만 거는데(`decisions.md:39,182`), 6-A 폴백은 approvable 버전에 retrain.json도 있다고 가정. 부분쓰기(validation.json 기록 후 retrain.json 실패) 시 "승인 가능하나 재학습 출처 공백" 재발 가능. → 미완성 후보 판정을 **두 파일 모두**에 걸거나 두 파일 원자적 기록(temp→rename)을 명세부에 못박을 것.
+- **mn-b. `eps`·"검증 시각"은 `ValidationResult` 필드가 아님** — `eps`는 `validate(*, eps=0.02)` 인자일 뿐 dataclass 필드 아니고(`validate.py:46`) 타임스탬프 필드도 없음(`validate.py:31-43`). "전체 직렬화"만으론 안 나오니 영속 시점에 별도 주입함을 명세부에 명시. (swap-임계 필드 no_regression엔 영향 없음.)
+- **mn-c. swap 반환값 `prev` 캡처 미명시** — `deploy.swap`은 이전 활성 버전명을 반환(`deploy.py:57-58,63-65`). 5-A 롤백이 `deploy.rollback(fs, previous_version_name)`을 호출하려면 이 `prev`가 감사에 기록돼야 롤백 대상이 결정됨. "swap 반환 prev를 감사 레코드에 캡처" 명시 권고.
+
+---
+
+## 루프 종결 요약
+
+- **3라운드 만에 PASS** (blocker: 2 → 1(신규 N1) → 0).
+- 라운드별 커밋: `130e097`(round 1), `09cc7f9`(round 2). 라운드 3은 redteam PASS만(보완 불필요).
+- 잔여 minor 3건(mn-a/b/c)은 구현 명세부(핸드오프)에서 정리 권고 — blocker 아님.
+- **사람 게이트 대기**: 푸시는 사람 승인 후.

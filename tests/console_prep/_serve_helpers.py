@@ -21,6 +21,7 @@ from types import SimpleNamespace
 import sepsis.drift.reference as drift_reference
 import sepsis.drift.synthetic as drift_synthetic
 import sepsis.serve.app as serve_app
+from sepsis import config as C
 
 REF_SENTINEL = SimpleNamespace(tag="REF_SENTINEL")
 THR_SENTINEL = SimpleNamespace(tag="THR_SENTINEL")
@@ -45,7 +46,11 @@ def patch_loaders(monkeypatch, *, run_id_default="hashrunid0000000"):
         meta_p = os.path.join(os.fspath(version_dir), "meta.json")
         if os.path.exists(meta_p):
             run_id = json.loads(open(meta_p).read()).get("run_id", run_id)
-        return SimpleNamespace(featureset="vitals", run_id=run_id)
+        # 실제 Bundle(bundle.py:48-51) 계약: run_id·featureset·input_dim 을 모두 가진다.
+        # /health 가 bundle.input_dim 을 읽으므로(serve/app.py) 대역도 이를 채워야 한다 —
+        # 빠지면 /health 가 AttributeError 로 500. featureset="vitals" 에 맞춰 일관되게 유도.
+        fs = "vitals"
+        return SimpleNamespace(featureset=fs, input_dim=len(C.featureset_columns(fs)), run_id=run_id)
 
     def fake_load_reference(path):
         rec.ref_paths.append(os.fspath(path))

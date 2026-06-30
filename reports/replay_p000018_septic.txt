@@ -1,0 +1,136 @@
+replaying p000018-b79dc0b6  fs=vitals  speed=36000.0  -> http://localhost:8000
+  t=  0  p=0.4579  alarm=False
+  t=  1  p=0.4605  alarm=False
+  t=  2  p=0.5374  alarm=False
+  t=  3  p=0.6032  alarm=True
+  t=  4  p=0.6516  alarm=True
+  t=  5  p=0.6822  alarm=True
+  t=  6  p=0.6740  alarm=True
+  t=  7  p=0.6373  alarm=True
+  t=  8  p=0.5912  alarm=True
+  t=  9  p=0.5640  alarm=False
+  t= 10  p=0.5443  alarm=False
+  t= 11  p=0.5364  alarm=False
+  t= 12  p=0.5426  alarm=False
+  t= 13  p=0.6006  alarm=True
+  t= 14  p=0.6271  alarm=True
+  t= 15  p=0.6134  alarm=True
+  t= 16  p=0.5820  alarm=True
+  t= 17  p=0.5605  alarm=False
+  t= 18  p=0.5527  alarm=False
+  t= 19  p=0.5999  alarm=True
+  t= 20  p=0.6429  alarm=True
+  t= 21  p=0.7096  alarm=True
+  t= 22  p=0.7784  alarm=True
+  t= 23  p=0.7746  alarm=True
+  t= 24  p=0.7539  alarm=True
+  t= 25  p=0.6736  alarm=True
+  t= 26  p=0.6124  alarm=True
+  t= 27  p=0.6061  alarm=True
+  t= 28  p=0.6743  alarm=True
+  t= 29  p=0.7360  alarm=True
+  t= 30  p=0.7357  alarm=True
+  t= 31  p=0.6596  alarm=True
+  t= 32  p=0.5873  alarm=True
+  t= 33  p=0.4991  alarm=False
+  t= 34  p=0.4629  alarm=False
+  t= 35  p=0.4707  alarm=False
+  t= 36  p=0.4800  alarm=False
+  t= 37  p=0.6014  alarm=True
+  t= 38  p=0.7296  alarm=True
+  t= 39  p=0.7573  alarm=True
+  t= 40  p=0.7595  alarm=True
+  t= 41  p=0.8067  alarm=True
+  t= 42  p=0.8348  alarm=True
+  t= 43  p=0.8344  alarm=True
+  t= 44  p=0.8344  alarm=True
+  t= 45  p=0.8228  alarm=True
+  t= 46  p=0.8213  alarm=True
+  t= 47  p=0.8448  alarm=True
+  t= 48  p=0.8530  alarm=True
+  t= 49  p=0.8398  alarm=True
+  t= 50  p=0.8105  alarm=True
+  t= 51  p=0.8064  alarm=True
+  t= 52  p=0.8170  alarm=True
+  t= 53  p=0.8540  alarm=True
+  t= 54  p=0.8658  alarm=True
+  t= 55  p=0.8505  alarm=True
+  t= 56  p=0.8403  alarm=True
+  t= 57  p=0.8355  alarm=True
+  t= 58  p=0.8635  alarm=True
+  t= 59  p=0.8871  alarm=True
+  t= 60  p=0.8940  alarm=True
+  t= 61  p=0.8718  alarm=True
+  t= 62  p=0.8523  alarm=True
+  t= 63  p=0.8464  alarm=True
+  t= 64  p=0.8506  alarm=True
+  t= 65  p=0.8634  alarm=True
+  t= 66  p=0.8531  alarm=True
+  t= 67  p=0.8386  alarm=True
+  t= 68  p=0.8479  alarm=True
+  t= 69  p=0.8589  alarm=True
+  t= 70  p=0.8539  alarm=True
+  t= 71  p=0.8357  alarm=True
+  t= 72  p=0.8503  alarm=True
+  t= 73  p=0.8794  alarm=True
+  t= 74  p=0.8932  alarm=True
+  t= 75  p=0.8943  alarm=True
+  t= 76  p=0.8758  alarm=True
+  t= 77  p=0.8601  alarm=True
+  t= 78  p=0.8573  alarm=True
+  t= 79  p=0.8083  alarm=True
+  t= 80  p=0.7722  alarm=True
+  t= 81  p=0.7496  alarm=True
+  t= 82  p=0.7390  alarm=True
+  t= 83  p=0.7974  alarm=True
+  t= 84  p=0.8596  alarm=True
+  t= 85  p=0.9178  alarm=True
+  t= 86  p=0.9368  alarm=True
+  t= 87  p=0.9248  alarm=True
+  t= 88  p=0.9044  alarm=True
+  t= 89  p=0.8900  alarm=True
+  t= 90  p=0.8893  alarm=True
+  t= 91  p=0.8912  alarm=True
+  t= 92  p=0.8897  alarm=True
+  t= 93  p=0.9022  alarm=True
+  t= 94  p=0.9190  alarm=True
+  t= 95  p=0.9011  alarm=True
+  t= 96  p=0.8852  alarm=True
+  t= 97  p=0.9022  alarm=True
+  t= 98  p=0.9141  alarm=True
+  t= 99  p=0.9358  alarm=True
+  t=100  p=0.9451  alarm=True
+  t=101  p=0.9427  alarm=True
+  t=102  p=0.9359  alarm=True
+  t=103  p=0.9111  alarm=True
+  t=104  p=0.8895  alarm=True
+  t=105  p=0.8777  alarm=True
+  t=106  p=0.8802  alarm=True
+  t=107  p=0.8928  alarm=True
+  t=108  p=0.9074  alarm=True
+  t=109  p=0.9110  alarm=True
+  t=110  p=0.9110  alarm=True
+  t=111  p=0.9097  alarm=True
+  t=112  p=0.9176  alarm=True
+  t=113  p=0.9211  alarm=True
+  t=114  p=0.9485  alarm=True
+  t=115  p=0.9417  alarm=True
+  t=116  p=0.9318  alarm=True
+  t=117  p=0.9331  alarm=True
+  t=118  p=0.9246  alarm=True
+  t=119  p=0.9184  alarm=True
+  t=120  p=0.9139  alarm=True
+  t=121  p=0.9108  alarm=True
+  t=122  p=0.9351  alarm=True
+  t=123  p=0.9309  alarm=True
+  t=124  p=0.9210  alarm=True
+  t=125  p=0.9154  alarm=True
+  t=126  p=0.9140  alarm=True
+  t=127  p=0.9274  alarm=True
+  t=128  p=0.9309  alarm=True
+  t=129  p=0.9179  alarm=True
+  t=130  p=0.8803  alarm=True
+  t=131  p=0.8644  alarm=True
+  t=132  p=0.8583  alarm=True
+  t=133  p=0.9023  alarm=True
+done. 134 timesteps sent.

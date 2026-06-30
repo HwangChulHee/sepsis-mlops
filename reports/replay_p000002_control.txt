@@ -1,0 +1,25 @@
+replaying p000002-aa41491a  fs=vitals  speed=36000.0  -> http://localhost:8000
+  t=  0  p=0.4644  alarm=False
+  t=  1  p=0.4514  alarm=False
+  t=  2  p=0.4563  alarm=False
+  t=  3  p=0.4269  alarm=False
+  t=  4  p=0.4213  alarm=False
+  t=  5  p=0.4503  alarm=False
+  t=  6  p=0.4134  alarm=False
+  t=  7  p=0.4096  alarm=False
+  t=  8  p=0.3929  alarm=False
+  t=  9  p=0.3566  alarm=False
+  t= 10  p=0.3144  alarm=False
+  t= 11  p=0.2854  alarm=False
+  t= 12  p=0.2602  alarm=False
+  t= 13  p=0.2340  alarm=False
+  t= 14  p=0.2010  alarm=False
+  t= 15  p=0.2050  alarm=False
+  t= 16  p=0.2066  alarm=False
+  t= 17  p=0.2051  alarm=False
+  t= 18  p=0.2049  alarm=False
+  t= 19  p=0.2045  alarm=False
+  t= 20  p=0.2037  alarm=False
+  t= 21  p=0.1980  alarm=False
+  t= 22  p=0.1954  alarm=False
+done. 23 timesteps sent.

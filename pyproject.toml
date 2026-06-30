@@ -26,6 +26,18 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.pytest.ini_options]
+# 한 커맨드(`uv run pytest`)로 전체 스위트(console·console_prep·replay)를 돌린다.
+# pythonpath=src: editable 설치 없이도 `sepsis` import 가능 — 매번 `PYTHONPATH=` 칠 필요 제거.
+testpaths = ["tests"]
+pythonpath = ["src"]
+# ROS(jazzy)가 셸 PYTHONPATH로 주입하는 pytest11 플러그인(launch_ros·launch_testing)이
+# 자동수집되며 lark 미설치로 collection을 깨뜨린다(이 프로젝트와 무관한 환경 누수).
+# 이 둘만 핀오프한다 — PYTEST_DISABLE_PLUGIN_AUTOLOAD로 전부 끄면 console_prep(fastapi
+# TestClient 등)이 의존하는 플러그인까지 죽어 collection error가 났다(검증됨). 설치 안 된
+# 환경에서도 `-p no:<name>`은 무해.
+addopts = "-p no:launch_ros -p no:launch_testing"
+
 # PyPI stays the default index; the pytorch CPU index is used ONLY for torch.
 [[tool.uv.index]]
 name = "pytorch-cpu"

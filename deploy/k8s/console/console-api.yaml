@@ -1,0 +1,77 @@
+# 운영 콘솔 API — console-api Deployment + Service (결정 2·5·7).
+#
+# - replicas=1 REQUIRED: 승인/롤백 직렬화 경계가 프로세스-로컬 락(_LOCKS, 결정 7-1)이다.
+#   >1 replica면 운영자 2명이 서로 다른 pod에서 동시 승인 → prev 갈라짐. scale-out 하려면
+#   먼저 공유 저장소 기반 락(DB advisory lock 등)으로 승격해야 한다(결정 7-1 의존).
+# - 부팅 lifespan(service.lifespan)이 라우팅 개시 전 alias↔감사 화해/seed를 끝낸다(결정 7-1).
+# - 공유 PVC를 /app/deploy/artifacts 에 마운트: console-api는 ARTIFACTS_DIR 같은 env를 읽지
+#   않고 deploy.ARTIFACTS(=C.ROOT/deploy/artifacts) 고정 경로를 쓴다(B2). 그래서 env가 아니라
+#   **마운트 경로를 serving과 동일하게** 맞추는 것이 전파 정합의 핵심.
+# - SERVE_URL: _propagate_and_confirm 이 swap 후 serving에 /admin/reload·/health를 호출하는
+#   대상. serving Service(sepsis-serving, port 80)를 가리킨다.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sepsis-console-api
+  labels:
+    app: sepsis-console-api
+spec:
+  replicas: 1                       # 직렬화 경계(프로세스-로컬 락) -> 단일 replica
+  selector:
+    matchLabels:
+      app: sepsis-console-api
+  template:
+    metadata:
+      labels:
+        app: sepsis-console-api
+    spec:
+      containers:
+        - name: console-api
+          # [검증 필요] 이미지: console API용 이미지(uvicorn sepsis.console.api:app) 빌드 필요.
+          # serving 이미지와 같은 베이스에 진입점만 다르게 둘 수 있다.
+          image: sepsis-console:a
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "sepsis.console.api:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - containerPort: 8000
+          env:
+            - name: SERVE_URL
+              value: "http://sepsis-serving"        # serving Service(port 80) — 전파 확인 대상
+            - name: LOG_LEVEL
+              value: "info"
+          volumeMounts:
+            - name: artifacts
+              mountPath: /app/deploy/artifacts       # serving과 동일 고정 경로(B2)
+          readinessProbe:
+            httpGet:
+              path: /console/versions?fs=vitals      # [검증 필요] 빈 클러스터에서도 200인지 확인
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: sepsis-artifacts
+---
+# console-api Service (ClusterIP) — Ingress가 /console/* 를 여기로 보낸다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sepsis-console-api
+  labels:
+    app: sepsis-console-api
+spec:
+  type: ClusterIP
+  selector:
+    app: sepsis-console-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000

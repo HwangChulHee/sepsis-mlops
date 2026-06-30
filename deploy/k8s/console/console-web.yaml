@@ -1,0 +1,84 @@
+# 운영 콘솔 웹 — console-web Deployment + Service + nginx 설정 (결정 2).
+#
+# nginx가 vite build 산출물(dist/)을 정적 서빙한다. React는 stateless라 replicas 증설 자유지만
+# 단일 운영 콘솔이라 1로 시작. console-web은 console-api를 직접 모르고, 브라우저가 /console/*를
+# 상대경로로 부르면 Ingress가 console-api로 라우팅한다(동일 출처 → CORS 없음).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sepsis-console-web
+  labels:
+    app: sepsis-console-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sepsis-console-web
+  template:
+    metadata:
+      labels:
+        app: sepsis-console-web
+    spec:
+      containers:
+        - name: console-web
+          # [검증 필요] 이미지: nginx 베이스에 console-web `vite build`의 dist/ 를 복사한 이미지.
+          # 예) FROM nginx:alpine; COPY dist/ /usr/share/nginx/html; COPY nginx.conf ...
+          image: sepsis-console-web:a
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: sepsis-console-web-nginx
+---
+# nginx 설정 — SPA 폴백(클라이언트 라우팅 대비). /console/* 는 Ingress가 가로채므로 여기 없음.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sepsis-console-web-nginx
+  labels:
+    app: sepsis-console-web
+data:
+  default.conf: |
+    server {
+      listen 80;
+      root /usr/share/nginx/html;
+      index index.html;
+      location / {
+        try_files $uri $uri/ /index.html;   # SPA 폴백
+      }
+    }
+---
+# console-web Service (ClusterIP) — Ingress가 / 를 여기로 보낸다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sepsis-console-web
+  labels:
+    app: sepsis-console-web
+spec:
+  type: ClusterIP
+  selector:
+    app: sepsis-console-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

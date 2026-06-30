@@ -1,0 +1,23 @@
+# 운영 콘솔 — 공유 번들 저장소 PVC (결정 2 "공유 자원 = 번들 저장소", 핸드오프 B B2).
+#
+# WHY: console-api(콘솔)가 deploy.swap/rollback으로 바꾸는 활성 alias(gru_<fs> 심링크)를
+# serving이 같은 디렉토리에서 읽어야 전파가 성립한다. 둘이 *다른* 볼륨을 보면 콘솔이 바꾼
+# alias를 serving이 영영 못 봐 전파 사슬이 silent하게 끊긴다(B2). 그래서 동일 PVC를
+# console-api와 serving이 **같은 고정 경로 /app/deploy/artifacts** 에 마운트한다.
+#
+# [검증 필요] accessMode: 단일노드 minikube는 ReadWriteOnce로 충분(같은 노드의 두 파드가
+# 동일 RWO 볼륨 공유 가능). 멀티노드 클러스터로 가면 ReadWriteMany(RWX) + RWX 지원
+# StorageClass(NFS 등)로 승격해야 한다. storageClassName은 환경 기본값에 위임(minikube=standard).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sepsis-artifacts
+  labels:
+    app: sepsis-console
+spec:
+  accessModes:
+    - ReadWriteOnce          # 단일노드 전제. 멀티노드 → ReadWriteMany
+  resources:
+    requests:
+      storage: 2Gi
+  # storageClassName: standard   # minikube 기본. 환경에 맞게 주석 해제/수정

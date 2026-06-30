@@ -1,0 +1,39 @@
+# 운영 콘솔 — Ingress (갈래 ㄱ: 동일 출처 라우팅, 결정 2).
+#
+# 안내데스크 역할: 같은 호스트(console.<host>)로 들어온 요청을 경로로 갈라 보낸다.
+#   /          -> console-web (React 정적)
+#   /console/* -> console-api (FastAPI)
+# 브라우저는 항상 동일 출처만 보므로 CORS가 발생하지 않는다(분리 앱인데도 CORS 제거).
+# console-api의 라우트는 이미 /console/* 접두라 rewrite 불필요 — Ingress는 경로 그대로 전달.
+#
+# [검증 필요]
+# - minikube: `minikube addons enable ingress` 로 nginx-ingress 컨트롤러 활성 필요.
+# - host: 실제 도메인/로컬 hosts 매핑에 맞게 수정(아래는 예시). minikube면 `minikube ip` →
+#   /etc/hosts 에 `console.local` 매핑.
+# - ingressClassName: 환경 컨트롤러에 맞게(minikube nginx-ingress = "nginx").
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sepsis-console
+  labels:
+    app: sepsis-console
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: console.local
+      http:
+        paths:
+          - path: /console
+            pathType: Prefix
+            backend:
+              service:
+                name: sepsis-console-api
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sepsis-console-web
+                port:
+                  number: 80

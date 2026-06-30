@@ -24,7 +24,10 @@ from sepsis.serve import bundle as bundle_mod
 # 체인(service→deploy→bundle)은 swap/rollback/set_active 만 거쳐 numpy/pandas 가 불필요하다.
 # 무게 import 는 사용 함수 내부로 lazy화한다(아래). (R.Reference 등 주석은 future-annotations 로 문자열 평가.)
 
-ARTIFACTS = C.ROOT / "deploy" / "artifacts"
+# serve/app.py 와 동일하게 ARTIFACTS_DIR env 를 존중한다(단일 출처). serve 가 env 로 다른
+# 경로를 읽는데 deploy/console 이 고정 경로를 쓰면, 콘솔이 교체한 alias 를 serve 가 못 봐
+# 전파가 silent 단절된다(B2). 둘이 같은 식으로 해석해야 정합. 기본값은 동일(repo deploy/artifacts).
+ARTIFACTS = Path(os.environ.get("ARTIFACTS_DIR", str(C.ROOT / "deploy" / "artifacts")))
 
 
 def _atomic_write_json(path: Path, obj) -> None:

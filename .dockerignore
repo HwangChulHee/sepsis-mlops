@@ -1,0 +1,39 @@
+# 빌드 컨텍스트 최소화 — serving(deploy/Dockerfile)·console-api(deploy/k8s/console/Dockerfile.api)는
+# 둘 다 루트(.)를 컨텍스트로 쓰지만 실제로는 src/ 만 COPY 한다. 아래 대용량/불필요 항목이
+# docker 데몬에 전송되는 것을 막아 빌드를 빠르고 안전하게(실수 COPY 방지) 한다.
+# 주의: 이미지 *크기*는 줄지 않는다(COPY src/ 만 하므로). 이건 빌드 컨텍스트 위생용이다.
+
+# 가상환경(2.3GB) — 절대 이미지에 들어가면 안 됨
+.venv/
+venv/
+
+# 데이터·실험 산출물 (553MB+) — 학습/EDA 산출물, 이미지와 무관
+data/
+mlruns/
+mlflow.db
+logs/
+reports/
+research/
+
+# 모델 번들 — 런타임에 공유 PVC 가 /app/deploy/artifacts 를 덮어 마운트(B2).
+# 이미지에 굽지 않는다(Dockerfile 도 빈 디렉토리만 만듦).
+deploy/artifacts/
+
+# 프론트엔드 소스 — 별도 이미지(console-web/Dockerfile, 자체 .dockerignore 보유)
+console-web/
+
+# VCS·캐시·테스트 산출물
+.git/
+.gitignore
+.pytest_cache/
+**/__pycache__/
+**/*.pyc
+.python-version
+
+# 감사 DB(로컬) — 클러스터에선 영속 PVC 사용
+console_audit.db
+
+# 에디터·OS
+.DS_Store
+.claude/
+*.swp

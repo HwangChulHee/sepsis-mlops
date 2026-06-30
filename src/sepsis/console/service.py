@@ -104,6 +104,13 @@ def rollback(fs: str, target_version_id: str, *, actor: str, reason: str = "") -
     _require_consistent(fs, target_version_id)      # 디렉토리명(B1)
     with _LOCKS[fs]:
         prev = deploy.active_version(fs)            # 롤백 prev = 사전 읽기(deploy.rollback이 prev 미반환, mn-c)
+        # H4r 롤백 안전 게이트(BR2-1): deploy.rollback이 무게이트(set_alias만)라 백엔드에서 강제.
+        # 프론트 archived 규칙과 동일한 _classify 재사용 — 롤백 대상은 '과거 활성 이력(archived)'이어야 한다.
+        # 게이트를 validation 재검증이 아니라 과거활성 이력으로 건다(5-A 재검증 면제 유지). api.py가 ValueError→422.
+        ready = (_version_dir(target_version_id) / ".ready").exists()
+        if _classify(target_version_id, active_id=prev,
+                     past_active=_past_active_ids(fs), ready=ready) != "archived":
+            raise ValueError(f"rollback target must be a past champion (archived): {target_version_id}")
         deploy.rollback(fs, target_version_id)      # validation 재검증 면제(의도, 5-A)
         ev = audit.append(event_type="ROLLBACK", featureset=fs, gate_passed=None,
                           from_version=prev, to_version=target_version_id,

@@ -46,6 +46,8 @@ def test_rollback_does_not_mutate_version_dir(console):
     fs = "vitals"
     console.fd.set_active(fs, "gru_vitals@v3")
     target, tdir = console.mk("v2", with_data=True)
+    # H4r: 롤백 대상은 과거 champion(archived)이어야 함 → 감사 이력 시드(BR2-1)
+    console.store.append(event_type="APPROVE", featureset=fs, to_version=target, gate_passed=True)
 
     before = _snapshot(tdir)
     console.service.rollback(fs, target, actor="op")

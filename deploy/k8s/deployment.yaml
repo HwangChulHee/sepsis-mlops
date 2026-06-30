@@ -49,6 +49,12 @@ spec:
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 20
+          volumeMounts:
+            # B2 — 공유 번들 PVC를 console-api와 동일 경로에 마운트. serve는 ARTIFACTS(기본
+            # /app/deploy/artifacts) 아래 alias gru_<fs>를 읽으므로, 콘솔이 PVC에 쓴 alias를
+            # 보려면 같은 PVC를 같은 경로에 마운트해야 한다(빠지면 전파 silent 단절).
+            - name: artifacts
+              mountPath: /app/deploy/artifacts
           resources:
             requests:
               cpu: "250m"
@@ -56,3 +62,7 @@ spec:
             limits:
               cpu: "1"
               memory: "1Gi"
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: sepsis-artifacts

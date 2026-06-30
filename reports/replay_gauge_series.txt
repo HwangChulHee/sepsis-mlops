@@ -1,0 +1,3 @@
+serve_pred_prob_latest{patient_id="p000001-90da45-1"} 0.821753203868866
+serve_pred_prob_latest{patient_id="p000002-90da45-2"} 0.19539159536361694
+serve_pred_prob_latest{patient_id="p000018-90da45-0"} 0.9023167490959167

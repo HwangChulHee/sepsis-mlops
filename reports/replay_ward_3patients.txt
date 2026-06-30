@@ -1,0 +1,8 @@
+replaying 3 patients  fs=vitals  speed=36000.0  -> http://localhost:8000
+  - p000018-90da45-0
+  - p000001-90da45-1
+  - p000002-90da45-2
+done p000018-90da45-0: 134 steps  last_p=0.9023167490959167  last_alarm=True
+done p000001-90da45-1: 54 steps  last_p=0.821753203868866  last_alarm=True
+done p000002-90da45-2: 23 steps  last_p=0.19539159536361694  last_alarm=False
+all done. 211 timesteps across 3 patients.

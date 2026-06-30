@@ -94,7 +94,8 @@ def predict(req: PredictRequest) -> dict:
     row = _row_from(req.features, s["cols"])
     t0 = time.perf_counter()
     out = s["pred"].predict(req.patient_id, row)
-    metrics.record(time.perf_counter() - t0, out["p"], out["alarm"], row, s["cols"])
+    metrics.record(time.perf_counter() - t0, out["p"], out["alarm"], row, s["cols"],
+                   patient_id=req.patient_id)   # 환자별 최신 위험도 Gauge(옵트인) — 라운드 다
     # H4d-b: collect (patient_id, raw_row) for drift monitoring — separate store from the
     # predictor's per-patient hidden state; light (no evidently). Serving behavior unchanged.
     get_window().add(req.patient_id, row)

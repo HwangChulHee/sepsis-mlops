@@ -130,6 +130,9 @@ serve `/admin/reload` → **`/health.run_id`가 synthA→synthC로 실제 변경
   (기본 1시간=1초). 결측은 **null 그대로**(0/평균 채움 금지 — 전처리는 서버 몫). 30 tests GREEN.
 - **소스**: 추상 인터페이스 + `.psv` 어댑터 → 모델 없이도 "행이 제 박자·제 순서·null 처리 맞게
   꽂힌다"를 TDD로 검증. 진짜 위험도 곡선은 실모델로 별도 실측(아래).
+- **병동(라운드 다)**: 무상태 엔진 위에 N명 동시 재생(`replay_many` + `scripts/replay_ward.py`,
+  중복 `patient_id` 가드). 환자별 위험도 선은 `serve_pred_prob_latest` Gauge로 Grafana에 — 단
+  무한 카디널리티 footgun이라 **기본 OFF**, `SERVE_PER_PATIENT_GAUGE=1`일 때만 기록(옵트인).
 
 **왜 만들었나 — 집계 지표가 가리는 것을 본다.** `util 0.4087`은 "괜찮은 모델"이라 하지만,
 *어떻게* 괜찮은지는 평균쳐서 숨긴다. 리플레이어로 실환자 궤적을 재생하면 **알람이 운영에서

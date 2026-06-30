@@ -69,6 +69,18 @@
       "targets": [
         {"expr": "serve_input_feature_value_count", "legendFormat": "{{feature}}"}
       ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Per-patient risk (latest p) — replay [SERVE_PER_PATIENT_GAUGE=1]",
+      "description": "환자별 최신 위험도 곡선(리플레이어 라운드 다). 옵트인 메트릭이라 서버를 SERVE_PER_PATIENT_GAUGE=1 로 띄운 동안만 채워진다(카디널리티 footgun 가드).",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+      "fieldConfig": {"defaults": {"min": 0, "max": 1, "custom": {"drawStyle": "line", "spanNulls": true}}},
+      "targets": [
+        {"expr": "serve_pred_prob_latest", "legendFormat": "{{patient_id}}"}
+      ]
     }
   ]
 }

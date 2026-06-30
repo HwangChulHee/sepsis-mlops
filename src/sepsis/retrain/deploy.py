@@ -16,12 +16,13 @@ import os
 import time
 from pathlib import Path
 
-import numpy as np
-
 from sepsis import config as C
-from sepsis.data import cache as cache_mod
-from sepsis.drift import reference as R
 from sepsis.serve import bundle as bundle_mod
+
+# numpy·data.cache·drift.reference 는 top-level 에서 끌어오지 않는다(이미지 슬림화): 이들은
+# materialize()/active_reference() 즉 재학습·드리프트 경로에서만 쓰이고, console 의 import
+# 체인(service→deploy→bundle)은 swap/rollback/set_active 만 거쳐 numpy/pandas 가 불필요하다.
+# 무게 import 는 사용 함수 내부로 lazy화한다(아래). (R.Reference 등 주석은 future-annotations 로 문자열 평가.)
 
 ARTIFACTS = C.ROOT / "deploy" / "artifacts"
 
@@ -40,7 +41,12 @@ def materialize(retrain_result, version: str, *, validation, root: Path = ARTIFA
 
     Called REGARDLESS of the validation gate (MJ-b): a REGRESSED version is still materialized so
     the console can show it as a challenger. The gate is enforced only in swap()."""
-    import torch   # lazy: console은 materialize 미호출이라 import 체인에서 torch 불필요(결함 7)
+    # lazy: console은 materialize 미호출이라 import 체인에서 torch/numpy/data/drift 불필요(이미지 슬림화)
+    import numpy as np
+    import torch
+
+    from sepsis.data import cache as cache_mod
+    from sepsis.drift import reference as R
 
     rr = retrain_result
     out = root / f"gru_{rr.featureset}@{version}"
@@ -111,6 +117,7 @@ def active_reference_path(featureset: str, *, root: Path = ARTIFACTS) -> Path:
     return Path(root) / f"gru_{featureset}" / "reference.npz"
 
 
-def active_reference(featureset: str, *, root: Path = ARTIFACTS) -> R.Reference:
+def active_reference(featureset: str, *, root: Path = ARTIFACTS) -> "R.Reference":
     """The drift baseline the monitor should use — always matches the deployed model."""
+    from sepsis.drift import reference as R   # lazy(드리프트 경로 전용 — console import 체인 제외)
     return R.load_reference(active_reference_path(featureset, root=root))

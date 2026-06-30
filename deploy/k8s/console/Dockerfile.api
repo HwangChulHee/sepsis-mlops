@@ -2,19 +2,21 @@
 # serve 이미지(deploy/Dockerfile)와 같은 베이스/레이아웃(src→/app/src, PYTHONPATH=/app/src,
 # config.ROOT=parents[2]=/app), 진입점만 console.api.
 #
-# 합성 번들 구조 검증용 — 모델 학습/실데이터 없음. console 임포트 체인
-# (service → retrain.deploy → drift.reference/serve.bundle/data.cache)이 요구하는 최소 deps만:
-#   torch(CPU) + numpy + pandas(data.cache) + sqlalchemy(audit ORM) + fastapi/uvicorn/pydantic.
-# mlflow/xgboost/lightgbm/sklearn/evidently 는 import 체인에 없어 제외(경량 유지).
-FROM python:3.12-slim
+# console 은 모델을 돌리지 않는다(승인=심링크 교체+감사). 따라서 numpy/pandas/torch/scipy 가
+# 전혀 필요 없다 — deploy.py/bundle.py 의 무게 import 를 함수내 lazy 로 옮겨, console import 체인
+# (api→service→deploy→bundle→config + audit)이 fastapi/uvicorn/pydantic/sqlalchemy 만 요구하도록 만들었다.
+# 검증: 이 4개만 설치한 환경에서 `import sepsis.console.api` 가 numpy/pandas/torch 0개 로딩으로 통과.
+# (합성 번들 생성기 gen_synth_bundle.py 는 torch 가 필요하므로 console 파드가 아니라 serve 파드에서 실행한다.)
+#
+# alpine 베이스: numpy/pandas/torch(=musl 빌드 까다로운 것들)를 다 들어냈으므로 musl 위험이 없다.
+# 남은 deps(pydantic-core·uvloop·httptools·watchfiles)는 musllinux 휠이 있어 빌드툴 없이 설치된다.
+# 결과 이미지 ~175MB(슬림 278MB·torch 포함 1.19GB 대비). glibc 가 필요하면 python:3.12-slim 으로 교체.
+FROM python:3.12-alpine
 
 WORKDIR /app
 
-# torch CPU wheel(공식 CPU 인덱스) → 나머지 경량 deps.
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
- && pip install --no-cache-dir \
-      "fastapi>=0.110" "uvicorn[standard]>=0.29" "pydantic>=2" \
-      "numpy>=2.0,<3" "pandas>=2.2,<3" "SQLAlchemy>=2.0"
+RUN pip install --no-cache-dir \
+      "fastapi>=0.110" "uvicorn[standard]>=0.29" "pydantic>=2" "SQLAlchemy>=2.0"
 
 # app 코드. 공유 PVC가 런타임에 /app/deploy/artifacts 를 덮어 마운트(B2)하지만,
 # 마운트 전에도 경로가 존재해야 list_versions/_scan_version_ids 가 graceful(빈 목록).

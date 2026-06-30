@@ -15,9 +15,11 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
-
 from sepsis import config as C
+
+# numpy 도 top-level 에서 끌어오지 않는다(이미지 슬림화): set_alias(console 경로)는 numpy 불필요.
+# np 는 번들 로드(_freeze/_assemble/load_*) 즉 serve 경로에서만 쓰이므로 그 함수들 내부에서 lazy import.
+# (Bundle 의 np.ndarray 필드 주석은 from __future__ import annotations 로 문자열 평가 — import 불요.)
 
 
 def set_alias(root, alias: str, target_name: str) -> None:
@@ -57,7 +59,8 @@ class Bundle:
     model: "GRUm2m"
 
 
-def _freeze(a: np.ndarray) -> np.ndarray:
+def _freeze(a: "np.ndarray") -> "np.ndarray":
+    import numpy as np   # lazy(serve 번들 로드 전용)
     a = np.asarray(a, dtype=np.float32)
     a.setflags(write=False)   # immutable — serving must not mutate frozen stats
     return a
@@ -100,7 +103,8 @@ def _assemble(run_id: str, meta: dict, z, state_dict) -> Bundle:
 def load_bundle_from_dir(artifacts_dir) -> Bundle:
     """Load an exported bundle dir (meta.json + pre.npz + model.pt). Used in the container
     (no MLflow). The dir IS one exported run -> atomicity is intrinsic."""
-    import torch   # lazy(결함 7)
+    import numpy as np   # lazy(serve 번들 로드 전용)
+    import torch         # lazy(결함 7)
 
     d = Path(artifacts_dir)
     meta = json.loads((d / "meta.json").read_text())
@@ -117,7 +121,8 @@ def load_bundle(featureset: str = "vitals", *, artifacts_dir: str | None = None,
         return load_bundle_from_dir(artifacts_dir)
 
     import mlflow
-    import torch   # lazy(결함 7)
+    import numpy as np   # lazy(serve 번들 로드 전용)
+    import torch         # lazy(결함 7)
     from mlflow.artifacts import download_artifacts
 
     tracking_uri = tracking_uri or f"sqlite:///{C.ROOT}/mlflow.db"

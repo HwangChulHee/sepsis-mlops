@@ -12,7 +12,11 @@ serve(load_bundle_from_dir) 가 요구하는 형식 + console(_classify·approve
   retrain.json = epochs·val_loss·seed·n_*·run_id·git_commit(MJ1 감사 출처)
   .ready     = 완성 표식(_classify 가 challenger/incomplete 가른다)
 
-사용: console-api 파드 안에서 실행(PVC /app/deploy/artifacts 에 기록). PYTHONPATH=/app/src.
+사용: **serve 파드** 안에서 실행(PVC /app/deploy/artifacts 에 기록). PYTHONPATH=/app/src.
+  - console-api 이미지는 슬림화로 torch/numpy 를 들어냈으므로 이 생성기를 못 돌린다.
+  - serve 이미지는 torch/numpy/pandas 가 있고 같은 공유 PVC 를 마운트하므로 여기서 실행한다.
+  - serve 파드는 번들이 없으면 Ready 가 아니지만 Running 이라 `kubectl exec` 로 주입 가능(부트스트랩).
+  예) kubectl cp scripts/gen_synth_bundle.py <serve-pod>:/tmp/gen.py && kubectl exec <serve-pod> -- python /tmp/gen.py
   python scripts/gen_synth_bundle.py
 """
 from __future__ import annotations

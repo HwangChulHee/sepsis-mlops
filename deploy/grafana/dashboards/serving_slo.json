@@ -1,0 +1,98 @@
+{
+  "uid": "sepsis-serving-slo",
+  "title": "Sepsis — Serving SLO & Health (G3·G4)",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "G3 · Predict latency p95 / p99 (s)",
+      "description": "histogram_quantile over serve_predict_latency_seconds. SLO 지연 상한 추적.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(serve_predict_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(serve_predict_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "G3 · Predict throughput (req/s)",
+      "description": "rate(serve_predict_requests_total). 처리량.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(serve_predict_requests_total[5m])",
+          "legendFormat": "req/s"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "G3 · Alarm rate (p >= tau 비율)",
+      "description": "alarms / predicts. 에러율 패널은 serve에 에러 카운터가 없어 부재 — serve_predict_errors_total 추가 시 보강(범위 외 권고).",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(serve_alarms_total[5m]) / rate(serve_predict_requests_total[5m])",
+          "legendFormat": "alarm share"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "G4 · Serving up/down",
+      "description": "up{job=\"sepsis-serving\"}. job 라벨은 Prometheus scrape 설정 종속 [검증 필요].",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "up{job=\"sepsis-serving\"}",
+          "legendFormat": "up"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "G4 · Predict liveness (req/min)",
+      "description": "rate(serve_predict_requests_total[1m]). 추론이 살아있다는 신호.",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(serve_predict_requests_total[1m])",
+          "legendFormat": "predict/min"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "G4 · Health scrape (req/min)",
+      "description": "rate(serve_health_requests_total[1m]). /health 호출 빈도. 활성 모델 run_id는 메트릭이 아니라 /health JSON → 콘솔 StatusBar 몫(Grafana 아님).",
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(serve_health_requests_total[1m])",
+          "legendFormat": "health/min"
+        }
+      ]
+    }
+  ]
+}

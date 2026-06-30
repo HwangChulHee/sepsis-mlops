@@ -96,7 +96,8 @@ class FakeDeploy:
     - swap(fs, version_dir, *, validation, approved, root=...)->prev :
         approved is not True → PermissionError, getattr(validation,"no_regression") falsy →
         ValueError, 통과 시 alias 전환 후 **이전 활성 디렉토리명** 반환(handoff:12).
-    - rollback(fs, prev_version_name, *, root=...)->None : alias 만 되돌림(handoff:13).
+    - rollback(fs, prev_version_name, *, approved, root=...)->prev : swap과 대칭(H4r 방어 심화,
+        BR2-1). approved is not True → PermissionError, 통과 시 alias 되돌리고 **이전 활성 디렉토리명** 반환.
     swap_delay 로 임계구간 내 지연을 주입해 직렬화 경합을 재현한다.
     """
 
@@ -126,10 +127,13 @@ class FakeDeploy:
         self.swap_calls.append((fs, to_name, prev, validation))
         return prev
 
-    def rollback(self, fs, prev_version_name, *, root=None):
+    def rollback(self, fs, prev_version_name, *, approved, root=None):
+        if approved is not True:
+            raise PermissionError("approved is not True")
+        prev = self.active.get(fs)                 # swap과 대칭: 이전 활성 반환(H4r)
         self.rollback_calls.append((fs, prev_version_name))
         self.active[fs] = prev_version_name
-        return None
+        return prev
 
 
 @pytest.fixture

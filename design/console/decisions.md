@@ -124,7 +124,8 @@ H4가 만든 버전 관리·검증 게이트·롤백 백엔드를, **champion-ch
   - **롤백에는 validation 게이트를 적용하지 않는다 (의도)**: 롤백 대상은 *과거에 이미 champion으로 검증·승인되었던* 버전이다. 인시던트 복구 중 재검증을 강제하면 회복을 막는 역효과. 따라서 "승인 + 감사"는 요구하되 `no_regression` 재검증은 요구하지 않는다.
   - **강제 지점 = 콘솔 API 경계** [우리 결정]: 백엔드 `deploy.rollback`엔 승인/감사 훅이 없으므로, 콘솔 API가 `deploy.rollback` 호출 *전에* (1) 승인 여부 확인 → 없으면 거부, (2) 감사 레코드 기록을 강제한다. swap도 동일하게 API 경계에서 감사를 기록한다. `deploy.swap`의 `PermissionError`(미승인)·`ValueError`(REGRESSED)는 **코드 경로 가드 드롭을 막는 방어선이지 감사원도 아니고 데이터 무결성 방어도 아니다** — `ValueError`는 `validation.json` 파생값(`no_regression`)을 보므로 그 파일이 오염이면 못 막는다(MJ-new2 참조).
   - **방어 심화(교차단계 권고, [검증 필요])**: 직접 `deploy.rollback` 호출이 API를 우회할 수 있으므로, H4r에 `deploy.rollback`도 `swap`처럼 `*, approved: bool` 가드를 추가하고 prev를 반환하도록 대칭화할 것을 권고. 이는 콘솔 단계가 아닌 H4r 코드 변경이라 본 DDD에선 권고로만 남긴다.
-    - **[H4r 일부 구현됨, 커밋 `790a285`]**: 콘솔 경계(`service.rollback`)에 롤백 대상이 `archived`(과거 활성 이력)인지 강제하는 게이트를 추가(`_classify` 재사용 → `ValueError` → API 422)해 **BR2-1**(프론트 핸드오프 검토에서 발견 — REGRESSED/미활성 challenger를 롤백으로 승격하는 우회)을 **콘솔 API 경로에서 닫았다**. 이는 결정 5-A의 "강제 지점 = 콘솔 API 경계" 원칙과 정합. `deploy.rollback` 원함수의 `approved` 가드·prev 반환 대칭화는 직접 import 우회(콘솔 API 미경유) 대비 권고로 잔존 `[검증 필요]`.
+    - **[H4r 일부 구현됨, 커밋 `790a285`]**: 콘솔 경계(`service.rollback`)에 롤백 대상이 `archived`(과거 활성 이력)인지 강제하는 게이트를 추가(`_classify` 재사용 → `ValueError` → API 422)해 **BR2-1**(프론트 핸드오프 검토에서 발견 — REGRESSED/미활성 challenger를 롤백으로 승격하는 우회)을 **콘솔 API 경로에서 닫았다**. 이는 결정 5-A의 "강제 지점 = 콘솔 API 경계" 원칙과 정합.
+    - **[H4r 대칭화도 구현됨]**: `deploy.rollback`에 `swap`과 대칭인 `*, approved: bool` 가드(미승인 시 `PermissionError`) + prev 반환을 추가(`deploy.py`, 테스트 `tests/console_prep/test_deploy_rollback_symmetry.py`). 이제 콘솔 API를 우회한 직접 import 호출도 무승인이면 차단된다. `service.rollback`은 승인 경계로 `approved=True`를 넘긴다. 단 이 가드는 "승인 여부"만 보므로, **archived 강제(REGRESSED 비승격)의 권위는 콘솔 경계 `_classify` 게이트로 유지**된다(deploy 가드는 그 위의 백스톱).
 - **근거 + 출처등급**: H4가 검증·승인·롤백 *기본 동작*은 구현, 콘솔은 노출 + **승인/감사 강제 경계** 계층 [확인됨: 코드 / 우리 결정].
 - **검토 요청 항목**: 노출하려는 엔드포인트가 실제 함수 시그니처(keyword-only 포함)와 맞는지. `swap`의 `approved`·`validation` 인자가 API에서 어떻게 채워지는지. 롤백 승인/감사가 API 경계에서 빠짐없이 강제되는지.
 
@@ -217,7 +218,7 @@ H4가 만든 버전 관리·검증 게이트·롤백 백엔드를, **champion-ch
 ### 교차단계 의존 (콘솔 구현 전 선행 또는 병행 확인 — [검증 필요])
 - **H4s(서빙)**: 버전 소스를 alias 기반으로 + 재로드 경로(`/admin/reload` 또는 롤링 재시작 훅) — B1. 재로드는 alias 1회 해석·`_S`/`_DS` 동시 로드·로드 중 swap 배제 규약 적용 — MJ1. **`/health`가 새 버전과 일치하는 `run_id`를 보고**해 콘솔이 전파 성공을 폴링으로 확인할 수 있어야 함 — MJ-new1(B2/MJ2의 `meta.json.run_id` 기록과 짝).
 - **H4r(재학습/자재화)**: (1) MLflow run 로깅 + `meta.json`에 `run_id`·`git_commit` 기록 — B2/MJ2(`/health` 식별까지 해소). (2) **`validate()` 직후/`materialize()`가 version dir에 `validation.json`+`retrain.json`을 *원자적으로* 영속**(둘을 temp→rename 등으로 함께 가시화) — N1/mn-a. 영속 시 `eps`(호출 인자)·검증 시각은 별도 주입 — mn-b. (3) `RetrainResult`에 `seed`/`run_id`/`git_commit` 필드 추가(현재 미존재, `pipeline.py:31-47`) 또는 `materialize()` 호출부 주입 — N1. (선행 안 되면 해당 버전은 두 파일 AND 미충족으로 *미완성 후보* 승인 배제.)
-- **H4r(deploy)**: `deploy.rollback`에 `approved` 가드·prev 반환 대칭화 — M2 방어 심화(권고). prev 미반환이므로 현재는 콘솔이 사전 `active_version` 읽기로 롤백 prev를 감사에 캡처 — mn-c/결정 7-3. **[일부 구현 `790a285`]**: 롤백 대상 archived 강제 게이트는 `service.rollback`(콘솔 경계)에 구현(BR2-1); `deploy.rollback` 원함수 자체의 대칭화는 직접 import 우회 대비 잔존 권고.
+- **H4r(deploy)**: `deploy.rollback`에 `approved` 가드·prev 반환 대칭화 — M2 방어 심화(권고). prev 미반환이므로 현재는 콘솔이 사전 `active_version` 읽기로 롤백 prev를 감사에 캡처 — mn-c/결정 7-3. **[구현 완료]**: 롤백 대상 archived 강제 게이트는 `service.rollback`(콘솔 경계)에 구현(BR2-1, `790a285`), `deploy.rollback` 원함수의 `approved` 가드·prev 반환 대칭화도 구현(직접 import 우회 백스톱). archived 강제 권위는 콘솔 경계 유지.
 - **콘솔 내부(교차단계 아님, 본 단계 구현)**: 승인/롤백 직렬화 경계(featureset 키)·FS alias 권위·부트스트랩 재기동 화해(`reconcile` 감사) — B-new(결정 7). 기법(락 종류·화해 알고리즘)은 구현 명세부.
 
 > **구현 명세부(어떻게)는 이 설계부가 검토를 통과한 뒤 이어붙인다** — 엔드포인트 입출력 스키마, 감사 테이블 스키마, React 컴포넌트 구조, 파일 경로.

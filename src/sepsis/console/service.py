@@ -111,7 +111,7 @@ def rollback(fs: str, target_version_id: str, *, actor: str, reason: str = "") -
         if _classify(target_version_id, active_id=prev,
                      past_active=_past_active_ids(fs), ready=ready) != "archived":
             raise ValueError(f"rollback target must be a past champion (archived): {target_version_id}")
-        deploy.rollback(fs, target_version_id)      # validation 재검증 면제(의도, 5-A)
+        deploy.rollback(fs, target_version_id, approved=True)   # 콘솔이 승인 경계(swap과 대칭). validation 재검증 면제 유지(5-A)
         ev = audit.append(event_type="ROLLBACK", featureset=fs, gate_passed=None,
                           from_version=prev, to_version=target_version_id,
                           actor_unverified=actor, reason=reason)

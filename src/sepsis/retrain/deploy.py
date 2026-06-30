@@ -90,9 +90,19 @@ def swap(featureset: str, version_dir: Path, *, validation, approved: bool,
     return prev
 
 
-def rollback(featureset: str, previous_version_name: str, *, root: Path = ARTIFACTS) -> None:
-    """Point the alias back to a previous version dir name (model+stats+τ+reference revert)."""
+def rollback(featureset: str, previous_version_name: str, *, approved: bool,
+             root: Path = ARTIFACTS) -> str | None:
+    """Point the alias back to a previous version dir name (model+stats+τ+reference revert).
+
+    Symmetric with swap() (H4r 방어 심화, BR2-1): requires human approval and returns the
+    PREVIOUS active version name. The console API (service.rollback) still enforces the
+    archived-target gate before calling this — this `approved` guard is the defense-in-depth
+    backstop against callers that bypass the console API and import deploy.rollback directly."""
+    if approved is not True:
+        raise PermissionError("human approval required: rollback blocked (approved is not True)")
+    prev = active_version(featureset, root=root)
     bundle_mod.set_alias(Path(root), f"gru_{featureset}", previous_version_name)
+    return prev
 
 
 # --- drift monitor reads the reference of the ACTIVE bundle (via alias) ---

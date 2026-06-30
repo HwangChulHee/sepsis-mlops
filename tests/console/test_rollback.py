@@ -2,7 +2,8 @@
 
 검증 대상(handoff:159-169, 175, 252, 결정 5-A·7-3):
 - validation 재검증 없이 실행되나 감사 1건 필수(event_type=ROLLBACK, gate_passed=NULL).
-- 롤백 prev = 사전 active_version 캡처(mn-c) — deploy.rollback 이 prev 미반환이라 콘솔이 사전 읽기.
+- 롤백 prev = 임계구간 내 사전 active_version 캡처(mn-c, 경합 오염 차단). deploy.rollback 도 H4r
+  대칭화로 prev 를 반환하나, 콘솔은 설계상 임계구간 안에서 읽은 값을 감사에 쓴다.
 - 롤백 타겟·from/to 가 모두 디렉토리명(B1).
 
 src/ 구현 코드는 읽지 않았다.
@@ -34,7 +35,7 @@ def test_rollback_records_audit_with_null_gate(console):
 
 # ===== prev 는 롤백 *전* active_version 캡처 (mn-c) =====
 def test_rollback_prev_captured_before_alias_change(console):
-    # 성공기준 5 (mn-c) — deploy.rollback 은 prev 미반환 → 콘솔이 사전 active 읽기
+    # 성공기준 5 (mn-c) — 콘솔이 임계구간 안에서 사전 active 읽기로 prev 캡처(deploy.rollback 반환과 무관, 경합 차단)
     fs = "vitals"
     console.fd.set_active(fs, "gru_vitals@v5")
     target, _ = console.mk("v4")

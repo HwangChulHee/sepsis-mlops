@@ -79,6 +79,24 @@ def test_rollback_rejects_non_archived_target(console):
     assert [e for e in console.store.query(featureset=fs) if e.event_type == "ROLLBACK"] == []
 
 
+# ===== MAJOR 결함 2: archived 지만 dir 이 GC된 타겟 롤백 거부 (dangling alias 차단) =====
+def test_rollback_rejects_archived_target_with_missing_dir(console):
+    # 과거 활성 이력(archived)이라도 버전 dir 이 삭제(GC)됐으면 롤백 금지 —
+    # 없는 dir 로 alias set 하면 dangling alias. dir 실재를 강제(FileNotFoundError → api 422).
+    import shutil
+    fs = "vitals"
+    console.fd.set_active(fs, "gru_vitals@v3")
+    target, tdir = console.mk("v2")
+    console.store.append(event_type="APPROVE", featureset=fs, to_version=target, gate_passed=True)
+    shutil.rmtree(tdir)                               # 과거 champion dir 이 GC됨
+    with pytest.raises(FileNotFoundError):
+        console.service.rollback(fs, target, actor="op", reason="dir gone")
+    # alias 불변, deploy.rollback 미호출, ROLLBACK 감사 없음
+    assert console.fd.active_version(fs) == "gru_vitals@v3"
+    assert console.fd.rollback_calls == []
+    assert [e for e in console.store.query(featureset=fs) if e.event_type == "ROLLBACK"] == []
+
+
 # ===== H4r: 진짜 과거 champion 롤백은 성공 (회귀 방지, BR2-1) =====
 def test_rollback_allows_genuine_past_champion(console):
     # BR2-1 — 안전 게이트가 정당한 롤백(과거 검증 champion=archived)은 막지 않음

@@ -56,8 +56,8 @@ class AuditStore:
         self.Session = sessionmaker(bind=self.engine)
 
     def append(self, **fields) -> AuditEvent:
-        """단일 INSERT. ts 미지정 시 UTC utcnow."""
-        fields.setdefault("ts", dt.datetime.utcnow())
+        """단일 INSERT. ts 미지정 시 tz-aware UTC now(utcnow deprecation 회피)."""
+        fields.setdefault("ts", dt.datetime.now(dt.timezone.utc))
         ev = AuditEvent(**fields)
         s = self.Session()
         try:

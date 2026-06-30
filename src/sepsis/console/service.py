@@ -23,7 +23,10 @@ from sepsis.console.config import CONSOLE_FEATURESETS
 
 # === 모듈 전역(테스트 fixture가 ARTIFACTS·audit을 임시값으로 override) ===
 ARTIFACTS: Path = deploy.ARTIFACTS                  # = C.ROOT/deploy/artifacts (deploy.py:27와 단일 출처)
-audit: AuditStore = AuditStore()                    # 기본 store; api lifespan/테스트가 교체
+# 감사 DB는 env(CONSOLE_AUDIT_DB_URL)로 PVC 경로 주입. env 없으면 기존 상대경로(하위호환) =
+# 비영속이므로 프로덕션 매니페스트가 sqlite:////app/auditdb/console_audit.db 를 반드시 주입.
+# 프로덕션은 env가, 테스트는 fixture(conftest monkeypatch)가 이 전역을 교체한다.
+audit: AuditStore = AuditStore(os.environ.get("CONSOLE_AUDIT_DB_URL", "sqlite:///console_audit.db"))
 MLFLOW_UI_BASE = os.environ.get("MLFLOW_UI_BASE")   # None → mlflow_link 폴백 null(6-A)
 
 _LOCKS: dict[str, threading.Lock] = defaultdict(threading.Lock)   # featureset 단위 락(1프로세스 전제)
@@ -107,10 +110,17 @@ def rollback(fs: str, target_version_id: str, *, actor: str, reason: str = "") -
         # H4r 롤백 안전 게이트(BR2-1): deploy.rollback이 무게이트(set_alias만)라 백엔드에서 강제.
         # 프론트 archived 규칙과 동일한 _classify 재사용 — 롤백 대상은 '과거 활성 이력(archived)'이어야 한다.
         # 게이트를 validation 재검증이 아니라 과거활성 이력으로 건다(5-A 재검증 면제 유지). api.py가 ValueError→422.
-        ready = (_version_dir(target_version_id) / ".ready").exists()
+        target_dir = _version_dir(target_version_id)
+        ready = (target_dir / ".ready").exists()
         if _classify(target_version_id, active_id=prev,
                      past_active=_past_active_ids(fs), ready=ready) != "archived":
             raise ValueError(f"rollback target must be a past champion (archived): {target_version_id}")
+        # archived(과거활성)여도 dir이 GC되면 dangling alias가 된다 — .ready 재검증은 면제(5-A)하되
+        # dir 실재는 강제. 없으면 FileNotFoundError(→api 422). (MAJOR 결함 2)
+        # GC는 버전 dir 전체를 제거하므로 dir 존재로 게이트(권위 = 디렉토리 실재).
+        if not target_dir.is_dir():
+            raise FileNotFoundError(
+                f"rollback target dir missing/GC'd: {target_version_id}")
         deploy.rollback(fs, target_version_id, approved=True)   # 콘솔이 승인 경계(swap과 대칭). validation 재검증 면제 유지(5-A)
         ev = audit.append(event_type="ROLLBACK", featureset=fs, gate_passed=None,
                           from_version=prev, to_version=target_version_id,
@@ -177,6 +187,9 @@ def _propagate_and_confirm(fs: str, *, timeout_s: float = 10, interval_s: float 
         if _get_health(fs).get("run_id") == target_run_id:          # /health.run_id == 현재 alias run_id
             return "confirmed"
         time.sleep(interval_s)
+    # 침묵 금지: serve가 시간 내 run_id를 확인 못 함 → 최소 로그로 표면화(능동 경보 채널은 후속 범위).
+    _log.warning("propagation pending: serve did not confirm run_id for fs=%s within %ss",
+                 fs, timeout_s)
     return "pending"                                # UI는 "전파 대기/실패"로 구분 표시
 
 

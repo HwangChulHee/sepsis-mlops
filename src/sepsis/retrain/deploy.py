@@ -17,7 +17,6 @@ import time
 from pathlib import Path
 
 import numpy as np
-import torch
 
 from sepsis import config as C
 from sepsis.data import cache as cache_mod
@@ -41,6 +40,8 @@ def materialize(retrain_result, version: str, *, validation, root: Path = ARTIFA
 
     Called REGARDLESS of the validation gate (MJ-b): a REGRESSED version is still materialized so
     the console can show it as a challenger. The gate is enforced only in swap()."""
+    import torch   # lazy: console은 materialize 미호출이라 import 체인에서 torch 불필요(결함 7)
+
     rr = retrain_result
     out = root / f"gru_{rr.featureset}@{version}"
     out.mkdir(parents=True, exist_ok=True)

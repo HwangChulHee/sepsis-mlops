@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import torch
 
 from sepsis import config as C
 
@@ -36,7 +35,11 @@ def set_alias(root, alias: str, target_name: str) -> None:
     if link.exists() and link.is_dir() and not link.is_symlink():
         shutil.rmtree(link)                            # migrate legacy real dir
     os.replace(tmp, link)                              # atomic for symlink / nonexistent
-from sepsis.train.gru import GRUm2m
+
+
+# torch / GRUm2m 는 top-level 에서 끌어오지 않는다(결함 7): set_alias 만 쓰는 console 의 import
+# 체인(service→deploy→bundle)이 torch 없이 import 되도록, 무게 import 는 사용 함수 내부로 lazy화.
+# (from __future__ import annotations 덕에 아래 Bundle.model 의 GRUm2m 주석은 문자열로만 평가됨.)
 
 
 @dataclass(frozen=True)
@@ -51,7 +54,7 @@ class Bundle:
     fill_mean: np.ndarray
     clip_lo: np.ndarray
     clip_hi: np.ndarray
-    model: GRUm2m
+    model: "GRUm2m"
 
 
 def _freeze(a: np.ndarray) -> np.ndarray:
@@ -62,6 +65,8 @@ def _freeze(a: np.ndarray) -> np.ndarray:
 
 def _assemble(run_id: str, meta: dict, z, state_dict) -> Bundle:
     """Build + consistency-check a Bundle from raw pieces (shared by both loaders)."""
+    from sepsis.train.gru import GRUm2m   # lazy: torch 끌어옴 — serve 핫패스에서만(결함 7)
+
     featureset = meta["featureset"]
     input_dim = int(meta["input_dim"])
     hp = meta["hp"]
@@ -95,6 +100,8 @@ def _assemble(run_id: str, meta: dict, z, state_dict) -> Bundle:
 def load_bundle_from_dir(artifacts_dir) -> Bundle:
     """Load an exported bundle dir (meta.json + pre.npz + model.pt). Used in the container
     (no MLflow). The dir IS one exported run -> atomicity is intrinsic."""
+    import torch   # lazy(결함 7)
+
     d = Path(artifacts_dir)
     meta = json.loads((d / "meta.json").read_text())
     z = np.load(d / "pre.npz")
@@ -110,6 +117,7 @@ def load_bundle(featureset: str = "vitals", *, artifacts_dir: str | None = None,
         return load_bundle_from_dir(artifacts_dir)
 
     import mlflow
+    import torch   # lazy(결함 7)
     from mlflow.artifacts import download_artifacts
 
     tracking_uri = tracking_uri or f"sqlite:///{C.ROOT}/mlflow.db"

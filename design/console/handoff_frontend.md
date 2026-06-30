@@ -4,7 +4,7 @@
 > **워크플로우**: 검토(`handoff_frontend_review.md`) 통과 → 구현. React/Grafana는 TDD보다 **와이어프레임·API 계약 일치**가 기준(UI는 단언보다 계약 정합). K8s YAML은 **사용자 직접 작성**(CKA 학습) — 본 문서는 골격·라우팅 규칙·이유만 제공.
 > **대상(신규)**: `console-web/`(Vite+React), `deploy/grafana/dashboards/serving_slo.json`, `deploy/k8s/console/*.yaml`.
 > **재활용(변경 없음)**: 핸드오프 A의 `/console` API, 서빙 `metrics.py`, 기존 `deploy/grafana/provisioning/*`.
-> **상태**: 명세부 v2 (Round 1 redteam blocker 2·major 1·minor 4 보완 반영; `handoff_frontend_review.md` 참조).
+> **상태**: 명세부 v3 (Round 1 blocker 2·major 1·minor 4 + Round 2 blocker 1(BR2-1 롤백 게이팅)·minor 1(mr2-1 active=null 표기) 보완 반영; `handoff_frontend_review.md` 참조).
 
 ## 코드 현황 (구현 시작점 — 프론트가 소비하는 실제 계약)
 
@@ -35,13 +35,13 @@
 
 ```
 App
- ├─ StatusBar              상단 활성(champion) 상태바: active 버전(읽기=`list_versions.active`) + 전파상태 배지(쓰기 직후 transient, MJ1 주석 참조)
+ ├─ StatusBar              상단 활성(champion) 상태바: active 버전(읽기=`list_versions.active`) + 전파상태 배지(쓰기 직후 transient, MJ1 주석 참조). active=null(심링크 소실)이면 "활성 alias 없음(심링크 소실)" 명시 표기(mr2-1)
  ├─ VersionList            list_versions.versions를 버킷 정렬: champion→challenger→archived→incomplete
  │   └─ VersionRow         접힌 행: version·bucket 배지·gate_passed 신호·bholdout_util 헤드라인·MLflow 아이콘(has_mlflow)
  │       └─ VersionDetail  행 클릭 시 펼침 — get_version_detail 호출(lazy)
  │           ├─ GatePanel    게이트 수치 크게 + 판정 보조(결정 3): util 3종 大, PASS/REGRESSED 배지 小
  │           ├─ RetrainPanel epochs·val_loss·seed·n_*·git_commit
- │           ├─ Actions      승인 / 롤백 버튼(+ ConfirmDialog)
+ │           ├─ Actions      승인(challenger 한정) / 롤백(archived 한정) 버튼(+ ConfirmDialog) — 버킷별 노출, BR2-1
  │           ├─ MlflowLink   mlflow_link 있으면 링크, 없으면 폴백 안내(6-A)
  │           └─ AuditTrail   이 버전 관련 감사 — 서버는 fs 필터만, 버전 단위는 클라가 거름(mn2)
  └─ ConfirmDialog          actor 입력 + reason → POST approve/rollback → propagation 결과 표시
@@ -55,6 +55,7 @@ App
 4. **cross-site 정직성 (코드 강제와 정합)**: GatePanel에 `cross_site_claim`을 표시 — `false`면 "in-distribution 검증 (cross-site 일반화 주장 아님)" 명시. 게이트 수치를 과대해석하지 않게.
 5. **버전 식별자 = 디렉토리명, 쓰기 직전 접두 재부착 (B1)** `[확인됨]`: 읽기 응답의 `version`은 stripped 순수 버전("champ")이지만, **쓰기(`approve`/`rollback`) 요청의 `version`은 디렉토리명 `gru_${fs}@${version}`이어야 한다**. 백엔드 `_require_consistent`가 `gru_<fs>@` 접두를 강제하기 때문(`service.py:38-40`) — stripped 값을 그대로 보내면 `ValueError("version 'champ' not in featureset 'vitals'")`→422로 **모든 쓰기가 실패**한다. 따라서 프론트는 ConfirmDialog에서 POST를 만들 때 stripped 표면값에 `gru_${fs}@`를 **재부착해 디렉토리명으로 전송**한다. (읽기는 stripped, 쓰기는 dir name — 비대칭이 백엔드 계약이다.)
 6. **AuditTrail "이 버전 관련" 필터는 클라이언트 측 (mn2)** `[확인됨]`: `/console/audit` 쿼리 파라미터는 `event_type/gate_passed/since/fs`뿐이라(`api.py:46`) **버전 단위 서버 필터가 없다** — `fs` 필터는 featureset 전체 이벤트를 준다. 따라서 "이 버전 관련"은 프론트가 받아온 행을 `from_version === dirName || to_version === dirName`으로 **클라이언트가 직접 거른다**. 이때 비교 키는 audit 행의 `from_version`/`to_version`이 **디렉토리명**(`gru_<fs>@<v>`)이므로, B1의 `toDirName(fs, version)`으로 만든 디렉토리명과 매칭한다(읽기 리스트의 stripped 버전을 그대로 비교하면 안 됨 — 재부착 키와 정합).
+7. **롤백 버튼은 `bucket === "archived"`(과거활성)에만 활성 — 프론트가 1차 방어선 (BR2-1)** `[확인됨]`: **백엔드 롤백 경로에는 하드게이트가 없다.** `service.rollback`(`service.py:103-112`)은 `_require_consistent`(fs 접두)만 검사하고 `_require_ready`도 validation 게이트도 호출하지 않으며, `deploy.rollback`(`deploy.py:93-95`)은 `set_alias`만 수행 — `approved`·`no_regression`·`.ready` 어떤 가드도 없다(하드게이트는 **승인 경로 `swap`에만**, `deploy.py:86-87`). 따라서 REGRESSED challenger(게이트 무관 자재화·`.ready` 부여, `deploy.py:42-43,59-67` → `_classify`에서 `challenger`·`gate_passed=false`, `service.py:189-197,214`) 행이나 미완성(`.ready` 없는 `incomplete`) 행에서 롤백을 누르면 **손상·미검증 모델이 활성화**돼 결정 3·M3의 "REGRESSED 비승격"(`decisions.md:83·203`)이 롤백 경로로 뚫린다. 설계 의도(`decisions.md:124` "롤백 대상 = 과거 검증된 champion")를 강제하는 **유일한 지점이 프론트**다 — 롤백 버튼은 **`bucket === "archived"`(과거 한때 활성, `_classify`의 `past_active` 매치) 버전에만** 노출/활성하고, `champion`(현재활성)·`challenger`·`incomplete`에는 `disabled`(승인 게이팅과 대칭). 백엔드 방어심화로 `deploy.rollback`에 past-active/`.ready` 가드를 추가하는 것은 `decisions.md` 5-A 방어심화 선상의 **H4r 교차단계 의존 → 본 핸드오프 범위 밖** `[검증 필요]`이며, 그것이 들어오기 전까지 **프론트 게이팅이 본 단계의 1차(유일) 방어선**임을 명시한다.
 
 ### API 클라이언트 (`console-web/src/api.ts`)
 
@@ -70,6 +71,9 @@ export const approve       = (fs: string, v: string, actor: string, reason: stri
   post(`${BASE}/console/approve`, { fs, version: toDirName(fs, v), actor, reason });   // 422 분기
 export const rollback      = (fs: string, v: string, actor: string, reason: string) =>
   post(`${BASE}/console/rollback`, { fs, version: toDirName(fs, v), actor, reason });
+// BR2-1: rollback 백엔드는 무게이트(service.py:103-112 → deploy.rollback set_alias만, deploy.py:93-95).
+//   롤백 버튼은 UI에서 bucket==="archived" 행에만 노출/활성해야 한다 — challenger/incomplete/champion 비활성.
+//   프론트가 1차(유일) 방어선: 무게이트 alias 교체로 REGRESSED/미검증 모델이 활성화되는 것을 막는다.
 // post(): !res.ok면 res.status로 분기 — 422=게이트/미완성/교차-fs 메시지 표면화.
 // 403(PermissionError)은 콘솔 경로에서 dead path (mn3): service.approve가 deploy.swap에 approved=True 고정(service.py:93),
 //   rollback은 swap 미경유 → PermissionError("approved is not True", deploy.py:84-85) 발생 불가. 핸들러는 방어적 폴백일 뿐 작동 방어선 아님.
@@ -146,8 +150,9 @@ export const rollback      = (fs: string, v: string, actor: string, reason: stri
 
 ## 성공 기준 (구현 검증 대상)
 
-1. **콘솔 렌더**: `list_versions` 응답으로 StatusBar(active) + 버킷 정렬 리스트가 그려진다. 행 클릭 시 `get_version_detail` lazy 호출로 게이트 수치 크게·판정 보조(결정 3)가 펼쳐진다.
-2. **REGRESSED·미완성 차단(M3, mn1)**: `gate_passed !== true`(false 또는 incomplete의 null) 또는 `!ready` 버전은 승인 버튼 비활성 + 백엔드 422 메시지 표면화(이중 게이트).
+1. **콘솔 렌더**: `list_versions` 응답으로 StatusBar(active) + 버킷 정렬 리스트가 그려진다. `active=null`(심링크 소실, `service.py:44-45,218`)이면 빈 상태바 대신 "활성 alias 없음(심링크 소실)" 명시 표기(mr2-1). 행 클릭 시 `get_version_detail` lazy 호출로 게이트 수치 크게·판정 보조(결정 3)가 펼쳐진다.
+2. **REGRESSED·미완성 차단(M3, mn1)**: `gate_passed !== true`(false 또는 incomplete의 null) 또는 `!ready` 버전은 **승인** 버튼 비활성 + 백엔드 422 메시지 표면화(이중 게이트).
+2b. **롤백 대상 게이팅(BR2-1)**: **롤백** 버튼은 `bucket === "archived"`(과거활성) 버전에만 활성 — `challenger`·`incomplete`·`champion`(현재활성)에는 `disabled`. 백엔드 롤백 경로는 무게이트(`service.py:103-112`→`deploy.rollback` set_alias만, `deploy.py:93-95`)라 프론트 게이팅이 1차(유일) 방어선이며, 이것이 결정 3·M3의 "REGRESSED 비승격"(`decisions.md:83·203·124`)을 롤백 경로에서도 지킨다. (백엔드 `deploy.rollback` past-active/`.ready` 가드는 H4r 교차단계 의존 `[검증 필요]`, 범위 밖.)
 3. **전파 표시(2-A-c)**: approve/rollback 후 `propagation!="confirmed"`면 "전파 대기/실패"로 구분 표시, 재폴링 제공. `"confirmed"`면 활성 확정 표시.
 4. **정직성 UI**: archived 빔 → "이전 이력 없음(거짓 복원 안 함)" 안내(mn1). GatePanel에 `cross_site_claim=false` 시 "cross-site 주장 아님" 명시.
 5. **버전 식별자(B1)**: 쓰기 요청 `version`이 **디렉토리명 `gru_<fs>@<v>`**으로 전송된다 — 프론트가 stripped 표면값에 `gru_${fs}@`를 재부착(`toDirName`)해 `approve`/`rollback`이 `_require_consistent`(`service.py:38-40`)를 통과한다. (읽기 응답은 stripped, 쓰기는 dir name — 비대칭 계약.)

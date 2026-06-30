@@ -1,0 +1,498 @@
+/**
+ * Sepsis 운영 콘솔 스타일 (순수 CSS, 의존성 0 — K8s nginx 정적 서빙).
+ * 시각 충실도 검토 산출물: 클래스명은 다 있었으나 CSS 0개였음.
+ * 핵심: 결정 3 위계(게이트 수치 >> 판정), 버킷 색 구분, 전파·정직성 시각화.
+ * 색은 CSS 변수 팔레트(하드코딩 지양) + prefers-color-scheme 다크모드. 평평한 디자인.
+ */
+
+:root {
+  /* 중립 톤 */
+  --bg: #ffffff;
+  --surface: #f7f8fa;
+  --text: #1c2230;
+  --text-muted: #6b7280;
+  --border: rgba(28, 34, 48, 0.14);
+  --border-strong: rgba(28, 34, 48, 0.28);
+
+  /* 의미 톤 (success/warning/neutral/muted) */
+  --success: #1f7a4d;
+  --success-bg: rgba(31, 122, 77, 0.10);
+  --warning: #b06a00;
+  --warning-bg: rgba(176, 106, 0, 0.10);
+  --neutral: #55607a;
+  --neutral-bg: rgba(85, 96, 122, 0.08);
+  --muted: #8a93a6;
+  --muted-bg: rgba(138, 147, 166, 0.08);
+
+  --radius: 6px;
+  --gap: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11151c;
+    --surface: #171c25;
+    --text: #e6e9f0;
+    --text-muted: #9aa3b5;
+    --border: rgba(230, 233, 240, 0.14);
+    --border-strong: rgba(230, 233, 240, 0.28);
+
+    --success: #4fb183;
+    --success-bg: rgba(79, 177, 131, 0.14);
+    --warning: #e0a23d;
+    --warning-bg: rgba(224, 162, 61, 0.14);
+    --neutral: #9aa6c2;
+    --neutral-bg: rgba(154, 166, 194, 0.12);
+    --muted: #79839a;
+    --muted-bg: rgba(121, 131, 154, 0.12);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ===== App ===== */
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+}
+
+.app__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding-bottom: 16px;
+  border-bottom: 0.5px solid var(--border);
+}
+
+.app__header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.app__main {
+  margin-top: 20px;
+}
+
+.app__error {
+  padding: 10px 12px;
+  border: 0.5px solid var(--warning);
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-radius: var(--radius);
+}
+
+/* ===== StatusBar ===== */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.status-bar__fs {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.status-bar__active {
+  font-weight: 500;
+}
+
+/* 심링크 소실 — 정상 빈 상태가 아니라 "주의"로 읽히게 muted+warning 경계 */
+.status-bar__active--missing {
+  color: var(--muted);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* ===== VersionList ===== */
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* archived 빔 안내 — "정상이지만 비어있음" muted 톤 */
+.version-list__notice {
+  margin: 0 0 4px;
+  padding: 8px 12px;
+  color: var(--text-muted);
+  background: var(--muted-bg);
+  border: 0.5px dashed var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+/* ===== VersionRow ===== */
+.version-row {
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.version-row__head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.version-row__head:hover {
+  background: var(--neutral-bg);
+}
+
+.version-row__version {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.version-row__util {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.version-row__mlflow {
+  color: var(--neutral);
+}
+
+/* 행 게이트 신호 — PASS/REGRESSED/미완성 색 구분(VersionRow가 상태별 modifier 부여) */
+.version-row__gate {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.version-row__gate--ok {
+  color: var(--success);
+}
+.version-row__gate--warn {
+  color: var(--warning);
+}
+.version-row__gate--muted {
+  color: var(--muted);
+}
+
+/* ===== badge (공통 pill) ===== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  border: 0.5px solid transparent;
+  white-space: nowrap;
+}
+
+/* 버킷 색 구분 — 한눈에 */
+.badge--champion {
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: var(--success);
+}
+.badge--challenger {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: var(--warning);
+}
+.badge--archived {
+  color: var(--neutral);
+  background: transparent;
+  border-color: var(--border-strong);
+}
+.badge--incomplete {
+  color: var(--muted);
+  background: var(--muted-bg);
+  border-color: var(--border);
+}
+
+/* 판정/전파 색 — success vs warning */
+.badge--ok {
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: var(--success);
+}
+.badge--warn {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: var(--warning);
+}
+
+/* ===== VersionDetail ===== */
+.version-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 12px;
+  border-top: 0.5px solid var(--border);
+  background: var(--bg);
+}
+
+.version-detail--loading,
+.version-detail--error {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.version-detail--error {
+  color: var(--warning);
+}
+
+.version-detail__result {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ===== GatePanel — 결정 3 위계 (수치 >> 판정) ===== */
+.gate-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* utils 가로 정렬, 큰 gap */
+.gate-panel__utils {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+}
+
+.gate-panel__util {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 라벨(em)은 작게·muted — 조연 */
+.gate-panel__util em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* 수치(strong)는 주인공 — 크게 */
+.gate-panel__util strong {
+  font-size: 29px;
+  font-weight: 500;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 판정 배지는 보조로 작게 — 위계상 수치 아래 */
+.gate-panel .badge {
+  align-self: flex-start;
+  font-size: 12px;
+}
+
+/* cross-site 정직성 안내 — 작게·muted */
+.gate-panel__cross-site {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ===== RetrainPanel ===== */
+.retrain-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px 20px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.retrain-panel__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.retrain-panel__row dt {
+  color: var(--text-muted);
+}
+
+.retrain-panel__row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== Actions ===== */
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.actions button {
+  padding: 7px 16px;
+  border-radius: var(--radius);
+  border: 0.5px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.actions__approve {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.actions__rollback {
+  border-color: var(--neutral);
+  color: var(--neutral);
+}
+
+/* 비활성(REGRESSED·미완성·비-archived) — 흐리게 + not-allowed 로 헛클릭 차단이 보이게 */
+.actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ===== MlflowLink ===== */
+.mlflow-link {
+  font-size: 13px;
+  color: var(--neutral);
+}
+
+.mlflow-link--missing {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ===== AuditTrail ===== */
+.audit-trail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 빈 감사 — 정상 빈 상태 muted */
+.audit-trail--empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.audit-trail__row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 6px 8px;
+  font-size: 12px;
+  border-bottom: 0.5px solid var(--border);
+}
+
+.audit-trail__ts {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.audit-trail__type {
+  font-weight: 600;
+}
+
+.audit-trail__gate {
+  color: var(--text-muted);
+}
+
+.audit-trail__actor {
+  color: var(--neutral);
+}
+
+.audit-trail__reason {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+/* ===== ConfirmDialog ===== */
+.confirm-dialog {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface);
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.confirm-dialog__actor,
+.confirm-dialog__reason {
+  padding: 6px 10px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.confirm-dialog button {
+  padding: 6px 16px;
+  border-radius: var(--radius);
+  border: 0.5px solid var(--success);
+  background: var(--success-bg);
+  color: var(--success);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.confirm-dialog button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 422 등 거부 메시지 표면화 — warning 톤 */
+.confirm-dialog__error {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border: 0.5px solid var(--warning);
+  border-radius: var(--radius);
+  font-size: 13px;
+}

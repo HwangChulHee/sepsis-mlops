@@ -9,7 +9,11 @@ WORKDIR /app
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
  && pip install --no-cache-dir \
       "fastapi>=0.110" "uvicorn[standard]>=0.29" "prometheus-client>=0.20" \
-      "numpy>=2.0,<3" "pydantic>=2"
+      "numpy>=2.0,<3" "pandas>=2.2,<3" "scipy>=1.11" "pydantic>=2"
+# pandas·scipy: app.py → drift.{reference,run,synthetic} import 체인에 필요
+#   (data.cache→pandas, drift.distance→scipy.spatial/stats). 빠지면 컨테이너에서 app import
+#   자체가 ModuleNotFoundError로 실패(잠복 버그, E2E에서 발견). mlflow는 bundle.py에서 함수내
+#   lazy import라 dir 기반 로드(load_bundle_from_dir) 경로엔 불필요 — 경량 유지.
 
 # app code + the portable model bundle (exported via scripts/h4s_export_bundle.py)
 COPY src/ /app/src/

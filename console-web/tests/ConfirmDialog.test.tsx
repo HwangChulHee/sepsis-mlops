@@ -71,3 +71,30 @@ describe("ConfirmDialog 422 표면화 (성공기준 2)", () => {
     ));
   });
 });
+
+describe("ConfirmDialog actor 게이팅·취소·접근성", () => {
+  it("actor 가 비면 확인 버튼이 disabled, 입력하면 활성", async () => {
+    const user = userEvent.setup();
+    render(<ConfirmDialog fs="vitals" version="chal1" action="approve" />);
+    const confirm = screen.getByRole("button", { name: /확인/ });
+    expect(confirm).toBeDisabled();
+    await user.type(screen.getByPlaceholderText("actor"), "alice");
+    expect(confirm).toBeEnabled();
+  });
+
+  it("취소 버튼은 onCancel 을 호출하고 api 는 호출하지 않는다", async () => {
+    const onCancel = vi.fn();
+    const user = userEvent.setup();
+    render(<ConfirmDialog fs="vitals" version="chal1" action="approve" onCancel={onCancel} />);
+    await user.click(screen.getByRole("button", { name: /취소/ }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(approveMock).not.toHaveBeenCalled();
+  });
+
+  it("래퍼가 role=dialog + aria-modal 이고 열릴 때 actor 에 포커스가 간다", () => {
+    render(<ConfirmDialog fs="vitals" version="chal1" action="approve" />);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(screen.getByPlaceholderText("actor")).toHaveFocus();
+  });
+});

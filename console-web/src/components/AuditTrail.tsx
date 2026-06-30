@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { getAudit, toDirName } from "../api";
-import type { AuditEvent } from "../api";
+import type { AuditEvent, ApiError } from "../api";
 
 interface Props {
   featureset: string;
@@ -15,21 +15,35 @@ interface Props {
 
 export default function AuditTrail({ featureset, version }: Props) {
   const [rows, setRows] = useState<AuditEvent[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const dirName = toDirName(featureset, version);
 
   useEffect(() => {
     let alive = true;
+    setError(null);
     getAudit({ fs: featureset })
       .then((all) => {
         if (!alive) return;
         // 클라이언트 측 버전 필터 — 디렉토리명 매칭(mn2).
         setRows(all.filter((e) => e.from_version === dirName || e.to_version === dirName));
       })
-      .catch(() => alive && setRows([]));
+      .catch((e: Partial<ApiError>) => {
+        if (!alive) return;
+        setRows([]);
+        setError(e?.detail || "감사 기록을 불러오지 못했습니다");
+      });
     return () => {
       alive = false;
     };
   }, [featureset, version, dirName]);
+
+  if (error) {
+    return (
+      <p className="audit-trail audit-trail--error" role="alert">
+        {error}
+      </p>
+    );
+  }
 
   if (rows.length === 0) {
     return <p className="audit-trail audit-trail--empty">이 버전 관련 감사 기록 없음</p>;

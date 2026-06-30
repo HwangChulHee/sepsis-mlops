@@ -86,7 +86,20 @@ export interface ApiError {
 export const toDirName = (fs: string, version: string): string =>
   version.startsWith(`gru_${fs}@`) ? version : `gru_${fs}@${version}`;
 
-const j = (res: Response): Promise<any> => res.json();
+// 읽기 응답도 상태코드 검사: 422/403 이면 detail 을 표면화하며 reject.
+// (검사 누락 시 422 의 {detail} 본문이 정상 응답처럼 흘러 VersionList 가 undefined spread 로 크래시.)
+const j = async (res: Response): Promise<any> => {
+  if (!res.ok) {
+    let detail = "";
+    try {
+      detail = ((await res.json()) as { detail?: string })?.detail ?? "";
+    } catch {
+      detail = "";
+    }
+    return Promise.reject<any>({ status: res.status, detail } as ApiError);
+  }
+  return res.json();
+};
 
 function qs(q: Record<string, unknown>): string {
   const p = new URLSearchParams();

@@ -13,6 +13,11 @@ const fmt = (n: number | undefined): string =>
   n === undefined || n === null ? "—" : n.toFixed(3);
 
 export default function GatePanel({ gate }: Props) {
+  // 3분기: true→PASS / false→REGRESSED / undefined(미완성)→"검증 미완료".
+  // (boolean 단순분기는 undefined 를 REGRESSED 로 오표기 — 미완성과 회귀를 뭉갬.)
+  const reg = gate.no_regression;
+  const regClass = reg === true ? "badge--ok" : reg === false ? "badge--warn" : "badge--muted";
+  const regText = reg === true ? "PASS" : reg === false ? "REGRESSED" : "검증 미완료";
   return (
     <div className="gate-panel">
       <div className="gate-panel__utils">
@@ -29,9 +34,7 @@ export default function GatePanel({ gate }: Props) {
           <strong>{fmt(gate.old_aval_util)}</strong>
         </span>
       </div>
-      <span className={`badge ${gate.no_regression ? "badge--ok" : "badge--warn"}`}>
-        {gate.no_regression ? "PASS" : "REGRESSED"}
-      </span>
+      <span className={`badge ${regClass}`}>{regText}</span>
       {gate.cross_site_claim === false && (
         <p className="gate-panel__cross-site">
           in-distribution 검증 (cross-site 일반화 주장 아님)

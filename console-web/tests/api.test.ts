@@ -22,8 +22,7 @@ function mockFetchOnce(opts: { ok: boolean; status: number; json: unknown }) {
     status: opts.status,
     json: async () => opts.json,
   });
-  // @ts-expect-error 테스트용 전역 fetch 주입
-  globalThis.fetch = fetchMock;
+  vi.stubGlobal("fetch", fetchMock); // 전역 fetch 주입(타입 안전)
   return fetchMock;
 }
 

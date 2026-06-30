@@ -4,12 +4,13 @@
  *   펼침: get_version_detail(stripped 버전) lazy 호출.
  */
 import { useState } from "react";
-import type { VersionSummary } from "../api";
+import type { VersionSummary, WriteResult } from "../api";
 import VersionDetail from "./VersionDetail";
 
 interface Props {
   v: VersionSummary;
   featureset: string;
+  onWrite?: (r: WriteResult) => void;
 }
 
 const gateSignal = (g: boolean | null): string =>
@@ -19,7 +20,7 @@ const gateSignal = (g: boolean | null): string =>
 const gateClass = (g: boolean | null): string =>
   g === true ? "version-row__gate--ok" : g === false ? "version-row__gate--warn" : "version-row__gate--muted";
 
-export default function VersionRow({ v, featureset }: Props) {
+export default function VersionRow({ v, featureset, onWrite }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -44,7 +45,14 @@ export default function VersionRow({ v, featureset }: Props) {
           </span>
         )}
       </button>
-      {open && <VersionDetail featureset={featureset} version={v.version} bucket={v.bucket} />}
+      {open && (
+        <VersionDetail
+          featureset={featureset}
+          version={v.version}
+          bucket={v.bucket}
+          onWrite={onWrite}
+        />
+      )}
     </div>
   );
 }

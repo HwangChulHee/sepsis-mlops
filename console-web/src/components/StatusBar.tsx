@@ -11,13 +11,16 @@ interface Props {
   featureset: string;
   active: string | null;
   propagation?: Propagation;
+  loading?: boolean;
 }
 
-export default function StatusBar({ featureset, active, propagation }: Props) {
+export default function StatusBar({ featureset, active, propagation, loading = false }: Props) {
   return (
     <div className="status-bar">
       <span className="status-bar__fs">{featureset}</span>
-      {active !== null ? (
+      {loading ? (
+        <span className="status-bar__active status-bar__active--loading">불러오는 중…</span>
+      ) : active !== null ? (
         <span className="status-bar__active">활성: {active}</span>
       ) : (
         <span className="status-bar__active status-bar__active--missing">

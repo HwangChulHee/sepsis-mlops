@@ -4,7 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import { getDetail } from "../api";
-import type { VersionDetailResponse, WriteResult } from "../api";
+import type { VersionDetailResponse, WriteResult, ApiError } from "../api";
 import GatePanel from "./GatePanel";
 import RetrainPanel from "./RetrainPanel";
 import Actions from "./Actions";
@@ -16,9 +16,10 @@ interface Props {
   featureset: string;
   version: string; // stripped
   bucket: string;
+  onWrite?: (r: WriteResult) => void;
 }
 
-export default function VersionDetail({ featureset, version, bucket }: Props) {
+export default function VersionDetail({ featureset, version, bucket, onWrite }: Props) {
   const [detail, setDetail] = useState<VersionDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<"approve" | "rollback" | null>(null);
@@ -28,7 +29,9 @@ export default function VersionDetail({ featureset, version, bucket }: Props) {
     let alive = true;
     getDetail(featureset, version)
       .then((d) => alive && setDetail(d))
-      .catch(() => alive && setError("상세를 불러오지 못했습니다"));
+      .catch((e: Partial<ApiError>) =>
+        alive && setError(e?.detail || "상세를 불러오지 못했습니다")
+      );
     return () => {
       alive = false;
     };
@@ -62,7 +65,10 @@ export default function VersionDetail({ featureset, version, bucket }: Props) {
           onResult={(r) => {
             setResult(r);
             setDialog(null);
+            // 쓰기 성공 결과를 App 까지 끌어올림 — StatusBar 전파배지 + 목록 새로고침.
+            onWrite?.(r);
           }}
+          onCancel={() => setDialog(null)}
         />
       )}
       <AuditTrail featureset={featureset} version={version} />

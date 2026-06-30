@@ -31,3 +31,21 @@ describe("GatePanel cross_site_claim 정직성 (성공기준 4)", () => {
     expect(screen.queryByText(/주장 아님/)).not.toBeInTheDocument();
   });
 });
+
+describe("GatePanel no_regression 3분기 (미완성 오표기 방지)", () => {
+  it("no_regression=true → PASS", () => {
+    render(<GatePanel gate={{ no_regression: true }} />);
+    expect(screen.getByText("PASS")).toBeInTheDocument();
+  });
+
+  it("no_regression=false → REGRESSED", () => {
+    render(<GatePanel gate={{ no_regression: false }} />);
+    expect(screen.getByText("REGRESSED")).toBeInTheDocument();
+  });
+
+  it("no_regression=undefined(미완성) → '검증 미완료'(REGRESSED 로 오표기하지 않음)", () => {
+    render(<GatePanel gate={{}} />);
+    expect(screen.getByText(/검증 미완료/)).toBeInTheDocument();
+    expect(screen.queryByText("REGRESSED")).not.toBeInTheDocument();
+  });
+});

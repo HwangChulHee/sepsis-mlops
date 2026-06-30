@@ -1,8 +1,8 @@
-# H4s-c — serving config. RUN selects the (atomic) exported bundle dir.
-# Swap the served model/featureset by changing RUN (= deploy/artifacts/<RUN>) and
-# rolling the Deployment. NOTE: the alarm threshold τ is NOT here — it is frozen inside
-# the bundle (A-val derived); overriding τ operationally would re-select on live data
-# (leakage, H3/H4 rule). ConfigMap holds only non-leaky operational settings.
+# H4s-c — serving config. SERVE_FEATURESET selects which active alias (gru_<fs>) serve resolves
+# under ARTIFACTS (결정 5). Swapping the *model version* is done by the console (alias 교체),
+# not here; this ConfigMap only picks the featureset family. NOTE: the alarm threshold τ is NOT
+# here — it is frozen inside the bundle (A-val derived); overriding τ operationally would
+# re-select on live data (leakage, H3/H4 rule). ConfigMap holds only non-leaky operational settings.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -10,5 +10,5 @@ metadata:
   labels:
     app: sepsis-serving
 data:
-  RUN: "gru_vitals"          # atomic bundle: gru_vitals | gru_vitals_labs
+  SERVE_FEATURESET: "vitals"   # active alias gru_<fs>: vitals | vitals_labs
   LOG_LEVEL: "info"

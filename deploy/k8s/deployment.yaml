@@ -9,6 +9,10 @@ metadata:
     app: sepsis-serving
 spec:
   replicas: 1                       # in-memory per-patient state -> single replica
+  # Recreate: 롤링이면 잠깐 2파드가 떠 환자별 in-memory hidden state(StatefulPredictor)·
+  # 공유 PVC(RWO) 가정이 깨진다. 옛 파드를 먼저 종료 후 새 파드 기동.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: sepsis-serving
@@ -17,21 +21,31 @@ spec:
       labels:
         app: sepsis-serving
     spec:
+      # fsGroup: 공유 번들 PVC 를 비-root(uid 10001) 가 읽도록 볼륨 소유 그룹 정렬.
+      securityContext:
+        fsGroup: 10001
       containers:
         - name: serving
           image: sepsis-serving:h4s
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
+          # 비-root 실행 + 권한상승/캡 전부 제거(공격면 축소).
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           env:
-            # RUN (ConfigMap) -> SERVE_BUNDLE_DIR via $(VAR) expansion -> atomic bundle dir.
-            - name: RUN
+            # serve app.py 는 활성 alias gru_<fs> 를 ARTIFACTS 아래에서 직접 해석한다(결정 5).
+            # featureset 만 외부에서 선택 — 레거시 RUN/SERVE_BUNDLE_DIR 고정경로 env 는 alias
+            # 통일(mn-B)로 폐기됨(app.py 는 SERVE_FEATURESET 만 읽음). 빠진 env 참조 제거.
+            - name: SERVE_FEATURESET
               valueFrom:
                 configMapKeyRef:
                   name: sepsis-serving-config
-                  key: RUN
-            - name: SERVE_BUNDLE_DIR
-              value: "/app/deploy/artifacts/$(RUN)"
+                  key: SERVE_FEATURESET
             - name: LOG_LEVEL
               valueFrom:
                 configMapKeyRef:

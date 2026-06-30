@@ -17,6 +17,11 @@ metadata:
     app: sepsis-console-api
 spec:
   replicas: 1                       # 직렬화 경계(프로세스-로컬 락) -> 단일 replica
+  # Recreate: 롤링이면 잠깐 2파드가 떠 프로세스-로컬 락(_LOCKS)·in-memory 직렬화 가정이
+  # 깨지고, 두 파드가 같은 audit PVC(RWO)를 동시에 못 쓴다. 옛 파드를 먼저 죽이고 새 파드를
+  # 띄운다(짧은 다운타임 < 직렬화 위반).
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: sepsis-console-api
@@ -25,6 +30,10 @@ spec:
       labels:
         app: sepsis-console-api
     spec:
+      # fsGroup: 마운트한 PVC(번들·감사 DB) 볼륨 소유 그룹을 10001 로 맞춰 비-root(uid 10001)
+      # 컨테이너가 쓰기 가능하게 한다. 빠지면 runAsNonRoot 가 PVC 에 write 못 해 부팅 실패.
+      securityContext:
+        fsGroup: 10001
       containers:
         - name: console-api
           # [검증 필요] 이미지: console API용 이미지(uvicorn sepsis.console.api:app) 빌드 필요.
@@ -34,20 +43,44 @@ spec:
           command: ["uvicorn", "sepsis.console.api:app", "--host", "0.0.0.0", "--port", "8000"]
           ports:
             - containerPort: 8000
+          # 비-root 실행: root 로 돌 이유가 없고, 권한상승/캡 전부 제거로 공격면 축소.
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # readOnlyRootFilesystem: sqlite WAL/임시파일 때문에 이번엔 생략 — 후속(M4 빚).
           env:
             - name: SERVE_URL
               value: "http://sepsis-serving"        # serving Service(port 80) — 전파 확인 대상
             - name: LOG_LEVEL
               value: "info"
+            # 감사 DB 위치(백엔드와 합의된 계약). 슬래시 4개 = 절대경로 /app/auditdb/console_audit.db.
+            # 이 경로는 영속 PVC(sepsis-console-audit) 위라 재시작/재배포에도 감사 이력이 보존된다.
+            - name: CONSOLE_AUDIT_DB_URL
+              value: "sqlite:////app/auditdb/console_audit.db"
           volumeMounts:
             - name: artifacts
               mountPath: /app/deploy/artifacts       # serving과 동일 고정 경로(B2)
+            - name: auditdb
+              mountPath: /app/auditdb                # 감사 DB 영속(CONSOLE_AUDIT_DB_URL)
           readinessProbe:
             httpGet:
               path: /console/versions?fs=vitals      # [검증 필요] 빈 클러스터에서도 200인지 확인
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
+          # liveness: readiness 와 같은 엔드포인트지만 더 관대하게(긴 initialDelay·큰 failure
+          # threshold) — 일시 지연으로 파드를 죽이지 않도록. 진짜 데드락/행만 재시작 유도.
+          livenessProbe:
+            httpGet:
+              path: /console/versions?fs=vitals
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
               cpu: "100m"
@@ -59,6 +92,9 @@ spec:
         - name: artifacts
           persistentVolumeClaim:
             claimName: sepsis-artifacts
+        - name: auditdb
+          persistentVolumeClaim:
+            claimName: sepsis-console-audit
 ---
 # console-api Service (ClusterIP) — Ingress가 /console/* 를 여기로 보낸다.
 apiVersion: v1

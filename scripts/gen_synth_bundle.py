@@ -17,6 +17,7 @@ serve(load_bundle_from_dir) 가 요구하는 형식 + console(_classify·approve
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -34,6 +35,13 @@ ROOT = Path(os.environ.get("ARTIFACTS_DIR", "/app/deploy/artifacts"))
 HP = {"hidden": 16, "layers": 1, "dropout": 0.0}
 
 
+def _seed(label: str) -> int:
+    """라벨 → 결정적 31비트 시드. 내장 hash()는 PYTHONHASHSEED 로 매 실행 달라져
+    번들이 비재현이 된다 → sha256 으로 프로세스 무관 결정성 확보."""
+    digest = hashlib.sha256(label.encode()).hexdigest()
+    return int(digest, 16) % (2**31)
+
+
 def make_bundle(label: str, *, no_regression: bool) -> str:
     cols = C.featureset_columns(FEATURESET)
     F = len(cols)
@@ -43,7 +51,7 @@ def make_bundle(label: str, *, no_regression: bool) -> str:
     run_id = f"synth-{label}-runid"
 
     # 1) model.pt — 랜덤 초기화 GRUm2m(학습 없음)
-    torch.manual_seed(abs(hash(label)) % (2**31))
+    torch.manual_seed(_seed(label))
     model = GRUm2m(F, HP["hidden"], HP["layers"], HP["dropout"])
     torch.save(model.state_dict(), d / "model.pt")
 
@@ -62,7 +70,7 @@ def make_bundle(label: str, *, no_regression: bool) -> str:
     }, indent=2))
 
     # 4) reference.npz — 합성 Reference(랜덤 summary), serve calibrate 가 bootstrap 으로 사용
-    rng = np.random.default_rng(abs(hash(label)) % (2**31))
+    rng = np.random.default_rng(_seed(label))
     summary = rng.normal(size=(200, F)).astype(np.float32)
     ref = Reference(
         featureset=FEATURESET, cols=cols, unit="patient_last", summary=summary,

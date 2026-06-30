@@ -10,7 +10,7 @@ metadata:
   labels:
     app: sepsis-console-web
 spec:
-  replicas: 1
+  replicas: 2                        # stateless 정적 서빙 — HA 위해 2 (서로 독립, 공유상태 없음)
   selector:
     matchLabels:
       app: sepsis-console-web
@@ -21,12 +21,21 @@ spec:
     spec:
       containers:
         - name: console-web
-          # [검증 필요] 이미지: nginx 베이스에 console-web `vite build`의 dist/ 를 복사한 이미지.
-          # 예) FROM nginx:alpine; COPY dist/ /usr/share/nginx/html; COPY nginx.conf ...
+          # [검증 필요] 이미지: nginxinc/nginx-unprivileged 베이스에 vite build dist/ 복사.
+          # 비-root(uid 101)·port 8080 전제 — console-web/Dockerfile 과 일관(80→8080 전환).
           image: sepsis-console-web:a
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 80
+            - containerPort: 8080         # nginx-unprivileged 는 비-root 라 80 바인드 불가 → 8080
+          # 비-root 실행. nginx-unprivileged 이미지의 기본 uid 101 사용(해당 이미지의 캐시·임시
+          # 디렉토리 소유가 101 기준이라 임의 uid 대신 101 이 가장 안전). 권한상승/캡 전부 제거.
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # readOnlyRootFilesystem: nginx 가 /tmp·/var/cache/nginx 에 써야 해 이번엔 생략(후속 빚).
           volumeMounts:
             - name: nginx-conf
               mountPath: /etc/nginx/conf.d/default.conf
@@ -34,9 +43,17 @@ spec:
           readinessProbe:
             httpGet:
               path: /
-              port: 80
+              port: 8080
             initialDelaySeconds: 3
             periodSeconds: 10
+          # liveness: readiness 보다 관대(긴 initialDelay·큰 threshold) — 행 걸린 nginx만 재시작.
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 6
           resources:
             requests:
               cpu: "50m"
@@ -59,7 +76,7 @@ metadata:
 data:
   default.conf: |
     server {
-      listen 80;
+      listen 8080;                          # 비-root nginx-unprivileged → 8080 (80 바인드 불가)
       root /usr/share/nginx/html;
       index index.html;
       location / {
@@ -68,6 +85,7 @@ data:
     }
 ---
 # console-web Service (ClusterIP) — Ingress가 / 를 여기로 보낸다.
+# Service port 는 80 유지(Ingress 가 number: 80 참조) — targetPort 만 컨테이너 8080 으로.
 apiVersion: v1
 kind: Service
 metadata:
@@ -81,4 +99,17 @@ spec:
   ports:
     - name: http
       port: 80
-      targetPort: 80
+      targetPort: 8080
+---
+# PodDisruptionBudget — 노드 드레인/롤링 중에도 최소 1파드 가용 보장(stateless 라 안전).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sepsis-console-web
+  labels:
+    app: sepsis-console-web
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: sepsis-console-web

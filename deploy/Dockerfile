@@ -15,9 +15,12 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 #   자체가 ModuleNotFoundError로 실패(잠복 버그, E2E에서 발견). mlflow는 bundle.py에서 함수내
 #   lazy import라 dir 기반 로드(load_bundle_from_dir) 경로엔 불필요 — 경량 유지.
 
-# app code + the portable model bundle (exported via scripts/h4s_export_bundle.py)
+# app code only. The model bundle lives on the shared PVC mounted at /app/deploy/artifacts
+# at runtime (B2) — baking deploy/artifacts/ into the image would just be shadowed by that
+# mount (dead layer + a trap: stale baked alias if the mount ever misses). Pre-create the dir
+# so serve's alias resolution is graceful (empty) before the PVC mounts, mirroring Dockerfile.api.
 COPY src/ /app/src/
-COPY deploy/artifacts/ /app/deploy/artifacts/
+RUN mkdir -p /app/deploy/artifacts
 
 # src layout: config.ROOT = parents[2] of /app/src/sepsis/config.py = /app
 # Serving resolves the active alias gru_<fs> under ARTIFACTS (default /app/deploy/artifacts).

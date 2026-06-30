@@ -9,8 +9,13 @@ RUN npm ci
 COPY . .
 RUN npm run build           # tsc(src) + vite build → dist/
 
-FROM nginx:alpine
+# nginx-unprivileged: 비-root(uid 101) 로 돌고 80 대신 8080 을 듣는다(K8s securityContext
+# runAsNonRoot 와 일관). 일반 nginx:alpine 은 master 가 root 라 runAsNonRoot 에서 부팅 실패.
+FROM nginxinc/nginx-unprivileged:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-# console-web.yaml 의 ConfigMap 과 동일한 SPA 폴백(standalone 폴백용 — 런타임엔 ConfigMap이 덮어씀)
-RUN printf 'server {\n  listen 80;\n  root /usr/share/nginx/html;\n  index index.html;\n  location / {\n    try_files $uri $uri/ /index.html;\n  }\n}\n' > /etc/nginx/conf.d/default.conf
-EXPOSE 80
+# console-web.yaml 의 ConfigMap 과 동일한 SPA 폴백(standalone 폴백용 — 런타임엔 ConfigMap이 덮어씀).
+# listen 8080 — 비-root 라 80 바인드 불가. conf 쓰기는 USER 전환 전 수행.
+USER root
+RUN printf 'server {\n  listen 8080;\n  root /usr/share/nginx/html;\n  index index.html;\n  location / {\n    try_files $uri $uri/ /index.html;\n  }\n}\n' > /etc/nginx/conf.d/default.conf
+USER 101
+EXPOSE 8080

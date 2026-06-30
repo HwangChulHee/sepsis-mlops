@@ -1,0 +1,91 @@
+# 운영 콘솔 — NetworkPolicy (default-deny + 명시 허용).
+#
+# 설계: 콘솔 워크로드(web/api)별로 deny-by-default 정책을 건다. NetworkPolicy 가 한 파드를
+# 선택하는 순간 그 파드의 해당 방향(Ingress/Egress)은 "명시한 것 외 전부 차단"이 된다. 즉
+# 아래 두 정책이 console-web·console-api 에 대한 default-deny 를 이미 구현한다.
+#
+# WHY serving 은 선택하지 않는가: serving 은 같은 네임스페이스의 Prometheus(G4 up{})가
+# /metrics 를 스크레이프해야 한다. 네임스페이스-전역 default-deny 를 걸면 그 스크레이프가
+# 조용히 끊긴다. 그래서 serving 의 ingress 는 건드리지 않고, "api→serving" 경로는 api 측
+# egress 화이트리스트로 강제한다(serving 격리는 별도 과제 — 후속).
+#
+# 주의: NetworkPolicy 포트는 *목적지 파드 포트*(컨테이너 포트)다. Service(sepsis-serving:80)는
+# kube-proxy 가 파드:8000 으로 DNAT 하므로 egress 허용 포트는 8000 이다(Service 80 아님).
+# ingress-nginx 네임스페이스 라벨(kubernetes.io/metadata.name: ingress-nginx)은 minikube
+# ingress addon 기준. 컨트롤러가 다른 네임스페이스면 namespaceSelector 를 맞춰라.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sepsis-console-web
+  labels:
+    app: sepsis-console-web
+spec:
+  podSelector:
+    matchLabels:
+      app: sepsis-console-web
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # ingress-nginx 컨트롤러 → web(8080) 만 허용. 그 외 모든 ingress 차단.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # 정적 nginx 는 상류 호출이 없다 — DNS 만 허용(헬스/해석 용).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sepsis-console-api
+  labels:
+    app: sepsis-console-api
+spec:
+  podSelector:
+    matchLabels:
+      app: sepsis-console-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # ingress-nginx 컨트롤러 → api(8000) 만 허용. (브라우저는 항상 Ingress 를 경유 — web 직접 X.)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    # api → serving 전파 확인(/admin/reload·/health). Service:80 → 파드:8000 DNAT 이므로 8000.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: sepsis-serving
+      ports:
+        - protocol: TCP
+          port: 8000
+    # DNS(serving Service 이름 해석).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

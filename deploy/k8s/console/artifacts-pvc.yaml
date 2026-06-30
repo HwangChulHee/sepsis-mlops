@@ -21,3 +21,27 @@ spec:
     requests:
       storage: 2Gi
   # storageClassName: standard   # minikube 기본. 환경에 맞게 주석 해제/수정
+---
+# 운영 콘솔 — 감사 DB 영속 PVC (결정: audit 로그는 재시작/재배포에도 살아남아야 함).
+#
+# WHY: console-api 의 AuditStore(sqlite)는 승인/롤백 이력을 기록한다. 이게 ephemeral
+# 컨테이너 FS 에 있으면 파드 재시작마다 감사 이력이 통째로 사라진다(규제·사고분석 치명).
+# 그래서 별도 PVC 를 /app/auditdb 에 마운트하고 CONSOLE_AUDIT_DB_URL 을 그 절대경로로
+# 고정한다(console-api.yaml). artifacts PVC 와 분리하는 이유: 번들 저장소와 감사 DB는
+# 수명·접근패턴·백업 정책이 다르다(번들은 재생성 가능, 감사는 불가).
+#
+# [검증 필요] accessMode: 단일 replica(console-api)가 단독으로 쓰므로 RWO 로 충분.
+# storageClassName 은 환경 기본값 위임(minikube=standard).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sepsis-console-audit
+  labels:
+    app: sepsis-console-api
+spec:
+  accessModes:
+    - ReadWriteOnce          # 단일 console-api replica 전용 쓰기
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName: standard   # 환경 기본 storageClass 에 위임

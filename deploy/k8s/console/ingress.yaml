@@ -17,6 +17,14 @@ metadata:
   name: sepsis-console
   labels:
     app: sepsis-console
+  # [M4 빚 — 운영 전 필수] /console 쓰기 엔드포인트(approve·rollback)가 현재 무인증 노출.
+  # 최소 방어로 nginx basic-auth 를 켤 수 있다(아래 주석 해제 + Secret 생성). 전면 인증(SSO/
+  # OIDC·역할기반)은 M4 범위. 예시:
+  #   kubectl create secret generic console-basic-auth --from-file=auth   # auth = htpasswd 산출
+  # annotations:
+  #   nginx.ingress.kubernetes.io/auth-type: basic
+  #   nginx.ingress.kubernetes.io/auth-secret: console-basic-auth
+  #   nginx.ingress.kubernetes.io/auth-realm: "sepsis console (auth required)"
 spec:
   ingressClassName: nginx
   rules:

@@ -5,8 +5,7 @@ PermissionError → 403. 로직·직렬화·감사·복원은 전부 service 계
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -23,12 +22,12 @@ class WriteRequest(BaseModel):
     reason: str = Field("", max_length=2000)
 
 
-def _iso_utc_z(ts) -> Optional[str]:
+def _iso_utc_z(ts) -> str | None:
     # ts는 UTC로 저장(naive 또는 tz-aware). 'Z' 접미 UTC isoformat으로 통일(deploy.py:61 ...Z 규약).
     if ts is None:
         return None
     if ts.tzinfo is not None:
-        ts = ts.astimezone(timezone.utc).replace(tzinfo=None)
+        ts = ts.astimezone(UTC).replace(tzinfo=None)
     return ts.isoformat() + "Z"
 
 
@@ -53,9 +52,9 @@ def version_detail(version: str, fs: str = Query(...)) -> dict:
 
 
 @app.get("/console/audit")
-def audit_query(event_type: Optional[str] = None, gate_passed: Optional[bool] = None,
-                since: Optional[str] = None, until: Optional[str] = None,
-                fs: Optional[str] = None) -> list[dict]:
+def audit_query(event_type: str | None = None, gate_passed: bool | None = None,
+                since: str | None = None, until: str | None = None,
+                fs: str | None = None) -> list[dict]:
     # since/until 은 ISO 문자열 → datetime 파싱 후 service.query 의 DateTime 비교에 전달.
     # 문자열을 그대로 넘기면 audit.py:99 DateTime 비교가 어긋난다(MINOR 결함 5). 잘못된 형식 → 422.
     since_dt = _parse_iso("since", since)
@@ -65,7 +64,7 @@ def audit_query(event_type: Optional[str] = None, gate_passed: Optional[bool] = 
     return [_serialize_event(r) for r in rows]
 
 
-def _parse_iso(name: str, value: Optional[str]) -> Optional[datetime]:
+def _parse_iso(name: str, value: str | None) -> datetime | None:
     if value is None:
         return None
     try:
@@ -80,9 +79,9 @@ def approve(req: WriteRequest) -> dict:
     try:
         return service.approve(req.fs, req.version, actor=req.actor, reason=req.reason)
     except (ValueError, FileNotFoundError) as e:      # 교차-fs·미완성·REGRESSED
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except PermissionError as e:                       # 미승인
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(status_code=403, detail=str(e)) from e
 
 
 @app.post("/console/rollback")
@@ -90,6 +89,6 @@ def rollback(req: WriteRequest) -> dict:
     try:
         return service.rollback(req.fs, req.version, actor=req.actor, reason=req.reason)
     except (ValueError, FileNotFoundError) as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(status_code=403, detail=str(e)) from e

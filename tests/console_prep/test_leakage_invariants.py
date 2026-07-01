@@ -18,9 +18,8 @@ from __future__ import annotations
 import json
 
 import numpy as np
-import pytest
-
 from conftest import make_validation
+
 from sepsis import config as C
 from sepsis.retrain import deploy
 

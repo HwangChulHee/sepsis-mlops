@@ -24,7 +24,7 @@ from pathlib import Path
 import numpy as np
 
 from sepsis import config as C
-from sepsis.serve.bundle import set_alias   # alias helper lives in the package (not here)
+from sepsis.serve.bundle import set_alias  # alias helper lives in the package (not here)
 
 OUT_ROOT = C.ROOT / "deploy" / "artifacts"
 TRACKING = f"sqlite:///{C.ROOT}/mlflow.db"
@@ -33,6 +33,7 @@ TRACKING = f"sqlite:///{C.ROOT}/mlflow.db"
 def export(featureset: str, version: str | None = None, *, link_alias: bool = True) -> Path:
     import mlflow
     from mlflow.artifacts import download_artifacts
+
     from sepsis.drift import reference as R
 
     mlflow.set_tracking_uri(TRACKING)

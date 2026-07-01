@@ -11,13 +11,12 @@ import ast
 import sys
 from types import SimpleNamespace
 
-import numpy as np
+import scripts.h4s_export_bundle as export_mod
 
 from sepsis import config as C
 from sepsis.retrain import deploy, pipeline, validate
 from sepsis.serve.bundle import load_bundle, load_bundle_from_dir
 from sepsis.util.progress import ProgressLogger
-import scripts.h4s_export_bundle as export_mod
 
 FS = "vitals"
 ROOT = C.ROOT / "deploy" / "artifacts"

@@ -120,7 +120,7 @@ def active_reference_path(featureset: str, *, root: Path = ARTIFACTS) -> Path:
     return Path(root) / f"gru_{featureset}" / "reference.npz"
 
 
-def active_reference(featureset: str, *, root: Path = ARTIFACTS) -> "R.Reference":
+def active_reference(featureset: str, *, root: Path = ARTIFACTS) -> R.Reference:
     """The drift baseline the monitor should use — always matches the deployed model."""
-    from sepsis.drift import reference as R   # lazy(드리프트 경로 전용 — console import 체인 제외)
+    from sepsis.drift import reference as R  # lazy(드리프트 경로 전용 — console import 체인 제외)
     return R.load_reference(active_reference_path(featureset, root=root))

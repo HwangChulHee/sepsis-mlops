@@ -35,7 +35,7 @@ class HttpSender:
         if self._owns_client:
             self._client.close()
 
-    def __enter__(self) -> "HttpSender":
+    def __enter__(self) -> HttpSender:
         return self
 
     def __exit__(self, *exc) -> None:

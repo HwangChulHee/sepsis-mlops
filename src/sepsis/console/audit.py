@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import (JSON, Boolean, Column, DateTime, Integer, String,
-                        create_engine, event)
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, create_engine, event
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 Base = declarative_base()
@@ -57,7 +56,7 @@ class AuditStore:
 
     def append(self, **fields) -> AuditEvent:
         """단일 INSERT. ts 미지정 시 tz-aware UTC now(utcnow deprecation 회피)."""
-        fields.setdefault("ts", dt.datetime.now(dt.timezone.utc))
+        fields.setdefault("ts", dt.datetime.now(dt.UTC))
         ev = AuditEvent(**fields)
         s = self.Session()
         try:

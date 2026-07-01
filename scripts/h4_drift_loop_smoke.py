@@ -22,8 +22,9 @@ os.environ["SERVE_BUNDLE_DIR"] = BUNDLE_DIR          # active bundle the server 
 os.environ["DRIFT_WINDOW_N"] = "150"                 # smaller window/calibration for the gate
 os.environ["DRIFT_CAL_TRIALS"] = "60"
 
-from sepsis.data import cache as cache_mod, split as split_mod   # noqa: E402
-from sepsis.drift import reference as R                          # noqa: E402
+from sepsis.data import cache as cache_mod  # noqa: E402
+from sepsis.data import split as split_mod
+from sepsis.drift import reference as R  # noqa: E402
 
 FS = "vitals"
 
@@ -48,9 +49,10 @@ def main() -> int:
     N_REF = ref.n_patients                                       # 1000 (distinct marker)
 
     from fastapi.testclient import TestClient
-    from sepsis.serve import app as appmod
+
     from sepsis.drift.window import get_window, reset_window
     from sepsis.retrain import promote
+    from sepsis.serve import app as appmod
     client = TestClient(appmod.app)
 
     # --- #2 insufficient window -> no test ---

@@ -15,10 +15,10 @@ import os
 from pathlib import Path
 
 import pytest
+from _serve_helpers import REF_SENTINEL, THR_SENTINEL, patch_loaders, setup_alias
 
-from sepsis import config as C
 import sepsis.serve.app as serve_app
-from _serve_helpers import patch_loaders, setup_alias, REF_SENTINEL, THR_SENTINEL
+from sepsis import config as C
 
 
 # ===== 5: ARTIFACTS 기본값 절대경로 (MJ-e, handoff:134) =====
@@ -141,6 +141,7 @@ def test_health_returns_real_run_id_not_alias(tmp_path, monkeypatch):
     #   meta.get("run_id", d.name) 폴백(bundle.py:102)으로 bundle.run_id 가 meta 에서 온다.
     #   여기선 그 폴백 계약을 대역으로 에뮬레이션(meta.json.run_id 를 그대로 사용).
     import json
+
     from fastapi.testclient import TestClient
 
     real_run_id = "abcdef0123456789abcdef0123456789"

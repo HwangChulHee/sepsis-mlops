@@ -9,8 +9,8 @@ File lines carry an [HH:MM:SS] wall-clock timestamp; elapsed uses a monotonic cl
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 
 def _fmt_dur(seconds: float) -> str:

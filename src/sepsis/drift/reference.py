@@ -14,7 +14,9 @@ from pathlib import Path
 import numpy as np
 
 from sepsis import config as C
-from sepsis.data import cache as cache_mod, missing, split as split_mod
+from sepsis.data import cache as cache_mod
+from sepsis.data import missing
+from sepsis.data import split as split_mod
 
 LOW_CARD_MAX_UNIQUE = 5   # n_unique <= this -> categorical (JS), else numeric (PSI/Wasserstein)
 REF_DIR = C.ROOT / "data" / "drift"

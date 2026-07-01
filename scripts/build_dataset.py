@@ -84,7 +84,6 @@ def main() -> int:
     # --- splits ---
     splits = split.split_cross_site(manifest, val_frac=cfg.val_frac, seed=cfg.seed)
     uni = split.split_unified(manifest, seed=cfg.seed)  # confirm well-formed
-    train_name = "A_train"
     tr, va, te = splits["A_train"], splits["A_val"], splits["B"]
     print(f"[split] cross_site A_train={len(tr)} A_val={len(va)} B={len(te)} "
           f"(val_frac={cfg.val_frac}, seed={cfg.seed})")

@@ -37,8 +37,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 
 def _rows_by_version(payload):
     """list_versions 응답의 versions 리스트 → {version: row} 매핑."""

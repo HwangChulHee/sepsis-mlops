@@ -31,8 +31,8 @@ import numpy as np
 import torch
 
 from sepsis import config as C
-from sepsis.train.gru import GRUm2m
 from sepsis.drift.reference import Reference, save_reference
+from sepsis.train.gru import GRUm2m
 
 FEATURESET = "vitals"
 ROOT = Path(os.environ.get("ARTIFACTS_DIR", "/app/deploy/artifacts"))

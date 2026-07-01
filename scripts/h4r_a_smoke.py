@@ -14,7 +14,8 @@ import sys
 import numpy as np
 
 from sepsis import config as C
-from sepsis.data import cache as cache_mod, split as split_mod
+from sepsis.data import cache as cache_mod
+from sepsis.data import split as split_mod
 from sepsis.eval import crosssite
 from sepsis.retrain import backfill, promote
 from sepsis.serve.bundle import load_bundle

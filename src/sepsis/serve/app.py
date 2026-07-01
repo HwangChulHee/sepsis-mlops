@@ -13,7 +13,6 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -21,10 +20,12 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from sepsis import config as C
-from sepsis.drift import reference as R, run as drift_run, synthetic
+from sepsis.drift import reference as R
+from sepsis.drift import run as drift_run
+from sepsis.drift import synthetic
 from sepsis.drift.window import get_window
 from sepsis.serve import metrics
-from sepsis.serve.bundle import load_bundle, load_bundle_from_dir
+from sepsis.serve.bundle import load_bundle_from_dir
 from sepsis.serve.predictor import StatefulPredictor
 
 app = FastAPI(title="sepsis-serving", version="h4s")
@@ -75,10 +76,10 @@ def state() -> dict:
 
 class PredictRequest(BaseModel):
     patient_id: str
-    features: dict[str, Optional[float]]   # absent/null feature -> NaN (no 0-fill)
+    features: dict[str, float | None]   # absent/null feature -> NaN (no 0-fill)
 
 
-def _row_from(features: dict[str, Optional[float]], cols: list[str]) -> np.ndarray:
+def _row_from(features: dict[str, float | None], cols: list[str]) -> np.ndarray:
     unknown = set(features) - set(cols)
     if unknown:
         raise HTTPException(status_code=422, detail=f"unknown features {sorted(unknown)}; "

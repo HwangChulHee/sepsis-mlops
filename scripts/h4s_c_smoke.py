@@ -13,7 +13,6 @@ A running cluster (minikube) is needed for #2's client validation.
 
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 from pathlib import Path

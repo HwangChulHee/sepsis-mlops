@@ -13,8 +13,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from sepsis import config as C
-
 
 def split_cross_site(manifest: pd.DataFrame, *, val_frac: float = 0.2, seed: int = 42) -> dict[str, list[str]]:
     a = manifest.loc[manifest.site == "training_setA", "pid"].to_numpy()

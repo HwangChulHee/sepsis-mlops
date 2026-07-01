@@ -25,7 +25,6 @@ import pytest
 from sepsis import config as C
 from sepsis.replay.engine import replay_stream
 
-
 # --------------------------------------------------------------------------
 # 가짜 협력자 (모델·서버·time.sleep·httpx 없이 — handoff §5:140)
 # --------------------------------------------------------------------------

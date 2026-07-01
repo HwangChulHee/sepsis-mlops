@@ -185,7 +185,7 @@ def main() -> int:
 
         masked, unmasked, n_valid, n_all = evaluate(model, va, cfg.batch_size)
         completed = True
-    except Exception as e:  # noqa: BLE001 — re-smoke must report, not crash silently
+    except Exception:  # noqa: BLE001 — re-smoke must report, not crash silently
         import traceback
         traceback.print_exc()
         completed = False

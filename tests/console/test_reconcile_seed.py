@@ -11,8 +11,6 @@ src/ 구현 코드는 읽지 않았다.
 """
 from __future__ import annotations
 
-import pytest
-
 
 def _count(store, fs):
     return len(store.query(featureset=fs))

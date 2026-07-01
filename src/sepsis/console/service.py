@@ -17,9 +17,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
-from sepsis.retrain import deploy
 from sepsis.console.audit import AuditStore
 from sepsis.console.config import CONSOLE_FEATURESETS
+from sepsis.retrain import deploy
 
 # === 모듈 전역(테스트 fixture가 ARTIFACTS·audit을 임시값으로 override) ===
 ARTIFACTS: Path = deploy.ARTIFACTS                  # = C.ROOT/deploy/artifacts (deploy.py:27와 단일 출처)

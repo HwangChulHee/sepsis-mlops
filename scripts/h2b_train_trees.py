@@ -25,7 +25,9 @@ from sklearn.metrics import average_precision_score
 warnings.filterwarnings("ignore", message="X does not have valid feature names")
 
 from sepsis import config as C
-from sepsis.data import cache as cache_mod, class_balance, features, split as split_mod
+from sepsis.data import cache as cache_mod
+from sepsis.data import class_balance, features
+from sepsis.data import split as split_mod
 from sepsis.eval import threshold
 from sepsis.train import tree, tune
 from sepsis.util.progress import ProgressLogger
@@ -187,7 +189,7 @@ def main() -> int:
                     mlflow.log_dict({"featureset": fs, "scale_pos_weight": spw, "tau": c["tau"],
                                      "hp": c["hp"], "note": "tree path: NaN as-is, no normalization"},
                                     "preprocess.json")
-    except Exception as e:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         import traceback
         traceback.print_exc()
         mlflow_ok = False

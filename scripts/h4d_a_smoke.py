@@ -13,7 +13,8 @@ import sys
 import numpy as np
 
 from sepsis import config as C
-from sepsis.data import cache as cache_mod, split as split_mod
+from sepsis.data import cache as cache_mod
+from sepsis.data import split as split_mod
 from sepsis.drift import distance as D
 from sepsis.drift import reference as R
 from sepsis.drift import synthetic as S

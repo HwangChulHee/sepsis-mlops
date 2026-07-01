@@ -10,7 +10,6 @@ featureset is DEFERRED (not fixed) — recorded as 미결 with rationale. ⏸ hu
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 from sepsis import config as C
 from sepsis.train import select

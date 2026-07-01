@@ -16,8 +16,9 @@ import torch
 from sklearn.metrics import average_precision_score
 
 from sepsis import config as C
-from sepsis.data import cache as cache_mod, features, missing, normalize, sequence
-from sepsis.eval import threshold, utility
+from sepsis.data import cache as cache_mod
+from sepsis.data import features, missing, normalize, sequence
+from sepsis.eval import threshold
 from sepsis.train import gru, tree
 
 

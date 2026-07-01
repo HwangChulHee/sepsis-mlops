@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import dataclasses
 
+from _serve_helpers import patch_loaders
+
 import sepsis.serve.app as serve_app
 from sepsis.serve.bundle import Bundle
-from _serve_helpers import patch_loaders
 
 # serving 이 번들에서 읽는 스칼라 메타(=/health 응답·reload 로그). 이게 늘어나면 여기 추가.
 SERVING_READS = ("run_id", "featureset", "input_dim")

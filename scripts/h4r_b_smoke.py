@@ -36,7 +36,8 @@ def main() -> int:
     vr = validate.validate(rr, old)
 
     # --- #1 B patient-level retrain/holdout split, disjoint ---
-    from sepsis.data import cache as cache_mod, split as split_mod
+    from sepsis.data import cache as cache_mod
+    from sepsis.data import split as split_mod
     b_all = set(split_mod.split_cross_site(cache_mod.load_manifest(), val_frac=0.2, seed=42)["B"])
     sr, sh = set(rr.b_retrain), set(rr.b_holdout)
     split_ok = (sr & sh == set() and sr | sh == b_all and len(sh) > 0 and len(sr) > 0)

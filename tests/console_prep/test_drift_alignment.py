@@ -13,10 +13,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import pytest
+from _serve_helpers import REF_SENTINEL, THR_SENTINEL, patch_loaders, setup_alias
 
 import sepsis.serve.app as serve_app
-from _serve_helpers import patch_loaders, setup_alias, REF_SENTINEL, THR_SENTINEL
 
 
 def test_drift_first_loads_via_alias_not_serve_bundle_dir(tmp_path, monkeypatch):

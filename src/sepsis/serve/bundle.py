@@ -56,11 +56,11 @@ class Bundle:
     fill_mean: np.ndarray
     clip_lo: np.ndarray
     clip_hi: np.ndarray
-    model: "GRUm2m"
+    model: GRUm2m
 
 
-def _freeze(a: "np.ndarray") -> "np.ndarray":
-    import numpy as np   # lazy(serve 번들 로드 전용)
+def _freeze(a: np.ndarray) -> np.ndarray:
+    import numpy as np  # lazy(serve 번들 로드 전용)
     a = np.asarray(a, dtype=np.float32)
     a.setflags(write=False)   # immutable — serving must not mutate frozen stats
     return a
@@ -68,7 +68,7 @@ def _freeze(a: "np.ndarray") -> "np.ndarray":
 
 def _assemble(run_id: str, meta: dict, z, state_dict) -> Bundle:
     """Build + consistency-check a Bundle from raw pieces (shared by both loaders)."""
-    from sepsis.train.gru import GRUm2m   # lazy: torch 끌어옴 — serve 핫패스에서만(결함 7)
+    from sepsis.train.gru import GRUm2m  # lazy: torch 끌어옴 — serve 핫패스에서만(결함 7)
 
     featureset = meta["featureset"]
     input_dim = int(meta["input_dim"])
@@ -103,8 +103,8 @@ def _assemble(run_id: str, meta: dict, z, state_dict) -> Bundle:
 def load_bundle_from_dir(artifacts_dir) -> Bundle:
     """Load an exported bundle dir (meta.json + pre.npz + model.pt). Used in the container
     (no MLflow). The dir IS one exported run -> atomicity is intrinsic."""
-    import numpy as np   # lazy(serve 번들 로드 전용)
-    import torch         # lazy(결함 7)
+    import numpy as np  # lazy(serve 번들 로드 전용)
+    import torch  # lazy(결함 7)
 
     d = Path(artifacts_dir)
     meta = json.loads((d / "meta.json").read_text())
@@ -121,8 +121,8 @@ def load_bundle(featureset: str = "vitals", *, artifacts_dir: str | None = None,
         return load_bundle_from_dir(artifacts_dir)
 
     import mlflow
-    import numpy as np   # lazy(serve 번들 로드 전용)
-    import torch         # lazy(결함 7)
+    import numpy as np  # lazy(serve 번들 로드 전용)
+    import torch  # lazy(결함 7)
     from mlflow.artifacts import download_artifacts
 
     tracking_uri = tracking_uri or f"sqlite:///{C.ROOT}/mlflow.db"

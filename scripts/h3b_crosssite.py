@@ -19,7 +19,8 @@ import numpy as np
 import torch
 
 from sepsis import config as C
-from sepsis.data import cache as cache_mod, split as split_mod
+from sepsis.data import cache as cache_mod
+from sepsis.data import split as split_mod
 from sepsis.eval import crosssite, official_compat
 from sepsis.train import gru, tree
 

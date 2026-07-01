@@ -18,8 +18,8 @@ import os
 import re
 
 import pytest
-
 from conftest import make_validation
+
 from sepsis.retrain import deploy
 from sepsis.retrain.validate import ValidationResult
 

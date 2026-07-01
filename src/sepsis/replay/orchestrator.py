@@ -12,8 +12,8 @@ httpx.Client 는 스레드 안전).
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Callable
 
 from sepsis.replay.engine import RowSource, Sender, replay_stream
 

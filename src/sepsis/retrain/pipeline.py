@@ -15,7 +15,9 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from sepsis import config as C
-from sepsis.data import cache as cache_mod, class_balance, missing, normalize, split as split_mod
+from sepsis.data import cache as cache_mod
+from sepsis.data import class_balance, missing, normalize
+from sepsis.data import split as split_mod
 from sepsis.serve.bundle import load_bundle
 from sepsis.train import gru
 

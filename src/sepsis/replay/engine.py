@@ -13,7 +13,8 @@ sleep 의미(§3.1): 행 0 은 즉시 전송, 행 1..T-1 은 각각 전송 **전
 from __future__ import annotations
 
 import time
-from typing import Callable, Iterator, Protocol
+from collections.abc import Callable, Iterator
+from typing import Protocol
 
 
 class RowSource(Protocol):

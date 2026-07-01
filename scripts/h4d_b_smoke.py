@@ -7,10 +7,8 @@
 
 from __future__ import annotations
 
-import ast
 import json
 import sys
-from pathlib import Path
 
 import numpy as np
 from fastapi.testclient import TestClient

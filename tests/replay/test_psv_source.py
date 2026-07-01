@@ -23,7 +23,6 @@ from __future__ import annotations
 from sepsis import config as C
 from sepsis.replay.psv_source import PsvRowSource
 
-
 VITALS = C.featureset_columns("vitals")  # 9 cols, no labs/EtCO2/label
 
 

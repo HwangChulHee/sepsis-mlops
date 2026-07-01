@@ -87,7 +87,6 @@ def run_search(model_name: str, score_fn, *, n_trials: int, seed: int,
     Each trial uses an independent rng (seed, trial) so runs are reproducible and the
     budget (n_trials) is identical across models.
     """
-    base = np.random.default_rng(seed)
     trials: list[TrialResult] = []
     best: TrialResult | None = None
     for k in range(n_trials):

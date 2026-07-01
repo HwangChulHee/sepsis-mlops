@@ -143,9 +143,9 @@ def console(tmp_path, monkeypatch):
     구현이 없으면 이 fixture import 에서 RED(ModuleNotFoundError) — 정상.
     """
     # lazy import: 미구현 시 세션 전체가 아니라 *이 fixture 를 쓰는 테스트*만 RED
-    from sepsis.retrain import deploy
     import sepsis.console.service as service
     from sepsis.console.audit import AuditStore
+    from sepsis.retrain import deploy
 
     artifacts = tmp_path / "artifacts"
     artifacts.mkdir()

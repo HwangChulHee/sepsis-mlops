@@ -36,7 +36,7 @@ class DriftWindow:
 
     def patient_summary(self) -> np.ndarray:
         """(n_patients, F): per-patient last observed value (ffill end-state) — reference unit."""
-        groups: "OrderedDict[str, list]" = OrderedDict()
+        groups: OrderedDict[str, list] = OrderedDict()
         for pid, row in self._buf:
             groups.setdefault(pid, []).append(row)
         rows = [missing.ffill(np.vstack(rs))[-1] for rs in groups.values()]

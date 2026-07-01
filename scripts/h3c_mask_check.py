@@ -23,7 +23,9 @@ import numpy as np
 import torch
 
 from sepsis import config as C
-from sepsis.data import cache as cache_mod, class_balance, missing, normalize, split as split_mod
+from sepsis.data import cache as cache_mod
+from sepsis.data import class_balance, missing, normalize
+from sepsis.data import split as split_mod
 from sepsis.eval import threshold
 from sepsis.train import gru
 from sepsis.util.progress import ProgressLogger
@@ -65,6 +67,7 @@ def build_seqs(raw_list, fill_mean, mu, sigma, lo, hi, mask_on):
 def score(model, data, tau):
     """(utility@tau, masked PR-AUC, unmasked PR-AUC) — padding excluded for masked."""
     from sklearn.metrics import average_precision_score
+
     from sepsis.data import sequence
     per_labels, per_probs, masked, _ = gru.evaluate(model, data, BATCH)
     util = threshold.utility_at(per_labels, per_probs, tau)
@@ -183,7 +186,9 @@ def main() -> int:
             torch.save(res.model.state_dict(), sp)
             mlflow.log_artifact(str(sp), "model")
     except Exception:  # noqa: BLE001
-        import traceback; traceback.print_exc(); mlflow_ok = False
+        import traceback
+        traceback.print_exc()
+        mlflow_ok = False
 
     # ---------------- PASS gate (5) ----------------
     lines, ok = [], True

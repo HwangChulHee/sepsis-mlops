@@ -22,9 +22,10 @@ def _fresh_session(db_path):
     리스너는 sqlalchemy.orm.Session 전역에 걸리므로(handoff:85·91) 어떤 세션이든 지배된다.
     [검증 필요] 선행: audit.Base(declarative base)·audit.AuditEvent 가 export 됨(handoff:55).
     """
-    import sepsis.console.audit as audit_mod  # import 시 두 훅 등록
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
+
+    import sepsis.console.audit as audit_mod  # import 시 두 훅 등록
 
     engine = create_engine(f"sqlite:///{db_path}")
     audit_mod.Base.metadata.create_all(engine)  # DDL(엔진 경로) — 훅 무관

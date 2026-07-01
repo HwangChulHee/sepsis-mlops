@@ -14,7 +14,8 @@ import numpy as np
 from fastapi.testclient import TestClient
 
 from sepsis import config as C
-from sepsis.data import cache as cache_mod, split as split_mod
+from sepsis.data import cache as cache_mod
+from sepsis.data import split as split_mod
 from sepsis.serve import simulator
 from sepsis.serve.app import app
 from sepsis.serve.bundle import load_bundle

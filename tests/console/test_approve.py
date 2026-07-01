@@ -20,7 +20,7 @@ def test_approve_rejects_incomplete_without_ready(console):
     # 여기선 "예외 발생 + swap/audit 미발생" 계약만 고정.
     console.fd.set_active("vitals", "gru_vitals@v1")
     v2, _ = console.mk("v2", ready=False)  # .ready 없음 = 미완성
-    with pytest.raises(Exception):
+    with pytest.raises((ValueError, FileNotFoundError, PermissionError)):
         console.service.approve("vitals", v2, actor="op")
     assert console.fd.swap_calls == [], "미완성 후보가 swap 까지 도달했다(.ready 게이트 누락)"
     assert console.store.query(featureset="vitals") == [], "거부됐는데 감사가 기록됨"

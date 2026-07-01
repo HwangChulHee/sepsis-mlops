@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from sepsis import config as C
-
 
 def missing_mask(raw: np.ndarray) -> np.ndarray:
     """1 = observed, 0 = missing. Built from RAW NaN positions (must precede ffill)."""

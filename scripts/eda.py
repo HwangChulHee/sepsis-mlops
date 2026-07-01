@@ -152,8 +152,6 @@ def main() -> int:
         if (i + 1) % 5000 == 0:
             print(f"  ...processed {i + 1}/{len(files)} files", file=sys.stderr)
 
-    n_parsed = total_rows and (len(files) - len(bad_header_files))
-
     # ---- consolidate ----
     seq = np.array(seq_lengths)
     fpi = np.array(first_pos_iculos)
@@ -395,7 +393,6 @@ def write_markdown(nA, nB, n_total, total_rows, n_bad, ic_ok, ic_n, miss_table,
       "should be **patient-grouped and ideally site-aware**.\n")
 
     a("## Implications for the smoke pipeline")
-    p90 = sl["p90"]
     a(f"- **Window size**: median patient length is **{sl['median']:.0f}h**; a window of "
       f"**~8–12h** keeps the large majority of patients "
       f"({100*(seq>=12).sum()/len(seq):.0f}% have ≥12h) while staying short enough for "

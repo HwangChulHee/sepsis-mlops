@@ -210,3 +210,52 @@
 - **라운드 3 = 규칙상 마지막 라운드. blocker>0 → 자동 통과 불가. 사람 에스컬레이션(푸시 보류).** 사람 판단 지점: B-R3-1을 설계부에 반영(best_iter 의존 명시)할지, 예외적으로 핸드오프 범위로 위임할지. (레드팀 권고: `.ubj`·`tau`와 동급 의존이므로 설계부 반영이 정합.) M-R3-1은 같은 보완 라운드에서 함께 처리 권장.
 
 > **[reviser 라운드 3(round 4 커밋) 종료]** 사람이 3라운드 캡을 예외 승인한 마지막 보완 라운드. 지정 항목만 근본 해소(범위 확장 없음): blocker **B-R3-1**(best_iter를 `.ubj`·`tau`와 동급 의존으로 설계부 반영 — 결정 2 3항 + PASS 게이트 1), major **M-R3-1**(XGB 히스토그램 경계를 버퍼→lookback_summary+booster.predict로 GRU와 대칭 — 결정 3 + PASS 게이트 2), minor **mn-R3-1**(제목). 모든 새 사실 주장은 코드 직접 대조분만 [확인됨](`train/tree.py:69-75`·`crosssite.py:60,65`·`h3b_crosssite.py:144,158,162`·`h2b_train_trees.py:183,189`·`predictor.py:44`·preprocess.json keys 실측) — 거짓 [확인됨] 없음. 다음 redteam이 대조 요망: best_iter 의존이 결정 2 lookback 버퍼 계약·부속결정과 모순 없이 일관화됐는지, XGB 히스토그램 경계 대칭이 NB1 잔차 분해와 정합한지.
+
+---
+
+## 라운드 4
+
+- 대상 commit: `320a8c0` (main) — decisions.md **v4** (reviser 보완)
+- 검토일: 2026-07-01
+- 범위: 라운드 3 잔여 blocker **B-R3-1**(best_iter 의존·소스)·major **M-R3-1**(XGB 히스토그램 경계 대칭)과 그 파급만
+- 판정: **HOLD — blocker 1건 (신규, B-R4-1).** 사람이 캡을 예외 승인한 최종 검증 라운드이나 B-R3-1의 **소스 식별부**가 저장소 상태와 모순.
+
+### 라운드 3 잔여 항목 재판정 (코드·아티팩트 직접 대조)
+
+- **B-R3-1 (best_iter 의존 식별) → 부분 해소 / 새 blocker.**
+  - **의존 식별부 = 해소됨.** "챔피언 재구성은 전체 트리가 아니라 best_iteration까지, `iteration_range=(0, best_iter+1)` 절단"은 코드와 정확 [확인됨: `train/tree.py:74-75` `rng = (0, int(best_iter)+1) if best_iter and best_iter >= 0 else None` → `booster.predict(..., iteration_range=rng)`]. 채점 경로 주입 정합 [확인됨: `eval/crosssite.py:60,65`]. **PASS.**
+  - **소스 식별부 = 미해소 → B-R4-1.** 지목 소스(run metric `metrics.best_iter`)가 저장소에 영속돼 있지 않고, ".ubj에도 없다 [확인됨]"이 .ubj 임베드 `best_iteration`과 모순.
+- **M-R3-1 (XGB 히스토그램 경계 대칭) → 해소됨.** GRU `predict()`가 전처리 내포 정확 [확인됨: `predictor.py:44` `z = self.pre.step(pid, row)`가 predict 내부, `preprocess_rt.py:45-49` ffill→fill_mean→clip→z]. XGB 경계를 "버퍼→lookback_summary 재구성 + booster.predict(절단)"로 잡는 것은 GRU와 동형 경계 — 비용차(GRU 고정 O(F) vs XGB 8행 7종 통계)는 측정 대상 그 자체이지 경계 비대칭 아님. **PASS.**
+- **mn-R3-1 (제목) → 해소됨** [확인됨: `decisions.md:1`].
+
+### PASS (라운드 4에서 재확인)
+
+- v4 코드 인용 [확인됨] 대부분 정합: `train/tree.py:69-75`(절단식), `eval/crosssite.py:60,65`(주입), `h2b_train_trees.py:183`(best_iter를 metric으로만 로깅)·`:189`(preprocess.json = featureset/scale_pos_weight/tau/hp/note, best_iter 없음)·`:99`(네이티브 부스터 저장), `h3b_crosssite.py:144`(run metric 조회), `predictor.py:44`, `.ubj` 실재·`deploy/artifacts/` GRU 별칭만 — 전부 대조 통과.
+- best_iter 의존(트리 절단)과 NB2 lookback 버퍼(입력 재구성)는 직교 독립 의존으로 모순 없이 공존 [확인됨: `decisions.md:58,83`].
+- PASS 게이트 2 개정이 결정 3과 일치, 다른 게이트와 모순 없음.
+
+### blocker
+
+#### B-R4-1. best_iter의 지목 소스(run metric)가 저장소에 영속돼 있지 않고, ".ubj에도 없다 [확인됨]"이 미검증·모순 — 챔피언 재구성 입력의 영속 흐름 단절
+- **항목**: 결정 2 "★XGB 아티팩트·전처리 소스 식별" 3항(`decisions.md:58`) · PASS 게이트 1(`:141`)
+- **문제**: v4는 best_iter 소스를 "run metric `metrics.best_iter` — `.ubj`에도 `preprocess.json`에도 **없다**"로 [확인됨] 단정하고 이를 XGB 서빙의 유일 조회 소스로 못박았다. 그러나 (1) 이 저장소 mlruns run 디렉토리는 `artifacts/`만 존재, `metrics/`·`meta.yaml` 부재 → 지목한 metric이 **영속 안 됨**. (2) `.ubj` 두 파일 모두 `best_iteration`을 **임베드** → ".ubj에도 없다 [확인됨]"은 미검증·사실 반대.
+- **근거**:
+  - run metric 부재: `mlruns/1/3e21f380…/` 하위 = `.ubj` + `preprocess.json` 2개뿐 [확인됨: Glob]. `metrics/`·`meta.yaml` 없음, `grep best_iter mlruns/` = 0건 [확인됨].
+  - h3b 자신도 이 metric 스토어에 의존(`h3b_crosssite.py:139` search_runs → `:144` `r.get("metrics.best_iter")`) — H3 실행 당시엔 full 스토어, 저장소엔 artifacts-only로 pruned. 지금 재현 불가.
+  - `.ubj` 임베드: `h2b_train_trees.py:99` 네이티브 부스터 저장 → `grep best_iteration …/xgboost_vitals.ubj` = 1건, `…_labs.ubj` = 1건 [확인됨]. XGBoost 네이티브 저장은 best_iteration을 learner attribute로 보존 → **.ubj에서 복구 가능**.
+  - 다른 영속 소스 없음: 비-mlruns에서 best_iter는 코드 파일에만, 값 담은 산출물 없음 [확인됨].
+- **왜 blocker**: (1) **거짓/미검증 [확인됨] 재발** — ".ubj에도 없다" 근거가 .ubj를 검사 안 했고 실제론 임베드. 라운드 1 B1과 동형. (2) **영속 흐름 단절** — 챔피언 재구성의 load-bearing 입력 best_iter가 지목 소스(run metric)에 없어, 핸드오프가 설계대로 "run metric 조회"를 구현하면 이 저장소에서 아무 값도 못 얻음. 값이 있는 유일 장소(.ubj attribute)를 "없다"고 오배제. (3) 구현 디테일 아닌 **소스 식별**(설계부 몫) — B-R3-1이 고친다던 부분이 여전히 틀림.
+- **제안**: 결정 2 3항·게이트 1 소스 서술 정정. (a) `.ubj` 임베드 `best_iteration` attribute를 1차 소스로 확정(booster에서 직접 복구, run 스토어 불필요)하거나, (b) run metric 유지 시 커밋된 mlruns가 artifacts-only로 pruned되어 `metrics.best_iter`가 현재 저장소에 없음을 명시하고 복구 경로(.ubj attr vs H2 재실행 vs 스토어 복원)를 의존으로 식별. 어느 쪽이든 미검증 "`.ubj`에도 없다 [확인됨]"은 삭제/교체.
+
+### major
+- 없음. (M-R3-1 해소됨.)
+
+### minor
+- **mn-R4-1.** `tree.py:74` 절단은 `if best_iter and best_iter >= 0`일 때만, falsy/음수면 `None`(전체 트리) 폴백. 챔피언 best_iter는 양수라 실무 영향 없으나, B-R4-1 정정 시 "주입 best_iter가 유효 양수임"을 서빙 계약에 명시하면 무성 전체-트리 추론 방지.
+
+### 판정
+
+**라운드 4 blocker 1건(B-R4-1) → HOLD.**
+- M-R3-1(major)·B-R3-1 의존 식별부 = 해소됨.
+- 그러나 B-R3-1 **소스 식별부**가 미해소 — 지목 소스(run metric)가 저장소에 영속 안 됨 + ".ubj에도 없다 [확인됨]"이 .ubj 임베드 best_iteration과 모순. B-R3-1 보완이 만든 새 결함(B-R4-1).
+- **blocker 0 아님 → PASS 불가.** 사람 재에스컬레이션.

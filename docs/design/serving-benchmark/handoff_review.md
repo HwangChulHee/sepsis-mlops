@@ -78,3 +78,47 @@
 ### 판정
 
 **blocker 3건 (B1 §A3-a 골든/오라클 부재, B2 §A3-b 실패경로 트리거 불가, B3 §A4 관측불가+누수) → HOLD.** 공통 뿌리: §A 도입부 단언과 달리 A3·A4 load-bearing 성공기준이 화이트박스. 해결: (i) 관측 가능한 골든/훅을 §A에 제공, 또는 (ii) 해당 요구를 §B(main-소유 characterization)로 재배치하고 §A엔 관측 기준만. §A2-c 패딩·clip skew는 정합(PASS).
+
+---
+
+## 라운드 2
+
+- 대상 commit: `f14da48` 작업트리 (reviser R1 수정 후)
+- 검토일: 2026-07-01
+- 핵심 질문: R1 blocker(B1·B2·B3) 실제 해소 + 새 결함/누수 여부. 판정 = 기계적 실행 / 블랙박스 검증 / 출제자(§A)-응시자(§B) 분리.
+- 판정: **PASS (blocker 0). major 1 · minor 2.**
+
+> **[지휘자 독립 검증 — 골든 재현 공백 종결]** redteam 환경엔 Bash가 없어 골든 `p`값을 실행 재현 못 했다(중대 고지). **지휘자가 `.venv/bin/python`(xgboost 3.3.0)으로 직접 재현**해 이 load-bearing 공백을 닫았다 [확인됨]:
+> - vitals: A3-a 절단 `0.7098076`(핸드오프 0.70981 ✓), 비절단 `0.6923320`(0.69233 ✓), A2-a X단독 `0.6486735`(0.64867 ✓), alarm=true ✓.
+> - vitals_labs: 절단 `0.8335611`(0.83356 ✓), 비절단 `0.8228457`(0.82285 ✓, gap 0.01072), alarm=true ✓.
+> - 저장소 함수 그대로 사용(`config.FEATURESET_VITALS(_LABS)` 열순서, `features.lookback_summary`, `.ubj` `best_iteration`=105/149, `preprocess.json` tau). **골든 상수 5개 전부 정확 일치** → reviser 단일 [확인됨]이 아니라 독립 재현으로 확증됨.
+
+### R1 blocker 판정
+
+- **B1(§A3 골든 부재) → 해소됨.** §A3에 골든 시퀀스 `S_vitals`(9키 5행)가 관측 request payload로 완전 기입(`handoff.md:59-67`), 마지막 응답 기대값 `p=0.70981±1e-4, alarm=true`(`:71`), 감별력 비절단 ≈0.69233(gap 0.0175 ≫ eps). 시퀀스 명세 완전 — spec-writer가 src 없이 5회 POST 후 마지막 p 대조 RED 작성 가능. 산출 코드경로는 §B3.1에만. **지휘자 재현으로 상수값도 확증.**
+- **B2(§A3-b 죽은 계약) → 해소됨.** `SEPSIS_XGB_BEST_ITER_OVERRIDE` 관측 계약(무효값→기동 실패 or 5xx, 200+전체트리 무성 폴백=FAIL, `handoff.md:82-85`), 배선 §B3.2. spec-writer가 env만으로 §B 없이 실패경로 발동 가능. `grep best_iter mlruns/`=0 확인 → env 오버라이드가 유일 실패 트리거라는 근거 사실.
+- **B3(§A4 관측불가+누수) → 해소됨.** §A4가 A4-a(지표 등록)+A4-b(/predict N회→count 정확히 N 증가) 2개 관측 기준으로 재명세(`handoff.md:87-96`), "재구성 포함" 내부 타이머 경계는 §A 삭제→§B5 이관(`:96,152-156`). `metrics.record`가 `LATENCY.observe`를 호출당 1회(`metrics.py:45-46`) → A4-b GREEN 가능.
+
+### PASS
+
+- **골든 정적 정합** — tau 아티팩트 정확 일치(vitals `0.5467824…`, vitals_labs `0.4925572…` = preprocess.json), best_iter 산술(105→총136, 149→총180), 열순서·차원(9→63, 18→126). **+ 지휘자 실행 재현으로 부동소수값까지 확증.**
+- **§B 코드 라인 참조 전수 정확** — `tree.py:69-75,74`, `predictor.py:5-7,29-34,43`, `metrics.py:18`, `app.py:96-98,77-79,103-104` 대조 정확. 거짓 [확인됨] 없음.
+- **§A 화이트박스 리터럴 누수 없음(신규 없음)** — §A에 골든 상수·env 이름을 들였으나 파일/함수/라인 리터럴 없음. env 이름은 문서화된 운영 스위치(관측 인터페이스)라 위반 아님.
+- **A2-a 강제 어서션 성립** — X단독 0.64867 vs 이력후 0.70981(gap 0.061 ≫ eps), 같으면 FAIL. **지휘자 재현 확인.**
+- **M1(스레드 안전) 정합** — §B2가 GRU per-patient lock 패턴 정확 참조 + replicas=1·Redis 실패모드 명시.
+
+### major
+
+- **M-R2-1 — 골든을 지탱하는 버전 핀이 오기재·부유(floating), 결정론 논증 편도.**
+  - **문제**: §B3.1(`handoff.md:139`)·§B1(`:117`)이 결정론 근거로 "requirements/.venv 핀"을 드나 **`requirements*.txt`는 부재**(Glob 확인), `pyproject.toml:19`는 `xgboost>=3.3.0`(부유 하한, `==` 아님). 실효 핀은 `uv.lock`(3.3.0)뿐인데 문서가 이를 안 가리킴 → pip/pyproject 경로 설치 시 상위 버전이 들어와 eps 1e-4 이탈 여지. 또 결정론 논증이 "eps < 감별 gap 0.0107"(상한)만 보이고, eps가 플랫폼/BLAS/패치 지터보다 큰가(하한)는 미논증.
+  - **근거**: `pyproject.toml:19`(`>=3.3.0`), `uv.lock`(resolved 3.3.0), requirements 부재, `handoff.md:139`.
+  - **제안**: §B에 실효 핀 명시 — "골든 RED는 `uv run`/`uv.lock`(xgboost==3.3.0) 락 환경에서만" 또는 pyproject를 `==3.3.0`으로. 그리고 spec-writer가 상수 하드코딩 전 실행자가 골든 1회 재산출·확정하도록 명시. (**지휘자가 이 재산출을 이미 수행 — 5개 상수 일치 확인.** 남은 건 핀 문서 정정.)
+
+### minor
+
+- **mn-R2-1 §A/§0 개념 누수 잔존(R1 mn1 동종, 신규 아님)**: §A3-b·§0의 "best_iter 절단", A2-c "8행 미만/NaN-aware", A2 "lookback 요약"이 구현 개념 노출. 성공기준은 전부 p/count 관측으로 환원돼 블로킹 아님. 오리엔테이션 이상은 트림 권장.
+- **mn-R2-2 A3-a 감별력이 "절단 유무" 단일 축**: 골든 대조는 characterization이라 절단 외 오류가 우연히 0.70981±1e-4 착지하면 거짓 통과 가능(본질적 한계). 필요시 중간 행 골든 1개 추가로 궤적 고정(선택).
+
+### 판정
+
+**라운드 2 blocker 0건 → PASS.** R1 blocker 3건 모두 해소, 새 누수 없음, §B 코드참조 전수 정확. **골든 load-bearing 공백은 지휘자 독립 재현으로 종결(5개 상수 일치).** 남은 major M-R2-1(버전 핀 오기재·부유)은 blocker 아니나 CI 재현성 위해 정정 권장. minor 2건.

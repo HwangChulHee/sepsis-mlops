@@ -124,6 +124,30 @@ SUITES = [
              "sigmoid 누락(로짓을 확률로)"),
         ],
     },
+    {
+        "name": "eval/utility (공식 스코어러 등가성)",
+        "tests": ["tests/eval/test_official_equivalence.py"],
+        "muts": [
+            ("src/sepsis/eval/utility.py", "U_FP = -0.05", "U_FP = -0.5",
+             "FP 벌점 상수 변조(공식과 어긋남)"),
+            ("src/sepsis/eval/utility.py", "MIN_U_FN = -2.0", "MIN_U_FN = -1.0",
+             "FN 벌점 상수 변조"),
+            ("src/sepsis/eval/utility.py", "return int(np.argmax(labels)) - DT_OPTIMAL",
+             "return int(np.argmax(labels)) + DT_OPTIMAL", "onset 오프셋 부호 오류"),
+        ],
+    },
+    {
+        "name": "retrain/promote (승격 결정)",
+        "tests": ["tests/retrain/test_promote.py"],
+        "muts": [
+            ("src/sepsis/retrain/promote.py", "if persisted >= persistence:",
+             "if persisted > persistence:", "지속성 경계 off-by-one(투자권고 지연)"),
+            ("src/sepsis/retrain/promote.py",
+             'if d.get("dataset_drift_share", 0.0) > share_threshold:',
+             'if d.get("dataset_drift_share", 0.0) >= share_threshold:',
+             "임계 strict-greater 약화(경계값 오발동)"),
+        ],
+    },
 ]
 
 

@@ -84,6 +84,11 @@ source = ["sepsis"]
 branch = true
 data_file = "var/.coverage"       # 커버리지 데이터도 var/ 아래로(루트 정리)
 
+[tool.coverage.report]
+# 회귀 floor(품질 바가 아님 — 품질 바는 뮤테이션 하네스다). 커버리지가 실수로 이 밑으로
+# 떨어지면 CI 실패. 현재 ~57% → 여유 두고 55. 커버리지가 오르면 이 값도 래칫으로 올릴 것.
+fail_under = 55
+
 # PyPI stays the default index; the pytorch CPU index is used ONLY for torch.
 [[tool.uv.index]]
 name = "pytorch-cpu"

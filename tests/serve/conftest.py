@@ -29,12 +29,29 @@ def _build_xgb_client(featureset: str, env: dict | None = None):
       - 각 호출은 **버퍼가 비어있는 새 앱 인스턴스**를 준다(환자 버퍼 격리를 위해
         테스트 간 상태가 새지 않아야 한다 — fixture가 function-scoped인 이유).
 
-    구현 전에는 아래처럼 명시적으로 미구현을 알린다 → RED.
+    구현 단계(main): 아래처럼 실제 XGB 앱에 연결한다.
     """
-    raise NotImplementedError(
-        "XGB serving not implemented — main wires _build_xgb_client "
-        f"(featureset={featureset!r}, env={env!r})"
-    )
+    import os
+
+    from fastapi.testclient import TestClient
+
+    from sepsis.serve.xgb_app import build_app
+
+    old: dict[str, str | None] = {}
+    if env:
+        for k, v in env.items():
+            old[k] = os.environ.get(k)
+            os.environ[k] = v
+    try:
+        app = build_app(featureset)   # 무효 override면 여기서 RuntimeError (A3-b 기동 실패)
+    finally:
+        if env:
+            for k, prev in old.items():
+                if prev is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = prev
+    return TestClient(app)
 
 
 @pytest.fixture

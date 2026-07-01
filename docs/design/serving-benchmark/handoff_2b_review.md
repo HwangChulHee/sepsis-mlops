@@ -105,16 +105,31 @@
 - **근거**: `handoff_2b:151,169` vs handoff_2a `:52,80`(LATENCY 불변), decisions.md:35(격리 예외=LATENCY 관측 불변), decisions.md에 fine·버킷 재정의 작업 부재. [확인됨]
 - **제안**: (a) fine 버킷을 명시 owner에 귀속(handoff_2a 스코프에 성공기준 추가 or 별도 백로그), A9가 그 owner 지목. 또는 **(b) 서버 분위수를 리포트-only로 두고, load-bearing residual/tax를 버킷 무관 평균(`client_mean − server_mean`)에 태워 A9 고아 제거** — 평균은 `_sum/_count`로 정확·버킷 독립이고 `mean(client)−mean(server)=mean(client−server)`라 페어링 암묵 성립(m-1 unpaired proxy도 개선). 어느 쪽이든 현재 "handoff_2a가 버킷 설정" 문장은 사실이 아니라 유지 불가.
 
+> **[reviser 응답]** 해소(옵션 b 채택): load-bearing 잔차/tax를 버킷 무관 평균에 태워 fine 버킷 의존 자체를 제거. (1) 스키마 `ArmLatency`에 `client_mean`(벽시계 배열 산술평균) 추가, 기존 `server_mean` 유지, `residual`을 `client.p50−server.p50`(분위수차 proxy)에서 **`client_mean − server_mean`(버킷 무관·정확)**으로 재정의(handoff_2b:47-50). tax(`ModelBench.tax`)·A2-a/b/c 불변식을 이 평균 기반 residual 위에 재작성(A2 :106-112, tax 근거 :112). `mean(client)−mean(server)=mean(client−server)`라 per-request 페어링 암묵 성립 → m-1 unpaired proxy도 동시 해소. (2) 분위수(p50/p95/p99)는 **분포 리포트 용도로 강등** — A1-a는 load-bearing 평균+분포 분위수 둘 다 요구(:101), A1-b(client≥server−EPS)는 **분위수 sanity 체크**로만 남김(EPS 유지 :102). §A A0 인트로에 "load-bearing=평균 / 분위수=분포 참고" 명시(:24). (3) **A9 재작성**(:166-168): fine 버킷 handoff_2a 거짓 귀속 삭제, "load-bearing residual/tax는 버킷 무관 평균이라 버킷 정밀도 무관 / 서버 분위수는 default 버킷서 sub-25ms 격자 스냅되는 분포 참고값(EPS로 흡수) / fine 버킷은 어느 핸드오프도 선행조건 아닌 별도 백로그" 명시. handoff_2a 선행 의존은 **arm-2 부가계측 OFF 게이트(`SEPSIS_SERVE_AUX_METRICS`)만** 남기고 버킷 의존 제거(:166). §B2(:186)·§B3(:194)·§B7(:218) 동일 정정. `SEPSIS_SERVE_AUX_METRICS`는 handoff_2a:22,101에 실재 [확인됨].
+
 ### major
 
 - **M-R2-1. A5-c 비수렴 경계 미정의.** "K=20창 p95 ±15% 첫 창"만 정의, 어떤 창도 수렴 안 하면 `steady_state_start` 미정의→집계 시작점 없음. CPU 노이즈로 비수렴 현실적. 입력주입 TDD에서 "비수렴 배열→알려진 산출" 고정 불가. **제안**: 비수렴 폴백 명시(수렴 실패→run FAIL, 또는 "첫 M개 제외" 결정론 폴백).
+
+> **[reviser 응답]** 해소: A5-c에 **비수렴 폴백 3단계** 추가(handoff_2b:124) — run 총 요청 수 안에서 ±15% 이내 창이 하나도 없으면 `steady_state_start == −1` 고정 + 해당 모델 run **명시적 FAIL**(집계 산출 금지, 노이즈 궤적을 정상상태로 오인 배달 방지). "임의 컷 후 진행" 경로는 없음 — 같은 비수렴 배열 → 항상 `steady_state_start=−1`+FAIL 결정론 산출이라 spec-writer가 비수렴 입력→알려진 산출(−1/FAIL)로 RED 고정 가능. `steady_state_start`를 `ModelBench` presence 필드로 노출(:35, m-R2-1과 함께).
+
 - **M-R2-2. A6-c 귀인이 필드 없는 산문 — B-1 잔여 누수.** A6-c(`:130`)가 "featureset vs 아키텍처 기여를 분해 기재"라 하나 A0 스키마에 `attribution` 필드 없음. **제안**: (i) 구조화 `attribution` 필드로 승격 or (ii) "A6-b 수치의 렌더링일 뿐 별도 assert 아님"으로 명시 강등.
+
+> **[reviser 응답]** 해소(옵션 i 채택): `BenchResult`에 `attribution: list[Attribution]`(지표당 1개, 비어있지 않음) 승격(handoff_2b:32), `Attribution` 타입 정의 추가(:73-76) — `featureset_contrib`(**값 검증**: 동일 아키텍처 내 9→18 delta, 예 `xgb.M − control_arm.xgb9.M`), `arch_contrib`(**presence-only**: gru9 vs xgb9, NB2 state 형태차 섞임), `metric`(라벨). A6-c를 산문에서 **필드 assert로 재작성**(:143-146) — `featureset_contrib` 불변식으로 RED 고정, `arch_contrib`는 presence(A4-b(2) 교차-아키텍처 금지와 정합). A4-b의 "값검증 vs presence 정직 구분" 패턴 재사용.
 
 ### minor
 
 - **m-R2-1.** `boot_latency`·`steady_state_start`가 A0 스키마에 없음 — presence 필드로 노출 권고.
+
+> **[reviser 응답]** 해소: `ModelBench`에 `boot_latency: float`(presence, 부팅 비용 대칭)·`steady_state_start: int`(presence, 비수렴 시 −1=FAIL) 추가(handoff_2b:35-36). A5-c(:124)에 "두 필드 presence 노출, spec-writer가 컷 index·부팅비용 필드 assert" 명시.
+
 - **m-R2-2.** `ControlArm.gru9/xgb9` union 타입 `MemoryBreakdown|ModelBench` 모호 — 접근 경로(`.rss` vs `.memory.rss`) 특정 권고.
+
+> **[reviser 응답]** 해소: `ControlArm.gru9/xgb9` union을 **`ModelBench`로 확정**, 접근 경로 `.memory.rss` 특정(handoff_2b:69-71). A4-b(2) `:123`·§B4 `:184`도 `control_arm.xgb9.memory.rss`로 일치.
+
 - **m-R2-3.** `control_arm.gru9`와 배포 `gru` 중복(둘 다 vitals9) — "gru9는 gru 별칭/재기재" 1줄 명시.
+
+> **[reviser 응답]** 해소: 스키마 주석(handoff_2b:69-70)·§B6(:212)에 "GRU는 배포=통제 동일 featureset(둘 다 vitals9)이라 `control_arm.gru9`는 배포 `gru`의 별칭/재기재(featureset delta=0), 별도 arm 불필요" 명시. featureset 축(A6-c `featureset_contrib`)이 XGB(9→18)에서만 실측되는 이유로 연결.
 
 ### 판정
 

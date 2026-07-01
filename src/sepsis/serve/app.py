@@ -99,7 +99,10 @@ def predict(req: PredictRequest) -> dict:
                    patient_id=req.patient_id)   # 환자별 최신 위험도 Gauge(옵트인) — 라운드 다
     # H4d-b: collect (patient_id, raw_row) for drift monitoring — separate store from the
     # predictor's per-patient hidden state; light (no evidently). Serving behavior unchanged.
-    get_window().add(req.patient_id, row)
+    # ★ 2A 관측성 게이트(NB3): drift 윈도우 적재는 부가 계측이므로 aux 게이트에 묶는다
+    # (예측/응답/LATENCY 는 불변 — 격리 예외는 관측성 한정).
+    if metrics._aux_metrics_enabled():
+        get_window().add(req.patient_id, row)
     return {"patient_id": req.patient_id, "p": out["p"], "alarm": out["alarm"],
             "featureset": s["bundle"].featureset}
 

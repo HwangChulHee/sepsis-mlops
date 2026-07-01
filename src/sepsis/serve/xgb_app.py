@@ -28,6 +28,7 @@ from pydantic import BaseModel
 
 from sepsis import config as C
 from sepsis.data import features as F
+from sepsis.drift.window import get_window
 from sepsis.serve import metrics
 from sepsis.train import tree
 
@@ -79,11 +80,15 @@ class PredictRequest(BaseModel):
     features: dict[str, float | None]   # absent/null feature -> NaN (no 0-fill)
 
 
-def build_app(featureset: str = "vitals") -> FastAPI:
+def build_app(featureset: str = "vitals", *, metrics_set=None) -> FastAPI:
     """featureset(=vitals|vitals_labs)용 XGB 최소 서빙 앱을 새로 만든다.
 
     **매 호출이 빈 버퍼의 독립 인스턴스**를 준다(테스트 간 환자 상태 격리). 무효
     best_iter override면 여기서(기동 시) `RuntimeError`를 던진다 — A3-b의 "기동 실패".
+
+    `metrics_set`(2A): 인스턴스별 `MetricSet`(fresh 레지스트리)을 주면 그것으로 관측·
+    `/metrics` 렌더 → 부가계측 시계열이 다른 인스턴스와 격리된다. 안 주면 전역 기본.
+    관측성 게이트(`SEPSIS_SERVE_AUX_METRICS`)는 **기동 시점에 캡처**해 요청마다 적용한다.
     """
     if featureset not in _DEFAULT_MODEL_DIRS:
         raise ValueError(f"unknown featureset {featureset!r}")
@@ -92,6 +97,8 @@ def build_app(featureset: str = "vitals") -> FastAPI:
     booster = tree.load_booster("xgboost", str(mdir / "model" / f"xgboost_{featureset}.ubj"))
     tau = float(json.loads((mdir / "preprocess.json").read_text())["tau"])
     best_iter = _resolve_best_iter(booster)  # may raise -> 기동 실패 (A3-b)
+    ms = metrics_set if metrics_set is not None else metrics._DEFAULT
+    aux_on = metrics._aux_metrics_enabled()  # 기동 시점 캡처(2A 게이트)
 
     # per-instance 상태 (module-global 아님 → 인스턴스마다 빈 버퍼)
     buffers: dict[str, deque] = {}
@@ -139,9 +146,12 @@ def build_app(featureset: str = "vitals") -> FastAPI:
             p = float(tree.booster_predict(booster, "xgboost", last, best_iter)[0])
             latency = time.perf_counter() - t0
         alarm = bool(p >= tau)
-        # 공유 metrics.record 재사용 → serve_predict_latency_seconds 관측(A4) + per-feature
-        # 입력분포(2차 계측 표면과 동형). observe(latency)는 위 경계값을 그대로 관측.
-        metrics.record(latency, p, alarm, row, cols, patient_id=req.patient_id)
+        # 공유 MetricSet.record → serve_predict_latency_seconds 관측(A4) + per-feature 입력분포
+        # (2A 부가계측 표면, aux 게이트 대상). observe(latency)는 위 경계값을 그대로 관측.
+        ms.record(latency, p, alarm, row, cols, patient_id=req.patient_id, aux=aux_on)
+        # ★ 2A 부가계측 표면 — drift 윈도우 적재(GRU와 동형, aux 게이트 대상).
+        if aux_on:
+            get_window().add(req.patient_id, row)
         return {"patient_id": req.patient_id, "p": p, "alarm": alarm, "featureset": featureset}
 
     @app.get("/health")
@@ -150,7 +160,7 @@ def build_app(featureset: str = "vitals") -> FastAPI:
 
     @app.get("/metrics")
     def metrics_endpoint():
-        body, content_type = metrics.render()
+        body, content_type = ms.render()
         return Response(content=body, media_type=content_type)
 
     return app

@@ -115,11 +115,41 @@ def _build_gated_client(kind: str, env: dict | None = None):
 
     반환 객체는 최소한 `.post(path, json=...)` 와 `.get(path)` 를 지원한다
     (FastAPI TestClient 또는 httpx 클라이언트). /metrics·/predict 경로를 노출한다.
+
+    구현 단계(main): 각 인스턴스에 **fresh CollectorRegistry**를 준 `MetricSet`으로
+    격리하고, kind 에 맞는 앱 팩토리에 연결한다. 게이트는 앱 기동 시점에 env 를
+    캡처하므로, env 를 세팅→기동→복원해도 캡처값이 유지된다(누수 없음).
     """
-    raise NotImplementedError(
-        "관측성 게이트 서빙 seam 미구현(2A §B): main이 kind∈{'gru','xgb'} 서빙 앱을 "
-        "인스턴스별 fresh(격리된) 부가계측 레지스트리와 함께 연결해야 한다."
-    )
+    import os
+
+    from fastapi.testclient import TestClient
+    from prometheus_client import CollectorRegistry
+
+    from sepsis.serve import metrics as _metrics
+
+    old: dict[str, str | None] = {}
+    if env:
+        for k, v in env.items():
+            old[k] = os.environ.get(k)
+            os.environ[k] = v
+    try:
+        ms = _metrics.MetricSet(registry=CollectorRegistry())   # ★ 인스턴스별 격리
+        if kind == "xgb":
+            from sepsis.serve.xgb_app import build_app
+            app = build_app("vitals", metrics_set=ms)
+        elif kind == "gru":
+            from sepsis.serve.bench_app import build_gru_app
+            app = build_gru_app(metrics_set=ms)
+        else:
+            raise ValueError(f"unknown kind {kind!r}")
+    finally:
+        if env:
+            for k, prev in old.items():
+                if prev is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = prev
+    return TestClient(app)
 
 
 def _sample_request(kind: str, patient_id: str = "obs-gate", step: int = 0) -> dict:
@@ -136,10 +166,22 @@ def _sample_request(kind: str, patient_id: str = "obs-gate", step: int = 0) -> d
 
     미구현: NotImplementedError.
     """
-    raise NotImplementedError(
-        "샘플 /predict payload seam 미구현(2A §B): main이 kind 에 맞는 유효 요청을 "
-        "채워야 한다 (GRU featureset / XGB 9·18키)."
-    )
+    # gru/xgb 게이트 인스턴스는 둘 다 featureset=vitals(9키)로 배선(_build_gated_client).
+    # step 으로 생리값을 결정론적으로 진행시켜 상태 누적을 유발(A2-b) — 같은 (kind,pid,step)
+    # 은 항상 같은 payload.
+    s = float(step)
+    features = {
+        "HR": 80.0 + 4.0 * s,
+        "O2Sat": 98.0 - 0.6 * s,
+        "Temp": 37.0 + 0.25 * s,
+        "SBP": 120.0 - 3.0 * s,
+        "MAP": 85.0 - 2.0 * s,
+        "DBP": 70.0 - 1.5 * s,
+        "Resp": 16.0 + 1.2 * s,
+        "Age": 64.0,
+        "Gender": 1.0,
+    }
+    return {"patient_id": patient_id, "features": features}
 
 
 @pytest.fixture

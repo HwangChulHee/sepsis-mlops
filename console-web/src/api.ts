@@ -88,7 +88,8 @@ export const toDirName = (fs: string, version: string): string =>
 
 // 읽기 응답도 상태코드 검사: 422/403 이면 detail 을 표면화하며 reject.
 // (검사 누락 시 422 의 {detail} 본문이 정상 응답처럼 흘러 VersionList 가 undefined spread 로 크래시.)
-const j = async (res: Response): Promise<any> => {
+// 제네릭: `.then(j)` 호출부의 선언된 반환 타입에서 T 를 추론한다(any 제거, 호출부 타입 유지).
+const j = async <T>(res: Response): Promise<T> => {
   if (!res.ok) {
     let detail = "";
     try {
@@ -96,9 +97,9 @@ const j = async (res: Response): Promise<any> => {
     } catch {
       detail = "";
     }
-    return Promise.reject<any>({ status: res.status, detail } as ApiError);
+    return Promise.reject<T>({ status: res.status, detail } as ApiError);
   }
-  return res.json();
+  return res.json() as Promise<T>;
 };
 
 function qs(q: Record<string, unknown>): string {
@@ -128,15 +129,15 @@ async function post(url: string, body: unknown): Promise<WriteResult> {
   return res.json() as Promise<WriteResult>;
 }
 
-// 읽기: stripped 버전을 그대로 경로/쿼리에 사용.
+// 읽기: stripped 버전을 그대로 경로/쿼리에 사용. j<T> 로 응답 타입을 명시(추론 대신 고정).
 export const getVersions = (fs: string): Promise<VersionsResponse> =>
-  fetch(`${BASE}/console/versions?fs=${fs}`).then(j);
+  fetch(`${BASE}/console/versions?fs=${fs}`).then((r) => j<VersionsResponse>(r));
 
 export const getDetail = (fs: string, version: string): Promise<VersionDetailResponse> =>
-  fetch(`${BASE}/console/versions/${version}?fs=${fs}`).then(j);
+  fetch(`${BASE}/console/versions/${version}?fs=${fs}`).then((r) => j<VersionDetailResponse>(r));
 
 export const getAudit = (q: AuditQuery): Promise<AuditEvent[]> =>
-  fetch(`${BASE}/console/audit?${qs(q as Record<string, unknown>)}`).then(j);
+  fetch(`${BASE}/console/audit?${qs(q as Record<string, unknown>)}`).then((r) => j<AuditEvent[]>(r));
 
 // 쓰기: toDirName 으로 디렉토리명 재부착(B1).
 export const approve = (fs: string, version: string, actor: string, reason: string): Promise<WriteResult> =>

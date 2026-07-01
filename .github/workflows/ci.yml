@@ -59,3 +59,32 @@ jobs:
 
       - name: ruff check
         run: uv run ruff check --output-format=github .
+
+  frontend:
+    name: console-web (Node 22)
+    runs-on: ubuntu-latest
+    # 운영 콘솔 프론트: 지금까지 로컬 node 수동 셋업으로만 검증됐다 — lint·타입체크·테스트를
+    # CI 게이트로 올려 파이썬(test·ruff)과 대칭으로 회귀를 막는다.
+    defaults:
+      run:
+        working-directory: console-web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: console-web/package-lock.json
+
+      - name: Install deps (lockfile 고정)
+        run: npm ci
+
+      - name: eslint
+        run: npm run lint
+
+      - name: typecheck + build
+        run: npm run build
+
+      - name: vitest
+        run: npm test

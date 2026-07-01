@@ -11,3 +11,8 @@ mlflow.db
 # H4s-c: exported serving bundles (derived from MLflow via scripts/h4s_export_bundle.py)
 deploy/artifacts/
 console_audit.db
+
+# coverage 산출물 (uv run pytest --cov / CI) — 커밋 금지
+.coverage
+coverage.xml
+htmlcov/

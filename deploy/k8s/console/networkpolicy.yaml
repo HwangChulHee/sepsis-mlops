@@ -4,10 +4,10 @@
 # 선택하는 순간 그 파드의 해당 방향(Ingress/Egress)은 "명시한 것 외 전부 차단"이 된다. 즉
 # 아래 두 정책이 console-web·console-api 에 대한 default-deny 를 이미 구현한다.
 #
-# WHY serving 은 선택하지 않는가: serving 은 같은 네임스페이스의 Prometheus(G4 up{})가
-# /metrics 를 스크레이프해야 한다. 네임스페이스-전역 default-deny 를 걸면 그 스크레이프가
-# 조용히 끊긴다. 그래서 serving 의 ingress 는 건드리지 않고, "api→serving" 경로는 api 측
-# egress 화이트리스트로 강제한다(serving 격리는 별도 과제 — 후속).
+# serving 격리: 별도 파일 deploy/k8s/networkpolicy.yaml(P3)로 분리했다. 과거엔 "네임스페이스-전역
+# deny 를 걸면 Prometheus 스크레이프가 끊긴다"는 이유로 serving 을 무정책으로 뒀지만, 이제 관측
+# 스택이 in-cluster(app=prometheus)라 serving 정책에서 prometheus 를 명시 허용하면 격리와 스크레이프를
+# 둘 다 지킬 수 있다. 여기(api egress)의 "api→serving:8000" 화이트리스트는 그대로 유지한다.
 #
 # 주의: NetworkPolicy 포트는 *목적지 파드 포트*(컨테이너 포트)다. Service(sepsis-serving:80)는
 # kube-proxy 가 파드:8000 으로 DNAT 하므로 egress 허용 포트는 8000 이다(Service 80 아님).

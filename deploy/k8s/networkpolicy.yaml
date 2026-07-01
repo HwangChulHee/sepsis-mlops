@@ -1,0 +1,52 @@
+# 서빙 — NetworkPolicy (default-deny + 명시 허용). P3.
+#
+# 배경: 콘솔(web/api)에는 default-deny 정책이 있는데 serving 은 무정책(네임스페이스 내 개방)이었다.
+# 원래 명분은 "네임스페이스-전역 deny 를 걸면 Prometheus 스크레이프가 끊긴다" 였는데, 이제
+# 관측 스택이 in-cluster(app=prometheus, deploy/k8s/monitoring)로 명시 라벨을 갖는다 → serving 에도
+# 정책을 걸되 **prometheus 를 명시 허용**하면 스크레이프를 지키면서 격리할 수 있다.
+#
+# 허용:
+#   ingress ← console-api(전파 /admin/reload·/health) + prometheus(/metrics 스크레이프), 둘 다 :8000
+#   egress  → DNS 만(serving 은 상류 호출 없음 — PVC 읽기 + 요청 응답이 전부)
+# 그 외 전부 차단.
+#
+# 주의(포트): NetworkPolicy 포트는 *목적지 파드 포트*(컨테이너 8000)다. Service(:80)가 아니라 8000.
+# 주의(강제): minikube 기본 CNI(bridge/kindnet)는 NetworkPolicy 를 강제하지 않는다 — 이 정책은
+# 선언적/이식성용(Calico·Cilium 등 실 CNI 에서 강제). 강제 CNI 에서도 `kubectl port-forward`(관리
+# 접속)는 kubelet↔pod 경로라 보통 영향받지 않는다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sepsis-serving
+  labels:
+    app: sepsis-serving
+spec:
+  podSelector:
+    matchLabels:
+      app: sepsis-serving
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # console-api(전파) + prometheus(스크레이프) → serving:8000. 그 외 ingress 전부 차단.
+    - from:
+        - podSelector:
+            matchLabels:
+              app: sepsis-console-api
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    # serving 은 상류 호출이 없다 — DNS 만 허용(이름 해석 용).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

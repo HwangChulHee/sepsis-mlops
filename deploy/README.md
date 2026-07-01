@@ -60,8 +60,9 @@ minikube image ls | grep sepsis               # 3개 다 보이는지 확인
 ```bash
 # (1) PVC 먼저 — 공유 번들 + 감사 DB
 kubectl apply -f deploy/k8s/console/artifacts-pvc.yaml
-# (2) 서빙
+# (2) 서빙 (+ NetworkPolicy: ingress ← console-api·prometheus 만 :8000)
 kubectl apply -f deploy/k8s/configmap.yaml -f deploy/k8s/service.yaml -f deploy/k8s/deployment.yaml
+kubectl apply -f deploy/k8s/networkpolicy.yaml
 # (3) 콘솔 (세부: k8s/console/README.md)
 kubectl apply -f deploy/k8s/console/console-api.yaml -f deploy/k8s/console/console-web.yaml
 kubectl apply -f deploy/k8s/console/networkpolicy.yaml -f deploy/k8s/console/ingress.yaml
@@ -160,8 +161,12 @@ kubectl port-forward svc/prometheus 9090:9090    # 타겟 확인: /targets, up{j
   console-web `/tmp`+`/var/cache/nginx`, prometheus `/prometheus`). 감사 DB·번들은 PVC(쓰기가능).
 - 비-root(`runAsNonRoot`) + `capabilities.drop:[ALL]` + `allowPrivilegeEscalation:false`.
 
+serving NetworkPolicy(P3): `deploy/k8s/networkpolicy.yaml` — ingress ← console-api·prometheus 만
+:8000, egress DNS 만. `[확인됨]` 적용 후 predict·스크레이프 무결. 단 minikube 기본 CNI 는
+NetworkPolicy 미강제라 **선언적/이식성용**(Calico·Cilium 등 실 CNI 에서 강제).
+
 **남은 부채**(운영 전): Ingress `/console` 무인증(basic-auth 주석 준비됨)·TLS 없음(M4 범위),
-serving NetworkPolicy 부재(네임스페이스 내 개방 — Prometheus 격리와 함께 후속).
+강제 CNI 로 전환(현재 정책들이 실제 격리되게).
 
 ---
 

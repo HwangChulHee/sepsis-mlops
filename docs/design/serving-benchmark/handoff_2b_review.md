@@ -70,3 +70,52 @@
 ### 판정
 
 **blocker 2건 → HOLD.** B-1(리포트 스키마 미고정 → 산문 substring 비검증)이 핵심 — 테스트 대상을 손으로 쓰는 md에서 **명명 필드 구조화 결과 객체**로 옮겨야 A2-a/A4-c/A6-a가 결정론 RED 가능. B-2(히스토그램 버킷 해상도·A1-b eps)도 실측 유효성에 load-bearing.
+
+---
+
+## 라운드 2
+
+- 대상 commit: 작업트리 (reviser v2 — B-1·B-2·M-1~M-4 반영)
+- 검토일: 2026-07-02
+- 판정: **HOLD — blocker 1건 (B-R2-1)** (major 2, minor 3)
+
+### R1 항목별 재판정
+
+- **B-1 (산문 substring) → 해소(핵심).** A0 `BenchResult` 스키마(`:20-74`)가 성공기준을 명명 필드로 1:1 매핑(A1→client/server/server_mean, A2→residual/residual_label/tax, A3→throughput.*, A4→memory.*+stateless_claim, A6→headline_label+control_arm, A7→cost.*). enum 동등성(`!= "network"`)이 substring 거짓양성 원천 차단. A4-c `stateless_claim==False` bool. (A6-c 잔여 누수 → M-R2-2.)
+- **B-2 (버킷 해상도+A1-b) → 부분해소, 새 blocker 파생.** EPS+server_mean 병기는 타당하나 A9 선행의존이 고아 owner 지목 → B-R2-1.
+- **M-1 (워밍업) → 부분해소.** 2단계 결정론 컷(index0 제외+K=20창 ±15%)은 결정적이나 비수렴 경계 미정의 → M-R2-1.
+- **M-2 (게이트 의존) → 해소.** 입력 주입 계약+A9 순서의존으로 spec-writer가 라이브 게이트 구동 금지·주입값 검증 인지. PASS.
+- **M-3 (중복 pid) → 해소.** `orchestrator.py:45-52` ValueError 실재, `psv_source.py:26-38` run_suffix 유일화 실재, A3 불변식 정합. [확인됨]
+- **M-4 (메모리 분리) → 해소.** instrumentation 값검증, input_dim/state presence+분리공식, 교차아키텍처 금지(NB2) 정합. [확인됨]
+- **m-1/2/3 → 해소.** unpaired proxy caveat, no-op sleep_fn(`engine.py:55-64` 확인), CostResult 불변식. [확인됨]
+
+### PASS
+
+- **B-1 핵심 — enum 동등성이 substring 거짓양성 차단.** A2-a `!= "network"` 필드 동등성.
+- **tax 불변식 산술 정합.** `tax==arm1.residual−arm2.residual`, 게이트가 predict 불변이라 server.p50 arm 간 ≈동일→tax≈부가계측이 client에 얹힌 세금. 부가작업이 `LATENCY.observe` 이후 실행이라 server 미오염·client만. network+직렬화는 양 arm residual에 있어 tax에서 상쇄. [확인됨: `metrics.py:46,52-56`, `app.py:102`]
+- **M-3 코드 대조.** [확인됨]
+- **§A/§B 분리 유지.** A0 스키마는 필드명·타입·불변식만, 직렬화·함수는 §B. src 리터럴 없음.
+- **reviser 새 [확인됨] 사실성.** `metrics.py:18` 버킷 미지정, `orchestrator.py:45-52`, `engine.py:55-64` 모두 코드 일치.
+
+### blocker
+
+#### B-R2-1. A9 서버분위수 선행의존이 존재하지 않는 owner(handoff_2a)를 지목 — 고아 요구
+- **문제**: A9(`:151`)·§B2(`:169`)가 "A1 서버 분위수·EPS 유의미성은 **handoff_2a가** `serve_predict_latency_seconds`에 sub-25ms fine 버킷을 양쪽 설정함에 의존"이라 못박음. 그러나 **handoff_2a는 이 작업을 소유 안 함** — LATENCY 히스토그램을 "절대 안 건드림"으로 명시(handoff_2a `:80` `LATENCY.observe` 불변, `:52` latency 관측 유지). 버킷은 `metrics.py:18` 생성자에서 정의되는데 handoff_2a·decisions.md·1차 handoff·handoff_2b §B 어디에도 fine 버킷 작업 없음(handoff.md:94는 `_bucket` **존재**만=default 충족). → **fine 버킷은 고아 요구.**
+- **왜 blocker**: (1) A9 의존 산출물의 생성 지점이 코드·문서 어디에도 없어 사슬 단절. (2) `residual=client.p50−server.p50`이 sanity-grade server.p50(default 버킷 격자 스냅) 위에 서면 residual·tax(A2) 전부 sanity-grade → "arm-1을 network라 안 부른다"는 A2 정직성 논증이 장식화. GREEN은 되나 분석 목표 영구 미배달이 거짓 귀속에 가려짐.
+- **근거**: `handoff_2b:151,169` vs handoff_2a `:52,80`(LATENCY 불변), decisions.md:35(격리 예외=LATENCY 관측 불변), decisions.md에 fine·버킷 재정의 작업 부재. [확인됨]
+- **제안**: (a) fine 버킷을 명시 owner에 귀속(handoff_2a 스코프에 성공기준 추가 or 별도 백로그), A9가 그 owner 지목. 또는 **(b) 서버 분위수를 리포트-only로 두고, load-bearing residual/tax를 버킷 무관 평균(`client_mean − server_mean`)에 태워 A9 고아 제거** — 평균은 `_sum/_count`로 정확·버킷 독립이고 `mean(client)−mean(server)=mean(client−server)`라 페어링 암묵 성립(m-1 unpaired proxy도 개선). 어느 쪽이든 현재 "handoff_2a가 버킷 설정" 문장은 사실이 아니라 유지 불가.
+
+### major
+
+- **M-R2-1. A5-c 비수렴 경계 미정의.** "K=20창 p95 ±15% 첫 창"만 정의, 어떤 창도 수렴 안 하면 `steady_state_start` 미정의→집계 시작점 없음. CPU 노이즈로 비수렴 현실적. 입력주입 TDD에서 "비수렴 배열→알려진 산출" 고정 불가. **제안**: 비수렴 폴백 명시(수렴 실패→run FAIL, 또는 "첫 M개 제외" 결정론 폴백).
+- **M-R2-2. A6-c 귀인이 필드 없는 산문 — B-1 잔여 누수.** A6-c(`:130`)가 "featureset vs 아키텍처 기여를 분해 기재"라 하나 A0 스키마에 `attribution` 필드 없음. **제안**: (i) 구조화 `attribution` 필드로 승격 or (ii) "A6-b 수치의 렌더링일 뿐 별도 assert 아님"으로 명시 강등.
+
+### minor
+
+- **m-R2-1.** `boot_latency`·`steady_state_start`가 A0 스키마에 없음 — presence 필드로 노출 권고.
+- **m-R2-2.** `ControlArm.gru9/xgb9` union 타입 `MemoryBreakdown|ModelBench` 모호 — 접근 경로(`.rss` vs `.memory.rss`) 특정 권고.
+- **m-R2-3.** `control_arm.gru9`와 배포 `gru` 중복(둘 다 vitals9) — "gru9는 gru 별칭/재기재" 1줄 명시.
+
+### 판정
+
+**blocker 1건(B-R2-1) → HOLD.** B-1·M-2·M-3·M-4·minor 실질 해소. 그러나 B-2 해소가 딛은 A9가 고아 fine-버킷을 handoff_2a에 거짓 귀속 → 사슬 단절·A2 정직성 공동화. major 2건(비수렴 경계·A6-c 산문)도 함께 정리 권장.

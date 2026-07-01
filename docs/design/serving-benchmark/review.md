@@ -185,15 +185,22 @@
 - **왜 blocker**: (1) 헤드라인 지표 오염 — latency는 트리 수에 선형 비례, 절단 없이 400 트리 서빙 시 XGB latency 체계적 부풀림 → 목표(A) "실제 배포 프로파일"과 배치. (2) tau 오정렬 — tau는 best_iter-절단 확률분포에서 캘리브레이션됨, 전체 트리 확률에 적용 시 alarm 판정 달라짐. (3) DDD가 tau·featureset은 식별하면서 동급 의존 best_iter만 누락 — 구현 디테일이 아니라 **입력 의존 식별**(설계부 몫).
 - **제안**: 결정 2 "★XGB 아티팩트·전처리 소스 식별"에 `best_iter` 의존 추가 — 소스 = run MLflow metric `metrics.best_iter`, XGB 서빙은 `iteration_range=(0, best_iter+1)`로 절단. PASS 게이트 1에도 "XGB 소스 = `.ubj` + `tau` + `best_iter`"로 반영.
 
+> **[reviser 응답]** 해소: 결정 2 "★XGB 아티팩트·전처리 소스 식별"을 **`.ubj` + `tau` + `best_iter` 세 조각**으로 재구성. `best_iter`를 **챔피언 재구성의 load-bearing 의존**으로 신설 — 절단 없이 전체 트리로 추론하면 latency 부풀림·확률 이동·tau 오정렬로 챔피언과 다른 모델임을 명시하고, 소스가 **run metric `metrics.best_iter`**(`.ubj`·preprocess.json 아님)임을 코드 대조로 못박음: [확인됨: `src/sepsis/train/tree.py:69-75` `booster_predict`가 `iteration_range=(0, int(best_iter)+1)` 절단; `eval/crosssite.py:60,65` `score_tree_frozen(…, best_iter, …)` 주입; `h3b_crosssite.py:144,158,162` best_iter를 run metric에서 읽어 주입; `h2b_train_trees.py:183`이 metric으로만 로깅·`:189` log_dict(preprocess.json)엔 tau·featureset만; preprocess.json keys `['featureset','scale_pos_weight','tau','hp','note']` 실측]. 설계부 수준(의존 존재·소스 식별)까지만 확정하고 **값 주입 경로(하드코딩 vs 벤치설정 vs run metric 조회) 구현은 핸드오프로 위임**함을 명문화. PASS 게이트 1도 "XGB 서빙 소스 = `.ubj` + `tau` + `best_iter`, `iteration_range=(0, best_iter+1)` 절단"으로 개정. (decisions.md 결정 2 "★XGB 아티팩트·전처리 소스 식별" 3항 · PASS 게이트 1)
+> 정합성: 기존 `.ubj`+`tau` 서술과 모순 없이 3조각으로 일관화, NB2 lookback 버퍼 재구성 계약과 충돌 없음(best_iter는 booster.predict 트리 절단, 버퍼는 입력 재구성 — 독립 의존). 참고: review가 인용한 `src/sepsis/models/tree.py`는 실제 경로 `src/sepsis/train/tree.py`이며 내용 동일 [확인됨].
+
 ### major
 
 #### M-R3-1. XGB 서버 히스토그램 관측 경계가 GRU와 비대칭일 위험
 - **문제**: 결정 3(`:75`)은 "XGB도 GRU와 동일 관측 경계(predict 감싸기)"라 하나, GRU `predict()`가 내부에 `StreamPreprocessor.step`(ffill→fill_mean→clip→z-score)을 포함 [확인됨: `predictor.py:44`]. XGB 대칭이 되려면 히스토그램이 **버퍼→lookback_summary 재구성(8×F 윈도우 7종 통계, numpy) + booster.predict**를 함께 감싸야. XGB 앱이 요약 재구성을 핸들러에 인라인하고 booster.predict만 감싸면 두 "서버 히스토그램"이 다른 범위를 재 NB1 비대칭이 다른 형태로 재발.
 - **제안**: 결정 3에 "XGB `serve_predict_latency_seconds`는 버퍼→lookback_summary 재구성 + booster.predict를 함께 감싼다(GRU predict의 StreamPreprocessor 포함과 대칭)" 명시.
 
+> **[reviser 응답]** 해소: 결정 3에 "★XGB 히스토그램 관측 경계" 항목 신설. GRU `predict()`가 내부에 전처리를 포함함을 [확인됨: `serve/predictor.py:44` `z = self.pre.step(pid, row)`가 predict 안에서 실행]으로 명시하고, XGB `serve_predict_latency_seconds`는 **버퍼→`lookback_summary` 재구성(윈도우 7종 통계) + `booster.predict`(best_iter 절단)를 함께** 감싸야 GRU의 "전처리 포함 predict"와 동형 경계가 됨을 못박음. `booster.predict`만 감싸면 GRU=전처리포함/XGB=추론만으로 두 서버 히스토그램 범위가 달라져 **NB1형 비대칭 재발**임을 명시. PASS 게이트 2도 동일 문구로 개정. (decisions.md 결정 3 "★XGB 히스토그램 관측 경계" · PASS 게이트 2)
+
 ### minor
 
 - **mn-R3-1.** 문서 제목/포지셔닝의 "아키텍처별 운영비용"(`:1`)이 (A) 목표와 어휘 마찰. 본문은 헤드라인=(아키텍처×featureset)로 확정해 실질 모순 없으나, 제목에 "(featureset 결합 배포 프로파일)" 한 마디 덧대면 무해화.
+
+> **[reviser 응답]** 해소: 문서 제목을 "…아키텍처별 운영비용 벤치마크 **(featureset 결합 배포 프로파일)**"로 덧대 (A) 목표와 어휘 마찰 무해화. (decisions.md 제목)
 
 ### 판정
 
@@ -201,3 +208,5 @@
 - 라운드 2 blocker 3건(NB1·NB2·NB3)은 **모두 해소됨** — 코드 구조가 실제로 수용(표면 봉합 아님).
 - 그러나 MJ1 의존 사슬 추적에서 **`best_iter`가 챔피언 재구성에 load-bearing인데 식별 누락** — 목표(A)와 배치되는 설계부 결함.
 - **라운드 3 = 규칙상 마지막 라운드. blocker>0 → 자동 통과 불가. 사람 에스컬레이션(푸시 보류).** 사람 판단 지점: B-R3-1을 설계부에 반영(best_iter 의존 명시)할지, 예외적으로 핸드오프 범위로 위임할지. (레드팀 권고: `.ubj`·`tau`와 동급 의존이므로 설계부 반영이 정합.) M-R3-1은 같은 보완 라운드에서 함께 처리 권장.
+
+> **[reviser 라운드 3(round 4 커밋) 종료]** 사람이 3라운드 캡을 예외 승인한 마지막 보완 라운드. 지정 항목만 근본 해소(범위 확장 없음): blocker **B-R3-1**(best_iter를 `.ubj`·`tau`와 동급 의존으로 설계부 반영 — 결정 2 3항 + PASS 게이트 1), major **M-R3-1**(XGB 히스토그램 경계를 버퍼→lookback_summary+booster.predict로 GRU와 대칭 — 결정 3 + PASS 게이트 2), minor **mn-R3-1**(제목). 모든 새 사실 주장은 코드 직접 대조분만 [확인됨](`train/tree.py:69-75`·`crosssite.py:60,65`·`h3b_crosssite.py:144,158,162`·`h2b_train_trees.py:183,189`·`predictor.py:44`·preprocess.json keys 실측) — 거짓 [확인됨] 없음. 다음 redteam이 대조 요망: best_iter 의존이 결정 2 lookback 버퍼 계약·부속결정과 모순 없이 일관화됐는지, XGB 히스토그램 경계 대칭이 NB1 잔차 분해와 정합한지.

@@ -189,3 +189,40 @@
 > - **m-R3-2**: §A A9의 `[확인됨: metrics.py:18]` src 리터럴 제거("구현 근거는 §B2"로 이관), §B2엔 유지 — §A src 리터럴 회귀 해소.
 > - **m-R3-3**: A5-c ±15% 경계 inclusivity를 `|Δ| <= 0.15`(경계 포함)로 명시 — knife-edge flaky 제거.
 > 다음 redteam 라운드가 대조 요망: server 요청별 계열 산출이 latency arm(단일 스트림 순차)에서 실제 복원 가능한지, 두 평균 슬라이스 동일 집합이 주입계약으로 RED 고정되는지, A2-a2 불변식이 스키마와 정합한지.
+
+---
+
+## 라운드 4
+
+- 대상: `handoff_2b.md` 명세부 **v4** (지휘자 B-R3-1·M-R3-1·minor 보완)
+- 검토일: 2026-07-02
+- 판정: **PASS — blocker 0** (major 1, minor 3 — 통과 불가 아님)
+
+### R3 항목별 재판정
+
+- **B-R3-1 (server_mean 집합 불일치) → 해소.** 요청별 계열 복원이 코드로 성립: `metrics.py:46` `LATENCY.observe`가 매 predict마다 그 요청 latency만큼 `_sum` 증가, latency arm 단일 스트림 순차(A5-b)라 인접 델타 겹침 없음, `app.py:98` observe가 `:103` 응답 전 완료, `/metrics`(`app.py:122-125`)는 observe 안 함 → 요청별 스크레이프가 히스토그램 미오염. **기존 노출 메트릭만으로 복원, 신규 의존·고아 없음.** server_mean이 client_mean과 동일 `[steady_state_start:T]` 슬라이스, A5-c FAIL(집합 어긋남)이 이중 방어. 주입 계약 (ii)가 warmup 포함/제외 시나리오를 요청별 배열로 RED 고정 가능. [확인됨: `metrics.py:46,59-60`, `app.py:96-98,103,122-125`]
+- **M-R3-1 (residual 일급 기준) → 해소.** A2-a2 `residual == client_mean − server_mean` 불변식이 A2-c와 병렬 번호 기준, 스키마·산문 정합.
+- **m-R3-1 (부호 관계) → 해소.** `featureset_contrib == −input_dim`(memory.rss) 검산 정확(input_dim=9−18 음수, featureset_contrib=18−9 양수).
+- **m-R3-2 (§A src 리터럴) → 부분 해소.** `metrics.py:18` 파일:줄 리터럴이 §A에서 §B2로 이관(재발 없음). §B 역참조·심볼 잔여는 m-R4-2.
+- **m-R3-3 (경계 inclusivity) → 해소.** `|Δ| <= 0.15` 명시.
+
+### PASS
+
+- **요청별 계열이 기존 메트릭만으로 복원, latency arm 전용.** `server_mean`은 `ArmLatency`에만, `Throughput`은 req_per_sec뿐 — "단일 누적 금지"가 throughput 집계와 충돌 없음. [확인됨]
+- **A2-a2 ↔ A2-c 산술 정합.** tax=(client₁−server₁)−(client₂−server₂), 페어링 항등식 동일 슬라이스 전제 하 성립.
+- **분위수 경로 ↔ 평균 경로 비충돌.** server 분위수=`_bucket` 보간(분포·sanity), server_mean=`_sum` 델타 계열 — 같은 스크레이프 다른 필드.
+
+### major
+
+- **M-R4-1. §B2 "두 스냅샷 델타" 대안의 "동일 집합 보장" 거짓 → A5-c 자기모순.** `steady_state_start`는 궤적 수렴 사후 결정이라 두 스냅샷은 소급 슬라이스 per-index 정보 없음 → 요청별 계열로 붕괴. 이중 방어(주입 (ii) 계열-형 RED + A5-c FAIL)라 진행 차단 아님. **→ 지휘자 정리: §B2 대안 문구를 "대안 아님(사후 컷 소급 불가, 요청별 계열 필수)"으로 정정.**
+- (해소 반영: v4에서 §B2 두 스냅샷 대안 문구 정정 완료.)
+
+### minor
+
+- **m-R4-1. A5-c 수렴 판정 driving 배열 미명시** — client·server 둘 다 계열이라 모호. **→ 지휘자 정리: driving = client 벽시계로 고정 명시(server⊂client, 단일 steady_state_start 양쪽 적용).**
+- **m-R4-2. §A 잔존 §B 역참조·코드 심볼** — `(§B1/2/5)` 포인터·`LATENCY.observe` 심볼(A2 근거). **→ 지휘자 정리: A2 근거의 `LATENCY.observe`를 관측 가능 서술로 대체. §B 섹션 포인터는 RED 안 깨므로 유지.**
+- **m-R4-3. latency arm 분위수를 요청별 계열에서 직접 산출 가능(선택 개선)** — 현재 `_bucket` 보간 유지도 무모순(분위수 non-load-bearing). 백로그로 남김(진행 무관).
+
+### 판정
+
+**라운드 4 blocker 0건 → PASS.** B-R3-1 핵심(요청별 server 계열 복원)이 기존 확인 코드만으로 성립 — 신규 의존·고아 없이 동일 슬라이스 산출, 주입 (ii)로 RED 고정, A5-c 이중 방어. M-R3-1·minor 해소. major M-R4-1 + minor m-R4-1/m-R4-2는 지휘자가 v4에서 정리(거짓 주장 삭제·driving 배열 명시·심볼 대체), m-R4-3은 백로그. **spec-writer §A TDD → main §A+§B 구현 진행 가능.**

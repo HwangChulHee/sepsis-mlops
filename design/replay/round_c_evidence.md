@@ -33,7 +33,7 @@ curl -s http://localhost:8000/metrics | grep '^serve_pred_prob_latest'
 
 ## 2. 관측
 
-### 2.1 다중 동시 스트림 작동 ✅ (`reports/replay_ward_3patients.txt`)
+### 2.1 다중 동시 스트림 작동 ✅ (`reports/replay/replay_ward_3patients.txt`)
 3명을 **동시**(스레드 3개, 공유 HttpSender)로 재생 — 211 timesteps, **500/422/error 0건**.
 각 환자가 유일 `patient_id`(run_suffix)로 분리돼 섞이지 않음(F-c1 가드 + 서버 hidden state 분리).
 
@@ -46,7 +46,7 @@ curl -s http://localhost:8000/metrics | grep '^serve_pred_prob_latest'
 > 동시 실행 last_p 가 (나) 단일 실행 범위와 일치 → 멀티스트림이 추론을 오염시키지 않음(무상태 엔진 F5 입증).
 > 교차검증: `serve_predict_requests_total=211`(=행 합), `serve_alarms_total=135`.
 
-### 2.2 환자별 Gauge 채워짐 ✅ (`reports/replay_gauge_series.txt`)
+### 2.2 환자별 Gauge 채워짐 ✅ (`reports/replay/replay_gauge_series.txt`)
 ```
 serve_pred_prob_latest{patient_id="p000001-90da45-1"} 0.821753203868866
 serve_pred_prob_latest{patient_id="p000002-90da45-2"} 0.19539159536361694
@@ -54,7 +54,7 @@ serve_pred_prob_latest{patient_id="p000018-90da45-0"} 0.9023167490959167
 ```
 정확히 **3개 시계열**(환자당 1개), 값 = 각 환자 last_p. Grafana "Per-patient risk (latest p)" 패널의 원천.
 
-### 2.3 위험도 "선"은 시간 가변 ✅ (`reports/replay_p000018_gauge_curve.tsv`)
+### 2.3 위험도 "선"은 시간 가변 ✅ (`reports/replay/replay_p000018_gauge_curve.tsv`)
 Gauge 는 **최신값만** 보유하므로, 곡선은 Prometheus(또는 폴러)가 재생 중 반복 스크랩해 만든다.
 p000018 을 느리게(speed=3000, ~1.2초/행) 재생하며 `/metrics` 를 ~3초 간격 폴링 → **40개 표본**:
 
@@ -92,9 +92,9 @@ Grafana `/render` API 로 "Per-patient risk (latest p)" 패널을 PNG 로 렌더
 
 ## 4. 산출물
 
-- `reports/replay_ward_3patients.txt` — 3명 동시 재생 로그(211 steps).
-- `reports/replay_gauge_series.txt` — 환자별 Gauge 3 시계열 스냅샷.
-- `reports/replay_p000018_gauge_curve.tsv` — p000018 Gauge 시간 궤적 40 표본(수동 폴링, 위험도 선 raw).
+- `reports/replay/replay_ward_3patients.txt` — 3명 동시 재생 로그(211 steps).
+- `reports/replay/replay_gauge_series.txt` — 환자별 Gauge 3 시계열 스냅샷.
+- `reports/replay/replay_p000018_gauge_curve.tsv` — p000018 Gauge 시간 궤적 40 표본(수동 폴링, 위험도 선 raw).
 - `reports/img/replay_per_patient_risk.png` — **Grafana 패널 실렌더**(3명 위험도 선, §2.5).
 - `deploy/monitoring/{docker-compose.yml,prometheus.yml}` — 재현용 로컬 모니터링 스택.
 - 이 문서.

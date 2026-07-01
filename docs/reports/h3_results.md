@@ -2,7 +2,7 @@
 
 > 생성: H3-b (`scripts/h3b_crosssite.py`) · 2026-06-28 · setB **1회 개봉**(채점 전용).
 > **A 동결 아티팩트만**(μ/σ·fill·clip·τ) 사용 — B 재계산·재튜닝·τ재선정 없음.
-> A-val 점수는 `reports/h2_results.md` 인용(재계산 아님). gap = A_val − B.
+> A-val 점수는 `docs/reports/h2_results.md` 인용(재계산 아님). gap = A_val − B.
 > ⚠️ **B는 관찰 전용** — 피처셋/모델 선택은 A-val+H4, B 점수로 고르지 않음.
 
 ## 6조합 utility · PR-AUC (A-val rank 순)

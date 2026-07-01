@@ -1,7 +1,7 @@
 # H4-서빙 설계결정문서 (DDD) — 실시간 서빙 + 스트리밍 시뮬레이터
 
 > **설계 근거**: H2 학습 아티팩트(GRU + A 동결 전처리·τ) + H1 전처리 모듈(`src/sepsis/data/`)을 **실시간 서빙**으로. H3 누수 규칙(A 동결 전처리·τ) 연장. 인프라는 pdm-mlops 스켈레톤 재활용.
-> **워크플로우·출처등급**: [`WORKFLOW.md`](../../WORKFLOW.md). 검토(`design/h4/serving/review.md`) 통과 후 핸드오프로.
+> **워크플로우·출처등급**: [`WORKFLOW.md`](../../WORKFLOW.md). 검토(`docs/design/h4/serving/review.md`) 통과 후 핸드오프로.
 > **상태**: 초안 — 레드팀 검토 전.
 > **개정 이력**
 > - **v2 (2026-06-28)** — review `c3396c5`의 HOLD 1건 + 출처등급 정정 반영
@@ -31,7 +31,7 @@ H2 GRU를 **실시간 서빙**한다 — 환자 시점 데이터가 스트리밍
 
 - **결정**: 서빙 모델 = **GRU**(B cross-site 최고). 기본 run = **gru/vitals**(B에서 vitals_labs보다 전이 우수). **설정은 단일 run을 선택**하고, 그 run에서 **model+featureset+전처리통계(μ/σ·fill·clip)+τ+input_dim을 원자적으로(통째) 로드** — model·featureset을 독립 노브로 두지 않는다(독립이면 불일치 번들 = train-serving skew). 교체는 `run=gru_vitals ↔ gru_vitals_labs`처럼 run 단위. H2 아티팩트가 이미 run 단위 번들이라 자연스러움.
 - **근거 + 출처등급**:
-  - GRU가 A-val·B 모두 최고(B util 0.247 vs 트리 0.055) [확인됨: reports/h3_results.md].
+  - GRU가 A-val·B 모두 최고(B util 0.247 vs 트리 0.055) [확인됨: docs/reports/h3_results.md].
   - vitals가 cross-site 전이 우수(gap 0.162 < vitals_labs 0.265) [확인됨: h3_results.md].
   - 피처셋 미결 → 교체 가능 설계가 "재설정 가능한 운영환경" 메시지 [우리 결정].
 - **고려한 대안**: 모델 하드코딩(교체 불가, 미결 피처셋과 모순). 앙상블(복잡도↑, 범위 외).

@@ -58,7 +58,7 @@
 
 최악 결측(>90%): Bilirubin_direct, Fibrinogen, TroponinI, Bilirubin_total, Alkalinephos, AST, Lactate, PTT, SaO2, EtCO2, Phosphate, HCO3, Chloride, BaseExcess, PaCO2, Calcium, Platelets, Creatinine, Magnesium, WBC, BUN, pH, Hgb, FiO2, Hct, Potassium. 검사 수치는 드물게 측정 → 대부분 NaN; 활력징후는 더 촘촘하지만 여전히 빈칸이 있음.
 
-**집계**: **측정 컬럼 34개**(활력 8 + 검사 26, 인구통계 6개와 라벨 제외) 기준 **컬럼별 평균 결측률은 80.1%**(컬럼 단위 평균)다. `research/02_features_missing.md`에서 인용한 "~80% 빈칸" 수치가 이것이다.
+**집계**: **측정 컬럼 34개**(활력 8 + 검사 26, 인구통계 6개와 라벨 제외) 기준 **컬럼별 평균 결측률은 80.1%**(컬럼 단위 평균)다. `docs/research/02_features_missing.md`에서 인용한 "~80% 빈칸" 수치가 이것이다.
 
 ## 4. 시퀀스 길이 (환자당 ICU 시간)
 - 최소 **8** · 중앙값 **38** · 평균 **38.5** · p90 **55** · p99 **133** · 최대 **336**

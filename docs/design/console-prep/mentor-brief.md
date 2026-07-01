@@ -1,6 +1,6 @@
 # mentor 브리핑 — console-prep 핸드오프(명세부)
 
-> 대상: `design/console-prep/handoff.md` · review-loop 2라운드 통과(blocker 0) · 커밋 `c75fe06`→`e63ec08`→`b242666`
+> 대상: `docs/design/console-prep/handoff.md` · review-loop 2라운드 통과(blocker 0) · 커밋 `c75fe06`→`e63ec08`→`b242666`
 > 목적: **구현 전** 이해 — 무엇을 승인하는 건지, 무슨 빚이 남았는지.
 
 ---

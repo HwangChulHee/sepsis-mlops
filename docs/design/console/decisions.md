@@ -1,7 +1,7 @@
 # Console 설계결정문서 (DDD) — 운영 콘솔 (R1~R3)
 
 > **설계 근거**: H4 운영 레이어(서빙·드리프트·재학습)가 만든 백엔드(`deploy.py`·`validate.py`·`bundle.py`)를 **사람이 조작하는 운영 콘솔**로 노출. 모델을 *만드는* 건 코드+MLflow(콘솔 밖), 콘솔은 *운영*(배포 승인·버전·감사)만.
-> **워크플로우·출처등급**: [`WORKFLOW.md`](../WORKFLOW.md). 검토(`design/console/review.md`) 통과 후 구현 명세부로.
+> **워크플로우·출처등급**: [`WORKFLOW.md`](../WORKFLOW.md). 검토(`docs/design/console/review.md`) 통과 후 구현 명세부로.
 > **상태**: 설계부 v4 — 레드팀 라운드 4 신규 blocker B-new(트랜잭션 경계·직렬화·복구) + major 2건 반영. 구현 명세부는 blocker 0 확정 후 이어붙임.
 > **개정 이력**
 > - v1: 초안 (설계부).

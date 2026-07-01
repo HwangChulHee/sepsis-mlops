@@ -1,7 +1,7 @@
 # H1 구현 핸드오프 — 전처리·피처·분할
 
-> **설계 근거**: [`design/h1/decisions.md`](decisions.md) (v4, 전 항목 PASS). 본 문서는 그 결정들을 **실행 명세**로 번역한 것이다.
-> **워크플로우**: [`WORKFLOW.md`](../WORKFLOW.md). 이 핸드오프는 자립형이며, 검토(`design/h1/handoff_review.md`) 통과 후 실행한다.
+> **설계 근거**: [`docs/design/h1/decisions.md`](decisions.md) (v4, 전 항목 PASS). 본 문서는 그 결정들을 **실행 명세**로 번역한 것이다.
+> **워크플로우**: [`WORKFLOW.md`](../WORKFLOW.md). 이 핸드오프는 자립형이며, 검토(`docs/design/h1/handoff_review.md`) 통과 후 실행한다.
 > **개정 이력**
 > - **v3 (2026-06-27)** — 검토 v2(`0ec8aca`) 비차단 주의 반영: H1-b PASS#9 양성비율 허용오차 완화(통합 1.8%±0.3%p → plausible 1%~4% + train-only 산출 + pos_weight 유한·양수). setA-only A-train이 상단에 spurious 정지하던 오발 제거.
 > - **v2 (2026-06-27)** — 핸드오프 검토 `1734bdb`의 HOLD 2건 + 게이트 크리스프 권고 반영
@@ -16,7 +16,7 @@
 
 ### 환경
 - WSL2 Ubuntu, Python(기존 `pyproject.toml`/`uv.lock` 환경). **CPU로 충분, GPU 불필요**(트리는 분 단위, GRU m2m도 1코어 epoch ~분 단위).
-- 외부 레포(pdm-mlops 등) **참조 금지**. 같은 레포의 `design/h1/decisions.md`·`reports/eda_findings.md`·`smoke/`는 참조 가능. 단 핵심 명세는 본 문서에 self-contained.
+- 외부 레포(pdm-mlops 등) **참조 금지**. 같은 레포의 `docs/design/h1/decisions.md`·`docs/reports/eda_findings.md`·`smoke/`는 참조 가능. 단 핵심 명세는 본 문서에 self-contained.
 
 ### 데이터 위치
 - `data/raw/training_setA/`, `data/raw/training_setB/` 에 PhysioNet 2019 `.psv`(환자 1명=파일 1개, 1행=1시간). `data/`는 `.gitignore`됨.
@@ -82,7 +82,7 @@ scripts/
 1. 캐시된 환자 수 == **40,336** (setA 20,336 + setB 20,000).
 2. 각 환자 배열의 피처 컬럼 == **19개**(정의된 이름과 정확히 일치), 라벨·site·patient_id 동반.
 3. `ICULOS` 등 제외 컬럼이 캐시에 **없음**.
-4. **NaN 보존 검증**: 캐시 전체 검사 9종의 결측률이 `reports/eda_findings.md` 측정치와 **±0.5%p 이내**로 일치(예: WBC 93.6%, Lactate 97.3% ± 0.5%p). 0으로 안 채워졌는지 확인.
+4. **NaN 보존 검증**: 캐시 전체 검사 9종의 결측률이 `docs/reports/eda_findings.md` 측정치와 **±0.5%p 이내**로 일치(예: WBC 93.6%, Lactate 97.3% ± 0.5%p). 0으로 안 채워졌는지 확인.
 5. 라벨 값 ∈ {0,1}, 환자 내 양성 블록이 **연속이며 기록 끝에서 끝남**(우측 절단) — 위반 환자 수를 로깅(제외는 H1-b 필터에서).
 
 ### 진행
@@ -136,7 +136,7 @@ scripts/
 2. **양성 시점 위치 분포**: 양성 라벨이 환자 기록 내 어디에 분포하는지(끝자락 집중 = 분포 편향 자명성 확인).
 
 ### 산출물
-- `reports/h1_diagnostics.md` + 그림(`reports/figures/`). 수치·표·해석.
+- `docs/reports/h1_diagnostics.md` + 그림(`docs/reports/figures/`). 수치·표·해석.
 
 ### PASS 기준 (프로그래매틱)
 - 두 산출물 파일이 생성되고, 측정밀도 비교가 **수치로** 제시됨(양성 vs 비양성 측정률 차이).
@@ -181,7 +181,7 @@ scripts/
 - **유령 시점(초기 전부-NaN)** 처리 미정의로 NaN이 모델 입력까지 전파
 - 위 중 하나라도 → 그 토막에서 정지, 다음 진행 금지, 사람 보고.
 
-## 검토 요청 (design/h1/handoff_review.md 용)
+## 검토 요청 (docs/design/h1/handoff_review.md 용)
 - PASS assert들이 **실제로 프로그래매틱**한지(애매한 기준 없는지).
 - 자동 진행 토막(a→b→재스모크)에 사람 판단이 숨어있지 않은지.
 - 자립성: 외부 레포 없이 이 문서만으로 구현 가능한지.

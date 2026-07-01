@@ -1,7 +1,7 @@
 # H2 설계결정문서 (DDD) — 학습 (baseline + GRU + ablation)
 
-> **설계 근거**: H1 산출물(`src/sepsis/data/`, 캐시·분할·시퀀스·요약통계·pos_weight) 위에 학습 레이어를 올린다. H1 결정은 [`design/h1/decisions.md`](../h1/decisions.md)(v5, 구현 완료).
-> **워크플로우·출처등급**: [`WORKFLOW.md`](../WORKFLOW.md). 이 DDD는 검토(`design/h2/review.md`) 통과 후 핸드오프로.
+> **설계 근거**: H1 산출물(`src/sepsis/data/`, 캐시·분할·시퀀스·요약통계·pos_weight) 위에 학습 레이어를 올린다. H1 결정은 [`docs/design/h1/decisions.md`](../h1/decisions.md)(v5, 구현 완료).
+> **워크플로우·출처등급**: [`WORKFLOW.md`](../WORKFLOW.md). 이 DDD는 검토(`docs/design/h2/review.md`) 통과 후 핸드오프로.
 > **개정 이력**
 > - **v2 (2026-06-28)** — review `6d597bf`의 HOLD 3건 + 출처등급 정정 반영
 >   - HOLD 1: 결정 2↔6 모순 해소 — **HP는 `vitals_labs`에서 모델별 1회 탐색 → 동결 → 두 피처셋 공통 적용**(featureset 유일 변인). 탐색 예산 수치화(모델당 동일 trial), 선택 objective를 **A-val utility로 단일화**(조기종료만 loss).
@@ -31,7 +31,7 @@ H1이 만든 시퀀스(GRU)·요약통계(트리)를 써서 **세 모델(XGBoost
 
 - **결정**: **XGBoost·LightGBM**(baseline, 트리, 요약통계 입력) + **GRU**(메인, m2m, 시퀀스 입력) 학습. 트리 둘 중 A-val 우수자를 **대표 baseline**으로 뽑아 GRU와 비교(결정 7).
 - **근거 + 출처등급**:
-  - baseline = "GRU가 넘어야 할 강한 기준선" [우리 결정]. 우승팀이 LightGBM이라 트리는 허수아비가 아닌 진짜 경쟁자 [확인됨: research/01, H1 결정 6].
+  - baseline = "GRU가 넘어야 할 강한 기준선" [우리 결정]. 우승팀이 LightGBM이라 트리는 허수아비가 아닌 진짜 경쟁자 [확인됨: docs/research/01, H1 결정 6].
   - 핵심 질문: "시간 흐름을 통째로 배우는 GRU가 요약통계 트리를 이기나, 특히 cross-site에서" [우리 결정].
 - **고려한 대안**: GRU만 학습(비교 대상 없음 → 성능 해석 불가). 트리 하나만(우승 계열 누락).
 - **미결/옵션**: Transformer는 "욕심" 항목으로 H2 범위 외(여유 시 별도).
@@ -71,13 +71,13 @@ H1이 만든 시퀀스(GRU)·요약통계(트리)를 써서 **세 모델(XGBoost
 - **근거 + 출처등급**:
   - 양성 1.8%라 정확도 무의미(전부 음성=98.2%) [확인됨: EDA].
   - PR-AUC = 불균형 표준 [ML 일반].
-  - utility = 대회 공식, 타이밍 반영(조기 보상) [확인됨: research/03 + 공식 코드 1차 대조].
+  - utility = 대회 공식, 타이밍 반영(조기 보상) [확인됨: docs/research/03 + 공식 코드 1차 대조].
   - **선택 기준을 최종 목표(utility)와 정렬**하려면 A-val에서 utility를 봐야 함 [우리 결정].
 - **고려한 대안**: H2는 PR-AUC만, utility는 H3에서 → 선택 기준과 최종 목표 불일치. τ를 B에서 선정 → 타깃 누수. 둘 다 기각.
-- **미결/옵션**: utility **정밀 검증**(우승점수 ~0.36 분해 TSV 대조, research/03 12시점 표 대조)은 H3에 둠 — *쓰는 것*(A-val)과 *정밀 검증*은 분리.
+- **미결/옵션**: utility **정밀 검증**(우승점수 ~0.36 분해 TSV 대조, docs/research/03 12시점 표 대조)은 H3에 둠 — *쓰는 것*(A-val)과 *정밀 검증*은 분리.
 - **검토 요청 항목**:
-  - 핸드오프 자립성: 위 수치(dt·m1/m2/m3·정규화식)를 핸드오프에 **인라인**(research/03 참조만 금지).
-  - sanity: 전부음성→0.0, 완벽예측→1.0, **research/03의 검증된 12시점 표와 시점별 점수 일치**.
+  - 핸드오프 자립성: 위 수치(dt·m1/m2/m3·정규화식)를 핸드오프에 **인라인**(docs/research/03 참조만 금지).
+  - sanity: 전부음성→0.0, 완벽예측→1.0, **docs/research/03의 검증된 12시점 표와 시점별 점수 일치**.
 
 ---
 
@@ -147,7 +147,7 @@ H1이 만든 시퀀스(GRU)·요약통계(트리)를 써서 **세 모델(XGBoost
 1. 6개 조합 무오류 학습 완료, 모델 아티팩트 6개 저장.
 2. 각 조합 A-val에서 PR-AUC + utility 기록(MLflow).
 3. 누수 가드: 학습·튜닝·선정·τ선정에 B 미접촉(정적·동적), A-val로만 선택.
-4. **utility 구현 sanity (크리스프)**: 전부음성 → 정규화 utility `== 0.0 (±1e-6)` **and** 완벽예측 → `== 1.0 (±1e-6)` **and** research/03의 검증된 12시점 표와 시점별 점수 일치.
+4. **utility 구현 sanity (크리스프)**: 전부음성 → 정규화 utility `== 0.0 (±1e-6)` **and** 완벽예측 → `== 1.0 (±1e-6)` **and** docs/research/03의 검증된 12시점 표와 시점별 점수 일치.
 5. **성능 하한 (크리스프)**: 6조합 전부 A-val `PR-AUC ≥ 0.05`(랜덤 0.018의 ~2.7배 — 배선이 실제 학습; 수치는 핸드오프에서 확정).
 6. 6조합 동일 seed·동일 분할·**동결된 동일 HP**(피처셋 간).
 7. **아티팩트 저장**: 모델·featureset별 **임계값 τ** + **전처리 통계**(A-train μ/σ·fill mean·pos_weight·clip bounds)를 저장(H3에서 B 재현용).
@@ -159,4 +159,4 @@ H1이 만든 시퀀스(GRU)·요약통계(트리)를 써서 **세 모델(XGBoost
 
 - v1(`6d597bf` 검토): HOLD 3건(결정2↔6 모순 / 임계값 정책 부재 / PASS 비크리스프) + 출처등급 정정 → **본 v2에서 전부 반영.**
 - utility 정의 `[확인됨]`(공식 코드 대조, 수치 인라인). HP default `[확인됨]`·탐색범위 `[우리 결정]`.
-- 다음: v2 재검토 → PASS 시 `design/h2/handoff.md` 작성.
+- 다음: v2 재검토 → PASS 시 `docs/design/h2/handoff.md` 작성.

@@ -1,10 +1,10 @@
 # H2 구현 핸드오프 — 학습 (utility · 트리 · GRU · 선정)
 
-> **설계 근거**: [`design/h2/decisions.md`](decisions.md)(v2, 검토 PASS `e523b07`). 본 문서는 그 결정을 실행 명세로 번역.
-> **워크플로우**: [`WORKFLOW.md`](../WORKFLOW.md). 자립형이며, 검토(`design/h2/handoff_review.md`) 통과 후 실행.
+> **설계 근거**: [`docs/design/h2/decisions.md`](decisions.md)(v2, 검토 PASS `e523b07`). 본 문서는 그 결정을 실행 명세로 번역.
+> **워크플로우**: [`WORKFLOW.md`](../WORKFLOW.md). 자립형이며, 검토(`docs/design/h2/handoff_review.md`) 통과 후 실행.
 > **개정 이력**
 > - **v2 (2026-06-28)** — 핸드오프 검토 `cec48cf`의 HOLD 3건 반영
->   - HOLD 1: H2-a에 **utility 계산 규칙 완전 인라인** — t_sepsis 유도(`첫양성+6`), U_TP/U_FN piecewise(절편·하한클리핑·FN시작점), best/inaction 정의, **14행 기대값 표 인라인**(research/03 참조 제거 → 자립).
+>   - HOLD 1: H2-a에 **utility 계산 규칙 완전 인라인** — t_sepsis 유도(`첫양성+6`), U_TP/U_FN piecewise(절편·하한클리핑·FN시작점), best/inaction 정의, **14행 기대값 표 인라인**(docs/research/03 참조 제거 → 자립).
 >   - HOLD 2: HP↔τ **중첩 순서** 명시(trial마다 τ-최대화 utility, 최고 trial의 HP\*·τ\* 동시 동결) — H2-b·c.
 >   - HOLD 3: 실패 모드에 **MLflow 기록 실패 / OOM·긴시퀀스 / 비유한 trial** 추가 + **동적 B-guard 기법** 명시.
 >   - 명칭 정정: "12시점 표" → **14행 표**.
@@ -59,7 +59,7 @@ logs/                     # 진행 로그
 ### 범위
 공식 PhysioNet 2019 utility를 구현하고 **검증**한다. 뒤 토막(b·c·d) 평가가 전부 여기 의존하므로 **맨 앞에서 검증 후 진행**.
 
-### 구현 (`eval/utility.py`) — 완전 인라인 정의 (research/03 참조 금지, 자립)
+### 구현 (`eval/utility.py`) — 완전 인라인 정의 (docs/research/03 참조 금지, 자립)
 
 **상수** [확인됨: 공식 evaluate_sepsis_score.py 대조]:
 `dt_early=−12h`, `dt_optimal=−6h`, `dt_late=+3h`. `u_fp=−0.05`, `u_tn=0`.
@@ -81,7 +81,7 @@ logs/                     # 진행 로그
 - **per-patient 시계열 재조립 채점**: 환자별로 시점열을 모아 U(s,t) 합산 후 전 환자 합.
 - 정규화: `U_norm = (U_obs − U_inaction) / (U_best − U_inaction)`.
 
-**검증 기대값 (research/03 14행 표 — 인라인)** — 패혈증 환자, t_sepsis 기준:
+**검증 기대값 (docs/research/03 14행 표 — 인라인)** — 패혈증 환자, t_sepsis 기준:
 | n (시간) | U_TP(맞힘) | U_FN(놓침) |
 |---|---:|---:|
 | < −12 | −0.05 | 0 |
@@ -102,7 +102,7 @@ logs/                     # 진행 로그
 ### PASS 기준 (assert)
 1. **전부음성 → `U_norm == 0.0` (±1e-6)** (= inaction).
 2. **best_predictions → `U_norm == 1.0` (±1e-6)**.
-3. **위 14행 기대값 표와 시점별 U_TP·U_FN 일치** (±1e-6). *(자립 — 핸드오프 내 표가 기준, research/03 참조 아님.)*
+3. **위 14행 기대값 표와 시점별 U_TP·U_FN 일치** (±1e-6). *(자립 — 핸드오프 내 표가 기준, docs/research/03 참조 아님.)*
 4. **t_sepsis 유도 검증**: 합성 환자(첫 양성 인덱스 k)에서 t_sepsis == k+6, 최적 보상(+1.0)이 첫 양성 인덱스(=n=−6)에 위치.
 5. 상수(`u_fp=−0.05`·`u_tn=0`·기울기)가 공식 코드와 일치.
 
@@ -169,7 +169,7 @@ logs/                     # 진행 로그
 6조합 결과를 모아 표로 만들고 대표 baseline 선정. 최종 피처셋·baseline 판단은 사람.
 
 ### 구현 (`train/select.py`)
-- MLflow에서 6조합(XGB·LGBM·GRU × vitals·vitals_labs) A-val PR-AUC·utility 집계 → `reports/h2_results.md` 표.
+- MLflow에서 6조합(XGB·LGBM·GRU × vitals·vitals_labs) A-val PR-AUC·utility 집계 → `docs/reports/h2_results.md` 표.
 - **대표 baseline 선정**: XGB·LGBM 중 A-val utility 우수자(B 미사용). 두 부스터 차이 부록.
 - robustness 결과(H2-b)도 표에 병기 — 피처셋 비교의 HP 편향 크기 명시.
 
@@ -201,9 +201,9 @@ logs/                     # 진행 로그
 ### 동적 B-guard (최중요 누수 게이트 — 기법 명시)
 "B 미접촉"을 prose가 아닌 런타임으로 강제: setB의 patient_id 집합을 미리 만들고, **학습·튜닝·τ선정·정규화통계 산출에 들어가는 모든 데이터의 patient_id가 그 집합과 교집합 ∅임을 각 함수 진입부에서 assert**. 위반 시 즉시 정지.
 
-## 검토 요청 (design/h2/handoff_review.md 용)
+## 검토 요청 (docs/design/h2/handoff_review.md 용)
 - PASS assert가 실제로 프로그래매틱한지(특히 H2-a 14행 표, robustness 수치).
-- 자립성: research/03 참조 없이 utility 수치가 인라인됐는지, 외부 레포 없이 구현 가능한지.
+- 자립성: docs/research/03 참조 없이 utility 수치가 인라인됐는지, 외부 레포 없이 구현 가능한지.
 - 진행 로그(ETA)가 터미널+파일 양쪽에 남는지.
 - H2-c가 smoke_m2m 배선과 정합하는지(단방향·마스킹).
 - τ·전처리통계 아티팩트가 H3에서 B 재현 가능한 형식인지.

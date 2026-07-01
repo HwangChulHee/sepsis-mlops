@@ -2,10 +2,10 @@
 
 ## 라운드 1
 
-- 대상: design/console-prep/decisions.md (신규, 첫 검토, 설계부)
+- 대상: docs/design/console-prep/decisions.md (신규, 첫 검토, 설계부)
 - 대상 commit: cb39acc (working tree clean)
 - 검토일: 2026-06-29
-- 핵심 질문: 콘솔(design/console/decisions.md, 통과)이 백엔드에 거는 교차단계 의존 6종을 이 문서가 실제로·끝까지 닫는가
+- 핵심 질문: 콘솔(docs/design/console/decisions.md, 통과)이 백엔드에 거는 교차단계 의존 6종을 이 문서가 실제로·끝까지 닫는가
 - 판정: HOLD — blocker 1건 (major 2 / minor 4)
 
 코드 대조 결과 본문의 출처표기(deploy.py:46/55/61/68, validate.py:46/60, bundle.py:102, app.py:34-44/97-110, pipeline.py:31-47/50)는 모두 실제 코드와 일치한다. 문제는 표기 정확성이 아니라 콘솔이 명시적으로 요구한 백엔드 의존 일부가 결정으로 닫히지 않은 것이다.
@@ -67,7 +67,7 @@
 
 ## 라운드 2 — 결정 7 + MJ1·MJ2 보완 재흐름추적
 
-- 대상: `design/console-prep/decisions.md` (설계부 v2, 라운드 1 보완 후)
+- 대상: `docs/design/console-prep/decisions.md` (설계부 v2, 라운드 1 보완 후)
 - 대상 commit: `398d878`
 - 검토일: 2026-06-29
 - 핵심 질문: 결정 7(두 파일 원자 co-visible)이 사슬을 실제로 닫았는가 아니면 구멍을 옮겼는가 + MJ1/MJ2 교정이 기존 결정·콘솔 문서와 모순 없이 끼워졌는가

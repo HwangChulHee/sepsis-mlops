@@ -1,6 +1,6 @@
 # 핸드오프 검토 — H4-드리프트 (레드팀, 실행 명세)
 
-- **대상**: `design/h4/drift/handoff.md` (초안)
+- **대상**: `docs/design/h4/drift/handoff.md` (초안)
 - **대상 commit**: `22af19b`
 - **검토일**: 2026-06-29
 - **핵심 질문**: 거리지표 감지가 **자기상관·거짓경보 없이** 구현되고, **watch 범위 경계**가 지켜지며, **서빙 토대와 정합**하는가.
@@ -67,7 +67,7 @@
 
 ## 재검토 v2
 
-- **대상**: `design/h4/drift/handoff.md` v2 (개정 이력 v2 — HOLD 2건 + 비차단)
+- **대상**: `docs/design/h4/drift/handoff.md` v2 (개정 이력 v2 — HOLD 2건 + 비차단)
 - **검토일**: 2026-06-29
 - **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 2건 해소, 비차단 반영, 신규 블로킹 모순 없음. → **다음은 H4d-a 구현 착수.** (cosmetic nit 1건.)
 

@@ -1,6 +1,6 @@
 # 검토 — H2 (레드팀 게이트)
 
-- **대상**: `design/h2/decisions.md` (초안)
+- **대상**: `docs/design/h2/decisions.md` (초안)
 - **대상 commit**: `9e2520b`
 - **검토일**: 2026-06-28
 - **핵심 질문**: 이 결정들로 학습하면 **공정한 비교**가 되고, **평가가 올바르며**, **누수가 없는가**.
@@ -10,7 +10,7 @@
 
 ## PASS
 
-- **결정 1 (세 모델 구도)** — baseline=강한 경쟁자 논리 타당. 우승팀 LightGBM 정렬은 H1 결정 6과 정합 [확인됨: research/01, h1_decisions 결정 6]. *주의*: H1 v5에서 우승팀은 "요약통계"가 아니라 path signature+도메인파생을 썼다고 정정됨 — 결정 1·6 본문이 "트리=강한 경쟁자"로만 적혀 있어 충돌 없음. PASS.
+- **결정 1 (세 모델 구도)** — baseline=강한 경쟁자 논리 타당. 우승팀 LightGBM 정렬은 H1 결정 6과 정합 [확인됨: docs/research/01, h1_decisions 결정 6]. *주의*: H1 v5에서 우승팀은 "요약통계"가 아니라 path signature+도메인파생을 썼다고 정정됨 — 결정 1·6 본문이 "트리=강한 경쟁자"로만 적혀 있어 충돌 없음. PASS.
 - **결정 3 (B 봉인 = H2/H3 경계)** — 코드로 전수 확인. `split.py:19-31` `split_cross_site`의 `B`는 sealed, `split.py:51-54` `train_split_name`이 cross_site에서 `A_train`만 통계원으로 반환. 정규화 μ/σ(`normalize.py:26-35`)·fill mean(`missing.py:38-41`)·pos_weight(`class_balance.py:23-29`) 전부 train-only로 구현됨. H2가 이를 그대로 재사용하면 B 무접촉 성립. PASS. *(단 핸드오프에서 "A_train 통계를 A_val에 적용·재계산 금지" assert 필요 → 권고 5.)*
 - **결정 5 (학습 설정) ↔ H1 정합** — 전제 4종 코드 확인: 단방향(`config.py:44 GRU_BIDIRECTIONAL=False`), 우측패딩+validity mask(`sequence.py:17-39`, 패딩을 **학습 loss·평가지표 양쪽에서** 제외 명시), pos_weight=A-train per-timestep·패딩 제외(`class_balance.py`). 모두 H1 결정 2·4·6·재스모크와 일치. PASS. *(331h BPTT 우려는 기우 → 권고 1.)*
 - **결정 7 (대표 baseline 선정)** — A-val만 참조, utility 우선·PR-AUC 보조, B 미사용. 누수 없음. PASS. *(utility 자체가 임계값 의존 → HOLD-2 연동.)*
@@ -31,7 +31,7 @@
      - HP를 한 번 튜닝해 두 featureset에 고정하면 → 어느 featureset에서 튜닝하는지, 다른 featureset에 불리하지 않은지가 미정.
   2. **"모델 간 튜닝 강도 공정"이 prose뿐.** 결정 6(`:90,94`)은 "튜닝 강도 절제 + 모델 간 공정(한 모델 과탐색 금지)"이라 했지만 검증 가능한 기준이 없다 — trial 수·탐색 예산·search space 크기 미지정. 한 모델이 우연히 더 넓게 탐색되면 "공정 비교"가 무너진다(task [B]가 짚은 지점).
   3. **튜닝 objective 불일치.** 결정 5는 GRU 조기종료=A-val **loss**(`:80`), 결정 4는 selection=PR-AUC+**utility**(`:62`), 결정 7은 **utility 우선**(`:103`). 무엇을 기준으로 HP를 고르는지가 세 곳에서 다르다.
-- **근거**: `design/h2/decisions.md:38` vs `:90`; 변인통제 주장 `:41`; objective 분산 `:62,80,103`.
+- **근거**: `docs/design/h2/decisions.md:38` vs `:90`; 변인통제 주장 `:41`; objective 분산 `:62,80,103`.
 - **제안**:
   - (a) **HP 튜닝 단위 명문화** — 권장: 모델별로 HP를 한 번 튜닝(예: `vitals_labs`에서)하고 **동일 HP를 두 featureset에 적용**해 featureset를 유일 변인으로 유지. 또는 "featureset+HP 동시 최적" 비교로 목적을 재정의(이 경우 결정 2의 인과 귀속 주장을 철회). **둘 중 하나를 골라 명시.**
   - (b) **탐색 예산을 수치로** — 모델당 동일 trial 수(예: N=각 20)·동일 search space로 고정해 "공정"을 assert 가능하게.
@@ -44,7 +44,7 @@
   - 임계값이 없으면 utility는 **정의되지 않는다**(PR-AUC는 랭킹이라 무관하지만 utility는 다름).
   - 임계값에 따라 모델 간 utility 순위가 **뒤집힐 수 있어** "공정 비교"가 성립 안 함.
   - H3에서 B를 채점할 때 임계값을 **B에서 다시 고르면 타깃 누수**(결정 3·5의 B봉인 원칙 위반). 임계값은 A-val에서 동결돼야 한다.
-- **근거**: research/03:66-75(utility=이진 예측 기반, 1차 출처 일치); `h2_decisions:62,103`(임계값 무언급); 누수 규칙 `h2_decisions:50`.
+- **근거**: docs/research/03:66-75(utility=이진 예측 기반, 1차 출처 일치); `h2_decisions:62,103`(임계값 무언급); 누수 규칙 `h2_decisions:50`.
 - **제안**: 결정 4에 임계값 정책 추가 — 권장: **모델·featureset별로 A-val utility를 최대화하는 임계값을 선정**해 MLflow에 **동결 저장**, H3는 이 동결 임계값을 B에 **그대로** 적용(B 재튜닝 금지). "PR-AUC는 임계값 무관"임을 1줄 명시. PASS 기준에 "임계값 A-val 선정·아티팩트 저장" 추가(HOLD-3 연동).
 
 ### HOLD-3 — PASS 기준 #4·#5 비크리스프 + 누락 (프로그래매틱 assert 불가)
@@ -52,11 +52,11 @@
 - **항목**: PASS 기준 #4, #5 (`h2_decisions:135-136`)
 - **문제**:
   - **#5 "랜덤(PR-AUC≈0.018) 대비 유의 상회"** — "유의 상회"는 임계가 없어 assert로 떨어지지 않는다.
-  - **#4 "전부음성≈0"** — 부정확. 전부음성 예측 = 무행동(inaction) 기준 그 자체라 정규화 utility는 **정확히 0.0**(≈ 아님). 또 결정 4가 약속한 "알려진 케이스 sanity"의 핵심인 **research/03의 검증된 12시점 표 대조**가 PASS에 빠짐.
+  - **#4 "전부음성≈0"** — 부정확. 전부음성 예측 = 무행동(inaction) 기준 그 자체라 정규화 utility는 **정확히 0.0**(≈ 아님). 또 결정 4가 약속한 "알려진 케이스 sanity"의 핵심인 **docs/research/03의 검증된 12시점 표 대조**가 PASS에 빠짐.
   - 누락: HOLD-2의 임계값 동결, 그리고 H3가 B를 재현하려면 필수인 **전처리 통계 아티팩트**(A-train μ/σ·fill mean·pos_weight·clip bounds) 저장이 PASS에 없음.
-- **근거**: `h2_decisions:135-136`; utility 정규화식 `evaluate_sepsis_score.py`(전부음성=inaction=정규화 0.0); research/03:96-118(12시점 표).
+- **근거**: `h2_decisions:135-136`; utility 정규화식 `evaluate_sepsis_score.py`(전부음성=inaction=정규화 0.0); docs/research/03:96-118(12시점 표).
 - **제안**: PASS 기준 재작성 —
-  - #4 → "전부음성 예측 → 정규화 utility == 0.0(±1e-6) **and** 완벽예측 → 1.0(±1e-6) **and** research/03 12시점 표와 시점별 점수 일치".
+  - #4 → "전부음성 예측 → 정규화 utility == 0.0(±1e-6) **and** 완벽예측 → 1.0(±1e-6) **and** docs/research/03 12시점 표와 시점별 점수 일치".
   - #5 → 구체값(예: "6조합 전부 A-val PR-AUC ≥ 0.05, 즉 랜덤 0.018의 ~2.7배 이상" 같은 assert 가능한 하한 — 수치는 채택자가 확정).
   - 추가: "모델·featureset별 임계값과 전처리 통계(μ/σ·fill mean·pos_weight·clip)를 아티팩트로 저장(H3 B 재현용)".
 
@@ -64,11 +64,11 @@
 
 ## 1차 출처 확인 결과
 
-### utility 정의 — ✅ research/03과 완전 일치 (1차 출처 직접 대조)
+### utility 정의 — ✅ docs/research/03과 완전 일치 (1차 출처 직접 대조)
 
 `physionetchallenges/evaluation-2019` 의 `evaluate_sepsis_score.py` raw 직접 확인:
 
-| 파라미터 | 공식 코드 값 | research/03 표기 | 일치 |
+| 파라미터 | 공식 코드 값 | docs/research/03 표기 | 일치 |
 |---|---|---|---|
 | `dt_early` | **−12h** (보상 창 열림) | 발병 12h 전 | ✅ |
 | `dt_optimal` | **−6h** (최대 보상) | 6h 전 +1.0 | ✅ |
@@ -80,8 +80,8 @@
 | 기울기 | `m1=1/6`, `m2=−1/9`, `m3=−2/9` | +1/6 / −1/9 / −2/9 | ✅ |
 | 정규화 | `(obs − inaction) / (best − inaction)` | 동일 | ✅ |
 
-→ **research/03의 utility 정의는 [확인됨] 유효.** DDD 결정 4의 `[검증 필요]`(임계값 외 정의 부분)는 **해소.**
-- *단 핸드오프 자립성 원칙(WORKFLOW §6)상* 결정 4는 현재 research/03을 **참조만** 한다. 핸드오프에는 위 수치(dt·m1/m2/m3·정규화식)를 **인라인**할 것. utility는 **per-patient 시계열 지표**(점 단위 아님)임도 명시(권고 3).
+→ **docs/research/03의 utility 정의는 [확인됨] 유효.** DDD 결정 4의 `[검증 필요]`(임계값 외 정의 부분)는 **해소.**
+- *단 핸드오프 자립성 원칙(WORKFLOW §6)상* 결정 4는 현재 docs/research/03을 **참조만** 한다. 핸드오프에는 위 수치(dt·m1/m2/m3·정규화식)를 **인라인**할 것. utility는 **per-patient 시계열 지표**(점 단위 아님)임도 명시(권고 3).
 
 ### 하이퍼파라미터 범위 — ⚠️ 공식 문서는 default+정성가이드만, numeric RANGE는 없음
 
@@ -123,15 +123,15 @@
 
 ## 다음 단계
 
-**HOLD 3건(HP 정책·utility 임계값·PASS 기준) 수정 후 재검토.** 전부 PASS 전에는 `design/h2/handoff.md`로 가지 않는다(WORKFLOW §5).
+**HOLD 3건(HP 정책·utility 임계값·PASS 기준) 수정 후 재검토.** 전부 PASS 전에는 `docs/design/h2/handoff.md`로 가지 않는다(WORKFLOW §5).
 
 ---
 
 ## 재검토 v2
 
-- **대상**: `design/h2/decisions.md` v2 (commit 검토 시점 `0442e4f`+v2 수정)
+- **대상**: `docs/design/h2/decisions.md` v2 (commit 검토 시점 `0442e4f`+v2 수정)
 - **검토일**: 2026-06-28
-- **판정**: ✅ **전부 PASS — HOLD 0건.** v1 HOLD 3건 전부 해소, 출처등급 정정 정확, 신규 블로킹 모순 없음. → **다음은 `design/h2/handoff.md` 작성 가능.** (경미 4건은 핸드오프에서 흡수, 비차단.)
+- **판정**: ✅ **전부 PASS — HOLD 0건.** v1 HOLD 3건 전부 해소, 출처등급 정정 정확, 신규 블로킹 모순 없음. → **다음은 `docs/design/h2/handoff.md` 작성 가능.** (경미 4건은 핸드오프에서 흡수, 비차단.)
 
 ### [1단계] 회귀 — v1 HOLD 3건 해소 검증
 
@@ -174,4 +174,4 @@
 1. **featureset 튜닝 비대칭 robustness(선택)**: HP를 `vitals_labs`에서 튜닝하는 잔존 편향이 사람 체크포인트의 피처셋 선택을 왜곡하지 않도록, 여력 시 "default-for-both" 또는 "vitals에서도 튜닝"을 보조 robustness로 1회 기록. 필수는 아님.
 2. (v1 권고 1~6 유효) 길이 버킷팅, 아티팩트 native 포맷, "A_train 통계를 A_val/B에 적용·재계산 금지" assert, unified 모드 격리 등 — 핸드오프 반영.
 
-**결론: HOLD 0 → `design/h2/handoff.md` 작성으로 진행.** 경미 4건·권고는 핸드오프에서 흡수(DDD 재라운드 불필요, H1 review 선례와 동일).
+**결론: HOLD 0 → `docs/design/h2/handoff.md` 작성으로 진행.** 경미 4건·권고는 핸드오프에서 흡수(DDD 재라운드 불필요, H1 review 선례와 동일).

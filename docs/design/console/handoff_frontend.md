@@ -1,6 +1,6 @@
 # Console 구현 핸드오프 B (명세부) — 프론트: React 콘솔 + Grafana 2패널 + K8s 배포
 
-> **전제**: `design/console/decisions.md`(설계부) 통과 + 핸드오프 A(백엔드) 구현 완료(52/52 GREEN, `97c2bd5`). 본 문서는 그 위에 얹는 표현·관측·배포 계층을 명세한다.
+> **전제**: `docs/design/console/decisions.md`(설계부) 통과 + 핸드오프 A(백엔드) 구현 완료(52/52 GREEN, `97c2bd5`). 본 문서는 그 위에 얹는 표현·관측·배포 계층을 명세한다.
 > **워크플로우**: 검토(`handoff_frontend_review.md`) 통과 → 구현. React/Grafana는 TDD보다 **와이어프레임·API 계약 일치**가 기준(UI는 단언보다 계약 정합). K8s YAML은 **사용자 직접 작성**(CKA 학습) — 본 문서는 골격·라우팅 규칙·이유만 제공.
 > **대상(신규)**: `console-web/`(Vite+React), `deploy/grafana/dashboards/serving_slo.json`, `deploy/k8s/console/*.yaml`.
 > **재활용(변경 없음)**: 핸드오프 A의 `/console` API, 서빙 `metrics.py`, 기존 `deploy/grafana/provisioning/*`.

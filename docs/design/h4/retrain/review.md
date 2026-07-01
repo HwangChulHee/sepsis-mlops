@@ -1,6 +1,6 @@
 # 검토 — H4-재학습 (레드팀 게이트)
 
-- **대상**: `design/h4/retrain/decisions.md` (초안)
+- **대상**: `docs/design/h4/retrain/decisions.md` (초안)
 - **대상 commit**: `b963b66`
 - **검토일**: 2026-06-29
 - **핵심 질문**: 드리프트≠성능을 올바로 다루고, human-in-the-loop을 강제하며, 안전하게 교체하고, 데이터 한계에 정직한가.
@@ -33,7 +33,7 @@
 
 - **항목**: 결정 4(`:61` "cross-site 검증(H3 방식)"), 결정 5(`:71` "A-val + cross-site 나쁘지 않음")
 - **문제**: H3에서 **setB는 일회성 봉인 held-out**(cross-site 일반화의 정직한 1회 측정)이었고, 프로젝트 전체가 B를 보호했다. 재학습 검증이 "cross-site(H3 방식)"로 매 사이클 **B에 대해 새 모델 vs 기존을 비교해 배포를 결정**하면, B가 **모델 선택에 반복 사용** → held-out 지위 소모(= H3가 막은 selection-on-test). "B에서 안 나빠지는 모델만 배포"를 반복하면 **B 과적합**, cross-site 일반화 주장이 무너진다.
-- **근거**: `h4_retrain_decisions:61,71`; H3 누수 원칙(reports/h3_results.md, h3_decisions B 봉인); WORKFLOW §3 누수.
+- **근거**: `h4_retrain_decisions:61,71`; H3 누수 원칙(docs/reports/h3_results.md, h3_decisions B 봉인); WORKFLOW §3 누수.
 - **제안**: 재학습 검증의 cross-site 프록시를 **신규 운영 데이터의 시간적 홀드아웃**(배포 대상 분포)으로 둔다 — 봉인 B를 반복 소비하지 않음. 봉인 B는 (필요 시) **1회 한정 참조**로만 쓰고 그 소모를 명시. 결정 4/5에서 "cross-site = setB 재사용"인지 "신규 홀드아웃"인지 **명확화**(setB 재사용이면 누수, 금지). PASS #4의 "cross-site"를 신규 홀드아웃으로 정의.
 
 ---
@@ -61,15 +61,15 @@
 
 ## 다음 단계
 
-**HOLD 2건(버전드 번들·롤백 / 봉인 B 재사용 누수) 해소 후 재검토.** 전부 PASS 전 `design/h4/retrain/handoff.md`로 가지 않는다(WORKFLOW §5).
+**HOLD 2건(버전드 번들·롤백 / 봉인 B 재사용 누수) 해소 후 재검토.** 전부 PASS 전 `docs/design/h4/retrain/handoff.md`로 가지 않는다(WORKFLOW §5).
 
 ---
 
 ## 재검토 v2
 
-- **대상**: `design/h4/retrain/decisions.md` v2 (개정 이력 v2 — HOLD 2건)
+- **대상**: `docs/design/h4/retrain/decisions.md` v2 (개정 이력 v2 — HOLD 2건)
 - **검토일**: 2026-06-29
-- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 2건 해소, 신규 블로킹 모순 없음. → **다음은 `design/h4/retrain/handoff.md`.** (cosmetic nit 1 + 정직성 권고 1.)
+- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 2건 해소, 신규 블로킹 모순 없음. → **다음은 `docs/design/h4/retrain/handoff.md`.** (cosmetic nit 1 + 정직성 권고 1.)
 
 ### 회귀 검증 (요청 3항목)
 
@@ -92,4 +92,4 @@
 - **post-retrain cross-site 측정 불가 명시**: A·B 둘 다 학습에 들어가면 재학습 모델엔 **미관측 제3 분포가 없음** → B-holdout은 *in-distribution* 검증(새 데이터 성능+A 무회귀)이지 cross-site 일반화 *주장*이 아님을 한 줄 명시(정직성). 실운영에선 신규 데이터 홀드아웃이 이 역할.
 - (v1 권고 1·3·5 유효) human-in-loop 자동경로 0건 grep(PASS #6 이미 반영), 시뮬 범위(게이트 차단·롤백 복원), 검증 임계 수치화.
 
-**결론: HOLD 0 → `design/h4/retrain/handoff.md` 작성으로 진행.** cosmetic nit·권고는 핸드오프에서 흡수.
+**결론: HOLD 0 → `docs/design/h4/retrain/handoff.md` 작성으로 진행.** cosmetic nit·권고는 핸드오프에서 흡수.

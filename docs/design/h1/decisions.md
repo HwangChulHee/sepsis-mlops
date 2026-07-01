@@ -12,7 +12,7 @@
 >   - 결정 6: baseline 부스터를 **XGBoost + LightGBM 병행**(피처 공유, A-val로 대표 선정, B 미사용), 우승 계열(LightGBM) 정렬. many-to-many와 **평가 단위 정렬**(매 시점 lookback 요약), "slope" 표현 일반화.
 >   - 경미: 클리핑 순서·다운샘플링 기각·완결성/이상라벨 필터·2차인용 표기·medRxiv 등급 하향.
 > - **v2 (2026-06-27)** — review `901c37f`의 HOLD 3 + 추가 5 + 미결 2 반영(검사 9종, A→B 3분할, 절단 진단·이연 등).
-> - v1·v2 및 반려 사유는 git history와 `design/h1/review.md` 참조.
+> - v1·v2 및 반려 사유는 git history와 `docs/design/h1/review.md` 참조.
 >
 > 워크플로우·출처등급 범례: [`WORKFLOW.md`](../WORKFLOW.md) 참고.
 
@@ -40,7 +40,7 @@
 - **근거 + 출처등급**:
   - 검사 9종 선정 근거 = **"임상 해석성 + 상대적 저결측 + 선행연구 지지"의 혼합**(단일 중요도 기준 아님) [우리 결정]. WBC·BUN·Platelets는 선행연구 지지 강함 [확인됨(review 989ee28 경유 1차대조)]; Lactate·Creatinine·Glucose는 임상 핵심이나 고결측이라 중요도 낮게 잡힘(Lactate 97.3% 결측) [확인됨: EDA]; PTT·HCO3·Calcium은 선행연구 고중요도라 추가 [확인됨(review 경유 1차대조)].
   - **EtCO2 제외**: 96.3% 결측 + 92% 미측정 → ffill로 끌어올 값조차 없는 *죽은 채널* [확인됨: EDA / review 권고].
-  - ICULOS 제외 = 우측 절단 컨닝 차단 [확인됨: research/04 + EDA §6].
+  - ICULOS 제외 = 우측 절단 컨닝 차단 [확인됨: docs/research/04 + EDA §6].
 - **고려한 대안**: 검사 6종(v1) → 약한 3종으로 ablation 시 오결론 위험. 26종 전부 → 노이즈 폭증. 활력만 고정 → 검사 신호 못 봄.
 - **미결/옵션**: 없음.
 - **검토 요청 항목**: 9종이 캐시(결정 8)에 모두 존재하는지, 활력셋(9)이 활력+검사셋(18)의 컬럼 부분집합으로 정확히 파생되는지.
@@ -50,7 +50,7 @@
 ## 결정 2: 결측 처리 — 모델별 분기, 0-fill 금지
 
 - **결정**: 트리(XGBoost·LightGBM)는 **NaN 그대로**. GRU는 **환자 내 forward-fill**(과거→미래만) → 잔여 빈칸은 **train split 평균**. **0으로 안 채움.**
-- **근거 + 출처등급**: 트리 결측 내장 처리(XGBoost·LightGBM 모두) [ML 일반]; ffill 챌린지 관행 [확인됨: research/02 — Pou-Prom[3]·Fu[4], review 코드 대조]; 0 = 진짜 값(혈압 0=사망) [우리 결정/도메인].
+- **근거 + 출처등급**: 트리 결측 내장 처리(XGBoost·LightGBM 모두) [ML 일반]; ffill 챌린지 관행 [확인됨: docs/research/02 — Pou-Prom[3]·Fu[4], review 코드 대조]; 0 = 진짜 값(혈압 0=사망) [우리 결정/도메인].
 - **고려한 대안**: 두 모델 동일 처리 → 한쪽 강점 죽음.
 - **미결/옵션**: 없음.
 - **검토 요청 항목**: ffill이 미래→과거로 새지 않는지, train 평균이 train split에서만 계산되는지.
@@ -98,7 +98,7 @@
 - **근거 + 출처등급**:
   - 환자 단위 = 누수 방지 [ML 기본].
   - 튜닝을 타깃 B에서 하면 타깃 누수 → 튜닝은 **A-val로만**, B는 평가 때만 [확인됨: review HOLD 3].
-  - A/B 유병률 다름(A 8.8% vs B 5.71%)이라 cross-site가 일반화의 핵심 시험대 [확인됨: EDA §8 / research/01·04].
+  - A/B 유병률 다름(A 8.8% vs B 5.71%)이라 cross-site가 일반화의 핵심 시험대 [확인됨: EDA §8 / docs/research/01·04].
 - **고려한 대안**: 행 단위 random → 환자 걸침(누수). 양방향 → 단순화 위해 단방향. val 출처 미정(v1) → 타깃 누수(HOLD 3).
 - **미결/옵션**: A-train/A-val 비율·seed = 핸드오프 디테일.
 - **검토 요청 항목**: **B가 학습·튜닝·정규화·pos_weight 어디에도 닿지 않는지**(평가 1회만), A-val이 A-train과 환자 겹치지 않는지.
@@ -128,7 +128,7 @@
 - **근거 + 출처등급**:
   - 측정 유무/빈도가 정보를 담는다(informative missingness)는 확립된 현상 [확인됨: Sharafoddini 2019, JMIR 2025].
   - 관찰-과정 피처가 **cross-site 이식성을 악화**(우리 A→B와 같은 우려) [유도: medRxiv 2026 MIMIC-IV↔eICU — 단 사망예측·cross-DB라 우리 발병/cross-site엔 직접 아님, 방향성만 유도].
-  - 치료행동 누수 통로(Epic 외부검증 실패) [확인됨: research/04].
+  - 치료행동 누수 통로(Epic 외부검증 실패) [확인됨: docs/research/04].
   - PhysioNet에서의 구체 발현은 결정 4 EDA로 확인 [검증 필요 → 데이터로].
 - **고려한 대안**: 기본 ON → 미검증 누수 채택. 미구현 → H3 검증 불가.
 - **미결/옵션**: 채택 여부는 H3 검증 결과에 달림.
@@ -157,7 +157,7 @@
 
 ---
 
-## 핸드오프(design/h1/handoff.md) 강제 항목 — review v3 반영
+## 핸드오프(docs/design/h1/handoff.md) 강제 항목 — review v3 반영
 
 핸드오프 작성 시 아래를 PASS 기준에 명시적으로 박는다:
 1. **validity mask 산출 + 평가에서 패딩 제외**: 패딩 시점을 학습 loss뿐 아니라 **평가 지표 계산에서도 제외**. 안 빼면 패딩이 "맞춘 음성"으로 세어져 지표가 가짜로 좋아진다.
@@ -171,7 +171,7 @@
 - v1(`901c37f`): HOLD 3+추가 5+미결 2 → v2 반영.
 - v2(`989ee28`): HOLD 1(마스크/ffill 순서)+경미 7 → v3 반영.
 - v3(`444b095`): 회귀 전부 해소 + 결정 4·6 1차출처 통과. **HOLD 1(결정 4(c) 단방향/우측패딩 미명시) → 본 v4에서 명문화.** slope→delta·range·variance로 특정([검증 필요] 해소). 효율을 m2m 고유 우위로 정직 한정. 핸드오프 강제 항목 3종 기록.
-- v4(`5d809b2`): DDD 재검토 전 항목 **PASS**(HOLD 0). → `design/h1/handoff.md` 작성·검토(v2 PASS `0ec8aca`, pos_weight 밴드 완화는 handoff v3 `48b1b56`).
+- v4(`5d809b2`): DDD 재검토 전 항목 **PASS**(HOLD 0). → `docs/design/h1/handoff.md` 작성·검토(v2 PASS `0ec8aca`, pos_weight 밴드 완화는 handoff v3 `48b1b56`).
 
 ### ✅ H1 구현 종료 (2026-06-27)
 **네 토막 전부 PASS + 사람 체크포인트 2건 통과 → H1 종료.**
@@ -180,7 +180,7 @@
   - H1-a 캐시 — PASS **5/5** (`ab74fb6`): 40,336명 NaN보존 raw 캐시(19피처+라벨+site+pid), 결측률 EDA와 ±0.004%p.
   - H1-b 변환 — PASS **10/10** (`c2a62af`): 분할·결측·정규화·m2m 시퀀스·트리 요약·pos_weight. cross_site 누수 방어선 전수 검증(전 1,552,210 시점).
   - m2m 재스모크 — PASS **4/4** (`8f68e6e`): 단방향 GRU·매시점 BCE(loss 마스킹)·평가 패딩 제외 배선 검증.
-  - H1-c 진단 EDA — PASS (`53c19eb`): 측정밀도 누수·양성 위치 분포(`reports/h1_diagnostics.md`).
+  - H1-c 진단 EDA — PASS (`53c19eb`): 측정밀도 누수·양성 위치 분포(`docs/reports/h1_diagnostics.md`).
 - **사람 체크포인트 2건 통과**:
   1. m2m 재스모크 — 손실곡선 유한·하락(1.373→1.293), 마스킹 효과 확인(평가 시점의 74%가 패딩 → masked **0.0168** ≠ unmasked **0.0132** PR-AUC). 누수 의심 고점수 없음.
   2. H1-c 측정밀도 → **마스크 OFF 정당성 데이터로 뒷받침**: any-lab 측정률 양성/음성 **1.05×**(근소), 발병 t0 직전 측정 **급증 없음**(-1h 0.214→t0 0.178), **PTT·HCO3는 오히려 감소**(0.95·0.94×) → informative-missingness 신호 약함. **단 최종 채택은 H3 A·B 검증과 함께**(결정 7 유지).

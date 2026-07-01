@@ -3,7 +3,7 @@
 ## 재검토 v2 — 회귀 확인
 
 - **검토일**: 2026-06-27
-- **대상**: working tree `design/h1/handoff.md` (**v2**, 개정 이력 `v2 2026-06-27`), base HEAD `f574898`.
+- **대상**: working tree `docs/design/h1/handoff.md` (**v2**, 개정 이력 `v2 2026-06-27`), base HEAD `f574898`.
 - **검토자**: Claude Code (레드팀 모드)
 - **결론**: **HOLD 2건 모두 해소 + 권고 7건 반영 → PASS.** 새 모순 없음. 단 **비차단 주의 1건**(assert#9 pos_weight 허용오차가 cross_site에서 spurious fail 가능 — 실행 전 권장 수정). v1 검토 결과는 git history(`1734bdb`) 참조.
 - **다음**: HOLD 없음 → **H1-a 구현 착수 가능**(아래 주의 1건 반영 권장).
@@ -13,10 +13,10 @@
 ## 회귀 점검
 
 ### HOLD 1 (0-fill 검증) — ✅ 해소
-- PASS#6(`design/h1/handoff.md:117`)이 **"raw 공간 — 정규화 前에 판정"**으로 이동: "대치 직후 NaN 없음 AND 채운 자리 값이 ffill값 또는 train평균과 일치(=0 아님)". 그리고 "정규화 후엔 평균fill이 0이 되어 판정 불가하므로 반드시 raw 공간에서 검사"를 명문화 — 내 v1 지적(z-score 후 0 구분 불가)을 정확히 반영. **코드 판정 가능**(결측 위치 → 채운 값 == 기대 fill값 비교). ✅
+- PASS#6(`docs/design/h1/handoff.md:117`)이 **"raw 공간 — 정규화 前에 판정"**으로 이동: "대치 직후 NaN 없음 AND 채운 자리 값이 ffill값 또는 train평균과 일치(=0 아님)". 그리고 "정규화 후엔 평균fill이 0이 되어 판정 불가하므로 반드시 raw 공간에서 검사"를 명문화 — 내 v1 지적(z-score 후 0 구분 불가)을 정확히 반영. **코드 판정 가능**(결측 위치 → 채운 값 == 기대 fill값 비교). ✅
 
 ### HOLD 2 (pos_weight 입력 산출) — ✅ 해소
-- `data/class_balance.py` 디렉토리(`:57`) + 구현(`:109`, A-train per-timestep 양성비율 산출·로깅, pos_weight=neg/pos, 산출만·적용 H2) + PASS#9(`:120`) 추가. 부속결정(`design/h1/decisions.md:153` "H1은 클래스 비율 집계까지")과 범위 일치, **시점 단위·A-train 한정**도 정합. ✅
+- `data/class_balance.py` 디렉토리(`:57`) + 구현(`:109`, A-train per-timestep 양성비율 산출·로깅, pos_weight=neg/pos, 산출만·적용 H2) + PASS#9(`:120`) 추가. 부속결정(`docs/design/h1/decisions.md:153` "H1은 클래스 비율 집계까지")과 범위 일치, **시점 단위·A-train 한정**도 정합. ✅
 
 ### 권고 7건 — ✅ 반영(1건 부분)
 1. `≈`→허용오차: H1-a#4 "**±0.5%p 이내**"(`:84`). ✅

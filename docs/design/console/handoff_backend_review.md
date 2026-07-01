@@ -1,13 +1,13 @@
 # Console 백엔드 핸드오프 A (명세부) 레드팀 검토
 
-> 대상: `design/console/handoff_backend.md` · 설계 권위: `design/console/decisions.md`(결정 4·5·5-A·5-B·6-A·7)
+> 대상: `docs/design/console/handoff_backend.md` · 설계 권위: `docs/design/console/decisions.md`(결정 4·5·5-A·5-B·6-A·7)
 > 루프: redteam ⇄ reviser. 통과 = blocker 0. 각 지적 아래 `[reviser 응답]`으로 해소/미해소를 대조 기록.
 
 ---
 
 ## 라운드 1 (2026-06-30, redteam 원문)
 
-- 대상: design/console/handoff_backend.md (신규, 첫 검토)
+- 대상: docs/design/console/handoff_backend.md (신규, 첫 검토)
 - 핵심 질문: 결정 4·5·5-A·5-B·6-A·7을 누락·왜곡 없이 구현 명세하는가. 승인·롤백·화해·전파의 의존 사슬이 코드 수준에서 끝까지 닫히는가.
 - 판정: HOLD — blocker 2건 (B1 버전 식별자 규약, B2 전파 확인 경로). major 2건, minor 3건.
 
@@ -83,7 +83,7 @@ blocker 2건(B1·B2)은 동일 근본 원인(맨버전 vs 디렉토리명 규약
 
 ## 라운드 2 (2026-06-30, redteam) — 규약 통일 보완 재흐름추적
 
-- 대상: `design/console/handoff_backend.md` (명세부 v2, reviser 커밋 `6439b23` 반영본)
+- 대상: `docs/design/console/handoff_backend.md` (명세부 v2, reviser 커밋 `6439b23` 반영본)
 - 핵심 질문: 디렉토리명 단일화가 화해·전파·archived·롤백 네 흐름을 실제로 닫았는가(구멍 옮김 아닌가). MJ1/MJ2/minor 정정이 코드·결정과 모순 없이 끼워졌는가.
 - **판정: PASS — blocker 0** (minor 2건 권고)
 

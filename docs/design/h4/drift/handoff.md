@@ -1,6 +1,6 @@
 # H4-드리프트 구현 핸드오프 — covariate 드리프트 감시 (watch까지)
 
-> **설계 근거**: [`design/h4/drift/decisions.md`](decisions.md)(v2, 검토 PASS `3eb98bd`). 실행 명세로 번역.
+> **설계 근거**: [`docs/design/h4/drift/decisions.md`](decisions.md)(v2, 검토 PASS `3eb98bd`). 실행 명세로 번역.
 > **워크플로우**: [`WORKFLOW.md`](../../WORKFLOW.md). 자립형(인프라·도구 버전 인라인).
 > **개정 이력**
 > - **v2 (2026-06-28)** — 핸드오프 검토 `25d490b`의 HOLD 2건 + 비차단 반영
@@ -108,7 +108,7 @@ Evidently로 reference vs 최근 윈도우 감지, watch 신호 노출, Grafana 
 - Evidently 감지가 엔진(H4d-a)과 불일치
 - 위 중 하나라도 → 정지·보고.
 
-## 검토 요청 (design/h4/drift/handoff_review.md 용)
+## 검토 요청 (docs/design/h4/drift/handoff_review.md 용)
 - 환자당 1관측 집계가 드리프트 신호를 죽이지 않는지(요약 방식 타당성).
 - 합성 주입 검증·거짓경보 보정이 프로그래매틱한지(PASS #3·#4).
 - reference가 RAW인지(정규화 통계 아님), 결측률이 1급 신호로 포함되는지.

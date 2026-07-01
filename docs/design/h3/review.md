@@ -1,6 +1,6 @@
 # 검토 — H3 (레드팀 게이트)
 
-- **대상**: `design/h3/decisions.md` (초안)
+- **대상**: `docs/design/h3/decisions.md` (초안)
 - **대상 commit**: `7f0e492`
 - **검토일**: 2026-06-28
 - **핵심 질문**: B를 개봉해 채점할 때 **누수가 없고**, 채점 도구가 **정확하며**, 결과 **해석이 올바른가**.
@@ -26,8 +26,8 @@
 ### HOLD-1 — “B로 featureset 선택”이 결정 2(“B는 모델선택 영향 불가”)와 정면 충돌 (★누수)
 
 - **항목**: 결정 2 ↔ 부속결정(피처셋 이연) ↔ H2-d
-- **문제**: 결정 2는 “**B는 채점에만 사용, 모델 선택·하이퍼파라미터에 영향 줄 수 없음**”(`h3_decisions:33`)이라 못박는다. 그런데 부속결정은 “메인 피처셋은 **H3 cross-site 결과** + H4 후 결정. **H3-b의 B gap이 그 핵심 재료**”(`h3_decisions:74`)라 하고, H2-d도 featureset을 “H3 cross-site B + H4 후”로 이연했다(`reports/h2_results.md:47`). **featureset은 모델 설계 선택**이고, 그것을 **B 성능으로 고르면 “시험지로 모델 고르기”(selection-on-test)** = 결정 2 위반·낙관 편향. 한 번만 개봉해도, 2개 중 B 점수 높은 쪽을 고르면 그 조합의 B 점수는 더 이상 정직한 held-out이 아니다.
-- **근거**: `h3_decisions:33` vs `:74`; `reports/h2_results.md:47`; 누수 원칙(WORKFLOW §3·H1·H2).
+- **문제**: 결정 2는 “**B는 채점에만 사용, 모델 선택·하이퍼파라미터에 영향 줄 수 없음**”(`h3_decisions:33`)이라 못박는다. 그런데 부속결정은 “메인 피처셋은 **H3 cross-site 결과** + H4 후 결정. **H3-b의 B gap이 그 핵심 재료**”(`h3_decisions:74`)라 하고, H2-d도 featureset을 “H3 cross-site B + H4 후”로 이연했다(`docs/reports/h2_results.md:47`). **featureset은 모델 설계 선택**이고, 그것을 **B 성능으로 고르면 “시험지로 모델 고르기”(selection-on-test)** = 결정 2 위반·낙관 편향. 한 번만 개봉해도, 2개 중 B 점수 높은 쪽을 고르면 그 조합의 B 점수는 더 이상 정직한 held-out이 아니다.
+- **근거**: `h3_decisions:33` vs `:74`; `docs/reports/h2_results.md:47`; 누수 원칙(WORKFLOW §3·H1·H2).
 - **제안**: 둘 중 하나로 **명문화**해 모순 제거 —
   - (권장) **B는 6조합 각각의 cross-site 일반화를 *보고*만 한다(선택 안 함).** featureset 최종 선택 기준은 **A-val + H4 운영/드리프트 신호**로 두고, B는 “**정직한 1회 cross-site 측정치(참고)**”로 위치. 이러면 결정 2 유지.
   - 또는 B를 featureset 선택에 쓰겠다면, **B의 held-out 지위가 소모됨**을 명시하고 일반화 주장을 그만큼 약화(별도 확정 데이터 필요). 
@@ -37,10 +37,10 @@
 
 - **항목**: 결정 5, 부속결정, PASS #5
 - **문제**:
-  1. **WORKFLOW가 H3의 귀결 결정을 “마스크를 켤까?”로 못박았다**(`WORKFLOW.md:163` — H3 끝에서 사람에게 돌아오는 결정). H1도 “마스크 OFF **최종 채택은 H3 A·B 검증과 함께**(결정 7 유지)”(`design/h1/decisions.md:186`)라 **H3에서 닫기로 약속**했다. 그런데 DDD는 H3-c를 “**H4 최우선이면 선택적**”(`h3_decisions:66`)·“이연 가능”(`:65`)으로 둬, **H3가 자기 정의상의 결정을 안 내리고 끝날 수 있다.** 이는 WORKFLOW·H1과의 문서 충돌이고, 마스크 OFF 근거가 **in-site(H1-c)에만 머무는** 위험을 그대로 남긴다(DDD도 인정 `:65`).
-  2. **마스크 cross-site 판정 기준이 부정확.** DDD는 “마스크 ON이 **B에서 크게 오르면 누수 의심**”(`:63`)이라 하나, 우려의 본질은 *전이성*이다(관찰-과정 피처가 **cross-site 이식성을 악화**, research/04). 즉 “B 점수↑=누수”가 아니라 “**마스크의 in-site 이득이 A→B에서 사라지거나 gap을 키우는가**”로 봐야 한다.
+  1. **WORKFLOW가 H3의 귀결 결정을 “마스크를 켤까?”로 못박았다**(`WORKFLOW.md:163` — H3 끝에서 사람에게 돌아오는 결정). H1도 “마스크 OFF **최종 채택은 H3 A·B 검증과 함께**(결정 7 유지)”(`docs/design/h1/decisions.md:186`)라 **H3에서 닫기로 약속**했다. 그런데 DDD는 H3-c를 “**H4 최우선이면 선택적**”(`h3_decisions:66`)·“이연 가능”(`:65`)으로 둬, **H3가 자기 정의상의 결정을 안 내리고 끝날 수 있다.** 이는 WORKFLOW·H1과의 문서 충돌이고, 마스크 OFF 근거가 **in-site(H1-c)에만 머무는** 위험을 그대로 남긴다(DDD도 인정 `:65`).
+  2. **마스크 cross-site 판정 기준이 부정확.** DDD는 “마스크 ON이 **B에서 크게 오르면 누수 의심**”(`:63`)이라 하나, 우려의 본질은 *전이성*이다(관찰-과정 피처가 **cross-site 이식성을 악화**, docs/research/04). 즉 “B 점수↑=누수”가 아니라 “**마스크의 in-site 이득이 A→B에서 사라지거나 gap을 키우는가**”로 봐야 한다.
   3. **공정 비교 통제 미명세.** 마스크 ON은 입력 채널 추가라 재학습이 맞다(아래 §1차 확인). 단 마스크 효과만 분리하려면 **H2 HP\*·seed·학습 프로토콜 동일, 입력 채널만 차이(input_dim F→2F)**, τ는 **A-val에서 자기 선정(B 아님)** 이어야 하는데 명세가 없다(`:67`은 검토요청으로만).
-- **근거**: `WORKFLOW.md:163`; `design/h1/decisions.md:186`; `h3_decisions:63,65,66,67`; research/04(관찰-과정 피처 이식성 악화 — H1 결정 7 경유).
+- **근거**: `WORKFLOW.md:163`; `docs/design/h1/decisions.md:186`; `h3_decisions:63,65,66,67`; docs/research/04(관찰-과정 피처 이식성 악화 — H1 결정 7 경유).
 - **제안**:
   - **H3-c를 H3 필수 범위로 복귀**(최소 대표 조합 1개라도)해 “마스크를 켤까?”를 H3에서 답한다. **그래도 H4로 미루려면 WORKFLOW §8 + h1 결정 7을 명시적으로 개정**(사유: H4 운영 평가가 더 결정적 — 단 그때까지 마스크 정책은 in-site 근거뿐임을 위험으로 기록).
   - 판정 기준을 **전이성**으로 재서술: 마스크 ON/OFF 각각의 **A-val→B gap** 비교(ON이 in-site 이득을 B에서 잃거나 gap↑ → 사이트 특이 신호, 채택 보류).
@@ -67,25 +67,25 @@
 ## 실행 전 권고 (비차단)
 
 1. **결정 2 강제 기법 명시(핸드오프)** — “B는 채점 함수에만”을 코드로: B는 `score_frozen(model, frozen_stats, τ, B_data)` *한 함수*에만 진입하고, H3 코드 경로에서 **`compute_norm_stats`·`compute_fill_mean`·`select_threshold`(=피팅/τ선정)는 호출 안 함**(정적 grep 0건 + 동적 assert). μ/σ·fill·τ는 **MLflow 아티팩트에서 로드**(재계산 금지). H2 B-guard 선례의 역방향.
-2. **gap은 A-val을 MLflow 풀정밀로** — `reports/h2_results.md`는 4자리 반올림. gap·순위역전 판단엔 MLflow 원값 사용(또는 동일 코드로 재계산해 H2와 bit-일치 확인).
+2. **gap은 A-val을 MLflow 풀정밀로** — `docs/reports/h2_results.md`는 4자리 반올림. gap·순위역전 판단엔 MLflow 원값 사용(또는 동일 코드로 재계산해 H2와 bit-일치 확인).
 3. **결정 4 문구 정정** — “우승 0.36 분해 *재현*” → “공표값 대비 *스케일 참조*”(재현 불가, §1차).
 4. **B gap 해석에 불확실성** — 작은 gap·순위역전 과해석 방지로 **환자 단위 부트스트랩 CI**(B utility/PR-AUC)를 사람 체크포인트 자료에 포함. (해석 정확성.)
-5. **AUROC 보조 병기(선택)** — 문헌 비교용(research/03: AUROC 보조). PR-AUC가 1차임은 유지.
+5. **AUROC 보조 병기(선택)** — 문헌 비교용(docs/research/03: AUROC 보조). PR-AUC가 1차임은 유지.
 6. **B 이상 라벨 환자 처리 1줄** — H1-a가 로깅한 비연속/우측끝 위반 환자(있다면)의 채점 포함/제외 방침 명시.
 
 ---
 
 ## 다음 단계
 
-**HOLD 2건(B-featureset 선택 충돌 · 마스크 H3-c 이연 충돌) 해소 후 재검토.** 전부 PASS 전 `design/h3/handoff.md`로 가지 않는다(WORKFLOW §5).
+**HOLD 2건(B-featureset 선택 충돌 · 마스크 H3-c 이연 충돌) 해소 후 재검토.** 전부 PASS 전 `docs/design/h3/handoff.md`로 가지 않는다(WORKFLOW §5).
 
 ---
 
 ## 재검토 v2
 
-- **대상**: `design/h3/decisions.md` v2 (개정 이력 v2 — HOLD 2건 + 정정)
+- **대상**: `docs/design/h3/decisions.md` v2 (개정 이력 v2 — HOLD 2건 + 정정)
 - **검토일**: 2026-06-28
-- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 2건 해소, 정정 반영, 신규 블로킹 모순 없음. → **다음은 `design/h3/handoff.md` 작성 가능.** (마이크로 nit 2건은 핸드오프 흡수.)
+- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 2건 해소, 정정 반영, 신규 블로킹 모순 없음. → **다음은 `docs/design/h3/handoff.md` 작성 가능.** (마이크로 nit 2건은 핸드오프 흡수.)
 
 ### 회귀 검증 (요청 4항목)
 
@@ -97,7 +97,7 @@
 
 **2. HOLD-2 (마스크 필수 복귀) → ✅ 해소.**
 - **필수화**: 결정 5(`:68`) "H3 **필수 항목**(WORKFLOW §8·H1 결정 7 약속), 최소 **대표 1조합(GRU vitals) 반드시 수행**." 범위 표(`:22`)·PASS #5(`:92`)·고려한 대안(`:72`, 이연=약속 위반→기각) 모두 일관. WORKFLOW §8(`WORKFLOW.md:163`)·H1(`h1_decisions:186`) 약속 이행.
-- **전이성 재서술**: `:69` "판정 = ON/OFF의 **A-val→B gap 비교**. ON이 A-val 비슷/좋은데 **B에서 더 무너지면(gap↑) → site-specific 외운 것 → OFF 맞다**. 단순 'B 점수 오르내림'이 아니라 gap 변화가 핵심 — research/04." ✓ 정확.
+- **전이성 재서술**: `:69` "판정 = ON/OFF의 **A-val→B gap 비교**. ON이 A-val 비슷/좋은데 **B에서 더 무너지면(gap↑) → site-specific 외운 것 → OFF 맞다**. 단순 'B 점수 오르내림'이 아니라 gap 변화가 핵심 — docs/research/04." ✓ 정확.
 - **공정 통제**: `:70` "HP\*·seed 동일·**입력 채널만 차이**·τ는 각자 A-val·그 외 전처리 동일." ✓ 명세됨.
 
 **3. 정정 → ✅ 반영.**
@@ -116,4 +116,4 @@
 ### 1차 확인 (변동 없음, v1에서 검증)
 공식 스크립트 동등성 입수·자동대조 가능 [확인됨] · B 재현 아티팩트 충분(GRU npz+json+state_dict / 트리 native+json), 빠진 통계 없음 [확인됨: h2c·h2b 코드] · 마스크=입력채널(input_dim F→2F) 재학습 필요 [확인됨: gru.py:24, h2c:75] · WORKFLOW §8 H3=마스크 결정 [확인됨].
 
-**결론: HOLD 0 → `design/h3/handoff.md` 작성으로 진행.** nit 2건은 핸드오프에서 흡수(DDD 재라운드 불필요).
+**결론: HOLD 0 → `docs/design/h3/handoff.md` 작성으로 진행.** nit 2건은 핸드오프에서 흡수(DDD 재라운드 불필요).

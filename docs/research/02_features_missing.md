@@ -3,7 +3,7 @@
 > 이 문서는 **읽고 이해하는 것**이 목적이라 사람 말로 썼다.
 > 신뢰도를 알 수 있게 각 결정에 출처 등급을 달았다:
 > **[확인됨]** = 공식 논문/페이지를 직접 확인 · **[우리 결정]** = 근거 위에서 우리가 판단(논문 인용 아님) · **[검증 필요]** = Claude Code가 1차 출처로 재확인할 것.
-> ⚠️ **갱신 이력**: 결측 마스크 정책이 바뀌었다(§3). Q4(누수)에서 마스크가 "치료행동 누수"의 통로일 수 있음이 드러나, **기본 추가 → 기본 미사용(옵트인)**으로 전환. 자세한 근거는 `research/04_leakage_generalization.md` 참고.
+> ⚠️ **갱신 이력**: 결측 마스크 정책이 바뀌었다(§3). Q4(누수)에서 마스크가 "치료행동 누수"의 통로일 수 있음이 드러나, **기본 추가 → 기본 미사용(옵트인)**으로 전환. 자세한 근거는 `docs/research/04_leakage_generalization.md` 참고.
 
 ---
 
@@ -146,4 +146,4 @@
 
 [7] Ding R, Rong F, Han X, Wang L. **"Cross-center Early Sepsis Recognition by Medical Knowledge Guided Collaborative Learning for Data-scarce Hospitals."** *ACM Web Conference (WWW '23)*, 2023. arXiv:2302.05702.
 
-> 치료행동 누수·Epic 사례의 1차 출처는 `research/04_leakage_generalization.md` 레퍼런스 참고.
+> 치료행동 누수·Epic 사례의 1차 출처는 `docs/research/04_leakage_generalization.md` 레퍼런스 참고.

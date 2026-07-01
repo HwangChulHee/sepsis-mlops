@@ -1,6 +1,6 @@
 # Console-Prep 구현 핸드오프 (명세부) — H4 백엔드 보강
 
-> **전제**: `design/console-prep/decisions.md`(설계부) 2라운드 검토 통과(blocker 0). 본 문서는 그 결정 1~7의 *구현 방법*을 자립형으로 명세한다. 설계 근거는 decisions.md 참조.
+> **전제**: `docs/design/console-prep/decisions.md`(설계부) 2라운드 검토 통과(blocker 0). 본 문서는 그 결정 1~7의 *구현 방법*을 자립형으로 명세한다. 설계 근거는 decisions.md 참조.
 > **워크플로우**: 검토(`handoff_review.md`) 통과 → spec-writer TDD → 구현.
 > **대상 파일**: `src/sepsis/retrain/{pipeline.py, deploy.py, validate.py}`, `src/sepsis/serve/app.py`, `scripts/h4r_c_smoke.py`(호출부 갱신). (콘솔 API/UI·FS↔DB 일관성은 범위 외.)
 > **상태**: 명세부 v2 — 레드팀 라운드 1 반영(B1 reload↔drift 정합 재명세, MJ-a~e, mn1~5).

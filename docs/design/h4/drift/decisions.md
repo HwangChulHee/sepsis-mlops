@@ -1,7 +1,7 @@
 # H4-드리프트 설계결정문서 (DDD) — covariate 드리프트 감시
 
 > **설계 근거**: H4-서빙 위. `serve/metrics.py`의 입력 피처 히스토그램·결측 카운터(covariate 드리프트 토대) + A-train 분포(H1 동결)를 기준으로 감시. 다음(H4-재학습)의 트리거를 만든다.
-> **워크플로우·출처등급**: [`WORKFLOW.md`](../../WORKFLOW.md). 검토(`design/h4/drift/review.md`) 통과 후 핸드오프로.
+> **워크플로우·출처등급**: [`WORKFLOW.md`](../../WORKFLOW.md). 검토(`docs/design/h4/drift/review.md`) 통과 후 핸드오프로.
 > **상태**: 초안 — 레드팀 검토 전.
 > **개정 이력**
 > - **v2 (2026-06-28)** — review `1db0500`의 HOLD 2건 + 비차단 반영
@@ -30,7 +30,7 @@
 ## 결정 1: 기준 분포(reference) — A-train 동결
 
 - **결정**: 드리프트 기준 = **A-train 입력의 RAW 분포**(정규화 전 원값 — μ/σ 같은 정규화 통계가 아니라 피처별 raw 값 분포). 서빙이 raw 입력을 받으므로 raw 단계에서 감시. 피처별 reference 분포 산출·동결. **결측률도 1급 신호** — 피처별 결측 비율의 reference를 함께 동결(H3-c에서 측정 패턴이 site-specific임을 봤으므로 결측률 변화 = 중요 드리프트).
-- **근거 + 출처등급**: "모델이 본 세상"에서 벗어나나가 우리 질문 [우리 결정]. 학습 분포 대비가 표준 [확인됨: 업계 관행]. cross-site(A→B) 붕괴를 H3에서 봤으므로 입력이 A에서 벗어나면 그 붕괴 위험 신호 [확인됨: reports/h3_results.md]. **결측률 site-specific** [확인됨: reports/h3_results.md H3-c — 마스크 cross-site 악화].
+- **근거 + 출처등급**: "모델이 본 세상"에서 벗어나나가 우리 질문 [우리 결정]. 학습 분포 대비가 표준 [확인됨: 업계 관행]. cross-site(A→B) 붕괴를 H3에서 봤으므로 입력이 A에서 벗어나면 그 붕괴 위험 신호 [확인됨: docs/reports/h3_results.md]. **결측률 site-specific** [확인됨: docs/reports/h3_results.md H3-c — 마스크 cross-site 악화].
 - **고려한 대안**: 운영 초기 N일 기준(모델 학습분포와 불일치). 정규화 후 분포 감시(raw 입력 단계를 못 봄 — 기각). 결측률 무시(H3-c 교훈 역행).
 - **검토 요청 항목**: raw reference가 serve 입력 raw_row와 같은 단계인지, 결측률 reference가 INPUT_MISSING 카운터와 연결되나.
 

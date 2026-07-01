@@ -1,13 +1,13 @@
 # Console-Prep 핸드오프(명세부) 레드팀 검토 — 라운드 로그
 
-> 대상: `design/console-prep/handoff.md` (명세부). 설계부 = `decisions.md`(결정 1~7, PASS).
+> 대상: `docs/design/console-prep/handoff.md` (명세부). 설계부 = `decisions.md`(결정 1~7, PASS).
 > 규약: redteam 지적 원문 보존 + 각 항목 아래 `[reviser 응답]`으로 해소 대조.
 
 ---
 
 ## 라운드 1 (redteam 원문)
 
-- 대상: design/console-prep/handoff.md (신규, 첫 검토, 명세부)
+- 대상: docs/design/console-prep/handoff.md (신규, 첫 검토, 명세부)
 - 대상 commit: cb39acc (working tree clean)
 - 검토일: 2026-06-29
 - 핵심 질문: 핸드오프만으로 구현자가 막힘없이 짤 수 있는가 + decisions.md 결정 1~7을 코드 정합·끊김 없이 구현 명세로 옮겼는가
@@ -84,7 +84,7 @@
 
 ## 라운드 2 (redteam) — B1 보완 재흐름추적
 
-- 대상: `design/console-prep/handoff.md` (명세부, reviser 커밋 `e63ec08` 반영본)
+- 대상: `docs/design/console-prep/handoff.md` (명세부, reviser 커밋 `e63ec08` 반영본)
 - 검토일: 2026-06-29
 - 핵심 질문: B1 보완이 reload→drift 사슬을 실제로 닫았는가(구멍을 옮기지 않았는가) + MJ-c eps 필드 추가가 설계부 결정 1~7 범위 내 구현인가 + MJ-a/b/d/e·minor가 코드·기존 결정과 모순 없이 끼워졌는가
 - **판정: PASS (blocker 0)** — major 0 / minor 2

@@ -1,4 +1,4 @@
-# Q1 — 모델 리서치 (research/01_models.md)
+# Q1 — 모델 리서치 (docs/research/01_models.md)
 
 > 목적: 풀 학습에 쓸 모델을 "데이터 기반 + 선행연구 근거"로 선택한다.
 > 결론 요약(TL;DR): **baseline = XGBoost/LightGBM, 메인(운영) = GRU, 욕심(여유 시) = Transformer.**

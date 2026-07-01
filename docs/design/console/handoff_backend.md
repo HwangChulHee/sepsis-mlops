@@ -1,6 +1,6 @@
 # Console 구현 핸드오프 A (명세부) — 백엔드: 감사 ORM + `/console` API + 트랜잭션 경계
 
-> **전제**: `design/console/decisions.md`(설계부) 2라운드 검토 통과. 본 문서는 결정 4·5·5-A·5-B·6-A·7의 *구현 방법*을 자립형으로 명세한다. 설계 근거는 decisions.md 참조.
+> **전제**: `docs/design/console/decisions.md`(설계부) 2라운드 검토 통과. 본 문서는 결정 4·5·5-A·5-B·6-A·7의 *구현 방법*을 자립형으로 명세한다. 설계 근거는 decisions.md 참조.
 > **워크플로우**: 검토(`handoff_backend_review.md`) 통과 → spec-writer TDD → 구현. 프론트(React)·관측(Grafana)은 **핸드오프 B**(별도 문서).
 > **대상 파일(신규)**: `src/sepsis/console/{__init__.py, audit.py, service.py, api.py}`. **재활용(변경 없음)**: `retrain/deploy.py`, `retrain/validate.py`, `serve/bundle.py`.
 > **선행(교차단계, 이미 닫힘)**: console-prep으로 `validation.json`·`retrain.json`·`.ready` 영속, `meta.json.run_id`, 서빙 `/admin/reload`·`/health.run_id`가 모두 구현됨 — 본 핸드오프는 그 위에 얹는다.

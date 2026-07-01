@@ -45,7 +45,7 @@ uv run python -m smoke.train_smoke           # 기본값: 환자 1000명, 2 epoc
 
 ## ⚠️ 인지된 채 넘어간 누수 (확인함, 수정 안 함 — 범위 밖)
 
-**기록-절단 누수(record-truncation leak).** EDA(`reports/eda_findings.md` §6)에서: 패혈증
+**기록-절단 누수(record-truncation leak).** EDA(`docs/reports/eda_findings.md` §6)에서: 패혈증
 환자의 기록은 **발병 근처에서 우측 절단**된다 — 양성 라벨은 **항상 마지막 기록 시간에서
 끝나는 ≤10시간의 연속 블록**(패혈증 환자의 100%)이다. 스모크는 이 라벨을 그대로 사용하므로
 (Method A), 모델이 진짜 생리가 아니라 *"기록이 곧 끝난다"* 라는 인공물을 양성 신호로 학습할

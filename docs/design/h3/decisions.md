@@ -1,7 +1,7 @@
 # H3 설계결정문서 (DDD) — cross-site 평가 (B 개봉)
 
-> **설계 근거**: H2 산출물(6조합 학습 모델·전처리통계·τ, MLflow) 위에서 **B를 처음 펼쳐** cross-site 채점. H2 결정은 [`design/h2/decisions.md`](../h2/decisions.md)(완료), 결과는 [`reports/h2_results.md`].
-> **워크플로우·출처등급**: [`WORKFLOW.md`](../WORKFLOW.md). 검토(`design/h3/review.md`) 통과 후 핸드오프로.
+> **설계 근거**: H2 산출물(6조합 학습 모델·전처리통계·τ, MLflow) 위에서 **B를 처음 펼쳐** cross-site 채점. H2 결정은 [`docs/design/h2/decisions.md`](../h2/decisions.md)(완료), 결과는 [`docs/reports/h2_results.md`].
+> **워크플로우·출처등급**: [`WORKFLOW.md`](../WORKFLOW.md). 검토(`docs/design/h3/review.md`) 통과 후 핸드오프로.
 > **개정 이력**
 > - **v2 (2026-06-28)** — review `71e47c6`의 HOLD 2건 + 정정 반영
 >   - HOLD 1: **피처셋을 B 성능으로 고르는 것은 selection-on-test**(결정 2 위반) → 부속결정 수정: B는 1회 참고 관찰, 피처셋 선택은 **A-val + H4 운영 신호**, B는 선택 기준 미진입. PASS #2에 명시.
@@ -27,7 +27,7 @@ H2에서 A로 학습한 **6조합을 B(봉인 해제)로 채점**해 cross-site 
 ## 결정 1: 채점 대상 — 6조합 전부 A→B
 
 - **결정**: H2의 **6조합(XGB·LGBM·GRU × vitals·vitals_labs)을 모두** B로 채점. 추론은 빠르므로 골라낼 이유 없음. PR-AUC + utility, **A-val→B gap**을 한 표로.
-- **근거 + 출처등급**: 6조합 다 봐야 모델별·피처셋별 gap·순위역전을 완전 비교 [우리 결정]. H2 결과는 in-site라 본 시험대는 cross-site [확인됨: reports/h2_results.md, GRU A-val 0.40은 도메인 시프트 없음].
+- **근거 + 출처등급**: 6조합 다 봐야 모델별·피처셋별 gap·순위역전을 완전 비교 [우리 결정]. H2 결과는 in-site라 본 시험대는 cross-site [확인됨: docs/reports/h2_results.md, GRU A-val 0.40은 도메인 시프트 없음].
 - **고려한 대안**: 대표만(GRU·XGBoost) 채점 → 피처셋·LGBM 비교 누락.
 - **검토 요청 항목**: 6조합 모델·전처리통계·τ가 MLflow에서 정확히 로드되는지.
 
@@ -47,9 +47,9 @@ H2에서 A로 학습한 **6조합을 B(봉인 해제)로 채점**해 cross-site 
 ## 결정 3: 평가 지표·gap — H2와 동일 잣대
 
 - **결정**: PR-AUC(GRU masked) + utility, H2와 **동일 구현**. 보고는 **A-val → B 나란히 + gap = A_val − B**. 순위도 A/B 각각.
-- **근거 + 출처등급**: 동일 잣대라야 gap이 의미 [우리 결정]. gap·순위역전이 핵심 발견(복잡한 GRU가 더 무너지나) [확인됨: cross-site 난제 — research/01].
+- **근거 + 출처등급**: 동일 잣대라야 gap이 의미 [우리 결정]. gap·순위역전이 핵심 발견(복잡한 GRU가 더 무너지나) [확인됨: cross-site 난제 — docs/research/01].
 - **고려한 대안**: B에서 새 지표 도입(비교 불가).
-- **검토 요청 항목**: A-val 점수를 reports/h2_results.md에서 그대로 가져와 일관 비교하는지.
+- **검토 요청 항목**: A-val 점수를 docs/reports/h2_results.md에서 그대로 가져와 일관 비교하는지.
 
 ---
 
@@ -66,9 +66,9 @@ H2에서 A로 학습한 **6조합을 B(봉인 해제)로 채점**해 cross-site 
 ## 결정 5: 마스크 누수 검증 — 마스크 ON 재학습 후 B 비교
 
 - **결정**: 마스크 OFF(기본)와 **마스크 ON**을 비교 — **H3 필수 항목**(WORKFLOW §8·H1 결정 7이 "마스크 채택은 H3 A·B 검증과 함께"로 약속). 마스크는 GRU 입력 채널이라 **마스크 ON으로 재학습 필요**(input_dim F→2F). 최소 **대표 1조합**(GRU vitals)은 반드시 수행.
-  - **판정 기준 = 마스크 ON/OFF의 A-val→B gap 비교**(전이성). 마스크 ON이 A-val에선 비슷하거나 좋은데 **B에서 더 무너지면(gap↑)** → 마스크가 site-specific 측정패턴을 외운 것 → **OFF가 맞다**는 증거. gap 차이 미미하면 OFF 결정 영향 없음 확정. *(단순 "B 점수 오르내림"이 아니라 gap 변화가 핵심 — research/04: 관찰-과정 피처가 cross-site 이식성 악화.)*
+  - **판정 기준 = 마스크 ON/OFF의 A-val→B gap 비교**(전이성). 마스크 ON이 A-val에선 비슷하거나 좋은데 **B에서 더 무너지면(gap↑)** → 마스크가 site-specific 측정패턴을 외운 것 → **OFF가 맞다**는 증거. gap 차이 미미하면 OFF 결정 영향 없음 확정. *(단순 "B 점수 오르내림"이 아니라 gap 변화가 핵심 — docs/research/04: 관찰-과정 피처가 cross-site 이식성 악화.)*
   - **공정 비교 통제**: ON/OFF가 **HP\*·seed 동일**, **입력 채널만 차이**(마스크 외 전부 동일), **τ는 각자 A-val에서**. 그 외 전처리 동일.
-- **근거 + 출처등급**: H1-c에서 측정밀도 누수 약함 확인(any-lab 1.05×, t0 직전 급증 없음) — 단 in-site → **cross-site 전이성은 H3에서 결판**(약속 이행) [확인됨: reports/h1_diagnostics.md, research/04]. 마스크 default-off/opt-in [확인됨: H1 결정 7].
+- **근거 + 출처등급**: H1-c에서 측정밀도 누수 약함 확인(any-lab 1.05×, t0 직전 급증 없음) — 단 in-site → **cross-site 전이성은 H3에서 결판**(약속 이행) [확인됨: docs/reports/h1_diagnostics.md, docs/research/04]. 마스크 default-off/opt-in [확인됨: H1 결정 7].
 - **고려한 대안**: H3-c 생략·H4 이연 → WORKFLOW §8·H1 약속 위반, 마스크 근거가 in-site에만 머묾. 기각.
 - **미결/옵션**: 대표 1조합(GRU vitals) 필수, 추가 조합은 여유 시. 범위는 핸드오프.
 - **검토 요청 항목**: ON 재학습이 OFF와 입력채널 외 동일 조건인지(HP·seed·전처리·τ방식), gap 비교가 프로그래매틱한지.
@@ -97,4 +97,4 @@ H2에서 A로 학습한 **6조합을 B(봉인 해제)로 채점**해 cross-site 
 
 - v1(`71e47c6` 검토): HOLD 2건(featureset-on-B selection / 마스크 H3-c 이연) + 정정 → **본 v2에서 반영.**
 - 1차 확인: 공식 스크립트 동등성 가능 [확인됨], 아티팩트 충분 [확인됨], 마스크=입력채널 재학습 필요 [확인됨].
-- 다음: v2 재검토 → PASS 시 `design/h3/handoff.md`.
+- 다음: v2 재검토 → PASS 시 `docs/design/h3/handoff.md`.

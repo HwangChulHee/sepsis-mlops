@@ -1,6 +1,6 @@
 # 검토 — H4-서빙 (레드팀 게이트)
 
-- **대상**: `design/h4/serving/decisions.md` (초안)
+- **대상**: `docs/design/h4/serving/decisions.md` (초안)
 - **대상 commit**: `dbe5c22`
 - **검토일**: 2026-06-28
 - **핵심 질문**: 이 서빙 설계가 **train-serving skew·누수 없이**, **causal하게**, **자립적으로** 구현 가능한가.
@@ -53,15 +53,15 @@
 
 ## 다음 단계
 
-**HOLD-1(설정 번들 원자성) 해소 후 재검토.** 전부 PASS 전 `design/h4/serving/handoff.md`로 가지 않는다(WORKFLOW §5).
+**HOLD-1(설정 번들 원자성) 해소 후 재검토.** 전부 PASS 전 `docs/design/h4/serving/handoff.md`로 가지 않는다(WORKFLOW §5).
 
 ---
 
 ## 재검토 v2
 
-- **대상**: `design/h4/serving/decisions.md` v2 (개정 이력 v2 — HOLD 1 + 등급 정정)
+- **대상**: `docs/design/h4/serving/decisions.md` v2 (개정 이력 v2 — HOLD 1 + 등급 정정)
 - **검토일**: 2026-06-28
-- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 해소, pdm 등급 정정, 신규 모순 없음. → **다음은 `design/h4/serving/handoff.md`** (비차단 권고 7건 흡수). 마이크로 nit 1건은 핸드오프 흡수.
+- **판정**: ✅ **PASS — HOLD 0건.** v1 HOLD 해소, pdm 등급 정정, 신규 모순 없음. → **다음은 `docs/design/h4/serving/handoff.md`** (비차단 권고 7건 흡수). 마이크로 nit 1건은 핸드오프 흡수.
 
 ### 회귀 검증 (요청 3항목)
 
@@ -86,4 +86,4 @@
 ### 1차 확인 (v1에서 검증, 변동 없음)
 hidden-state causal 동치(단방향 GRU) · ffill 스트리밍 동치(상태 NaN 초기화 전제) · 정규화 글로벌 A-train이라 미래 누수 없음 · H2 아티팩트 로드 가능 — 전부 [확인됨: 코드 대조].
 
-**결론: HOLD 0 → `design/h4/serving/handoff.md` 작성으로 진행.** 비차단 권고 7건 + nit 1건은 핸드오프에서 흡수(DDD 재라운드 불필요).
+**결론: HOLD 0 → `docs/design/h4/serving/handoff.md` 작성으로 진행.** 비차단 권고 7건 + nit 1건은 핸드오프에서 흡수(DDD 재라운드 불필요).

@@ -270,3 +270,41 @@
 - M-R3-1(major)·B-R3-1 의존 식별부 = 해소됨.
 - 그러나 B-R3-1 **소스 식별부**가 미해소 — 지목 소스(run metric)가 저장소에 영속 안 됨 + ".ubj에도 없다 [확인됨]"이 .ubj 임베드 best_iteration과 모순. B-R3-1 보완이 만든 새 결함(B-R4-1).
 - **blocker 0 아님 → PASS 불가.** 사람 재에스컬레이션.
+
+---
+
+## 라운드 5
+
+- 대상 commit: `320a8c0` (main) — decisions.md **v5** (reviser 보완)
+- 검토일: 2026-07-01
+- 범위: 라운드 4 잔여 blocker **B-R4-1**(best_iter 소스를 run metric → `.ubj` 임베드로 정정)의 실제 해소 + 파급 + 문서 전역 정합. 아티팩트 실측 대조 포함.
+- 판정: **PASS — blocker 0** (minor 2건은 통과를 막지 않음).
+
+> **계측 한계 명시**: redteam은 Bash 실행 도구가 없어 `load_model` 직접 재실행 대신 `.ubj` 바이너리를 ripgrep **교차-음성(cross-negative) 매칭**으로 임베드값을 독립 확인. load-bearing 값(105/149)은 이 방식으로 확정. python 부수값(`num_boosted_rounds`=136/180)은 재현 안 했으나 소스 정정의 load-bearing 아님.
+
+### 라운드 4 blocker B-R4-1 재판정 (아티팩트 실측 + 코드 대조)
+
+- **B-R4-1 → 해소됨.** 4개 검증축 전부 통과.
+
+**1. best_iter가 `.ubj`에서 복구되는가 → 확인됨(독립 재현).** `xgboost_vitals.ubj`: `best_iteration.{1,12}105` 매치(1)/`…149` 불일치(0). `xgboost_vitals_labs.ubj`: `…149` 매치(1)/`…105` 불일치(0) [확인됨: ripgrep 교차-음성]. → 임베드값 105/149, reviser 주장 독립 재현.
+
+**2. 임베드값 == 챔피언 채점값 → 확인됨(코드 대조).** `train/tree.py:49-51` `best_iteration()` = 공통 파생. `h2b_train_trees.py:155` combos best_iter(챔피언 소스) → `:183` metric 로깅 + `:186→99` `.ubj` 저장이 **동일 model 객체 m**(155~186 사이 refit 없음) [확인됨]. metric값·임베드값 동일 파생 — "refit로 트리 변동" 우려 근거 없음. metric 스토어 pruned라도 임베드 105/149 실측 + 동등성 코드증명으로 metric값도 105/149 확정.
+
+**3. run metric 미영속 + preprocess.json 소스 → 확인됨.** `grep -r best_iter mlruns/`=0건, run 디렉토리 `metrics/`·`meta.yaml` 부재, `artifacts/`만 [확인됨]. preprocess.json keys=`featureset/scale_pos_weight/tau/hp/note`, best_iter 없음 [확인됨].
+
+**4. mn-R4-1 유효성 계약 → 확인됨.** `tree.py:74` `rng=(0,int(best_iter)+1) if best_iter and best_iter>=0 else None` — falsy/음수→전체트리 폴백. 챔피언 105/149 양수라 절단 실질. 결정 2 3항 "유효 양수(≥1), 복구 실패 시 무성 폴백 금지·명시 실패"가 이 폴백을 정확히 겨냥 — 정합.
+
+### PASS (재확인)
+- B-R4-1 정정이 코드·아티팩트 정합, 거짓 [확인됨] 재발 없음(미검증 "`.ubj`에도 없다 [확인됨]" 삭제·실측 교체).
+- 소스 정정이 문서 전역 모순 없음(결정 2·3, PASS 게이트 1·2 일관, run metric 유일소스·".ubj 없음" 잔재 없음).
+- best_iter(트리 절단)·NB2 lookback 버퍼(입력 재구성)·히스토그램 경계 직교성 유지, 소스만 바뀌고 로직 불변 — 기존 PASS 항목 재오염 없음.
+
+### major
+- 없음.
+
+### minor
+- **mn-R5-1.** 결정 2 3항(`:59`) metric 소스 인용 `h2b_train_trees.py:93`은 HP-search 단계 best_iter이고, `c["best_iter"]` 실제 생성지점은 **`:155`**(챔피언 combos). 동등성 결론(155→183→186)은 여전히 참이라 blocker 아님 — 인용을 `:93`→`:155`로 교체 권고.
+- **mn-R5-2.** 검토 상태 v4 changelog(`:160`)에 옛 소스 주장("소스=run metric, .ubj·preprocess.json 아님 [확인됨]") 잔재. v5 항목(`:161`)이 폐기하므로 history로선 정합이나, 라운드1 히스토그램 false-[확인됨]을 인라인 "정정(v2)"한 선례처럼 v4 항목에도 인라인 "정정(v5)" 한 줄 붙이면 일관적. live 결정·게이트는 이미 정정 → minor.
+
+### 판정
+**라운드 5 blocker 0건 → PASS.** B-R4-1 실측·코드로 해소 확인, 새 결함·전역 모순 없음. 남은 건 minor 2건뿐 — 핸드오프 진행을 막지 않음. **설계부 v5 승인, 핸드오프(명세부) 진행 가능.** minor 2건은 착수 전/중 정리 권고(선택).

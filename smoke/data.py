@@ -1,6 +1,6 @@
 """Subset selection + preprocessing for the smoke pipeline.
 
-Design decisions are fixed by Handoff 02 (justified by the EDA in reports/eda_findings.md):
+Design decisions are fixed by Handoff 02 (justified by the EDA in docs/reports/eda_findings.md):
 - 10 features: 8 vitals + Age + Gender (labs/Unit*/ICULOS excluded for the smoke).
 - forward-fill within each patient (past->future only, no leakage), then fill any
   still-missing column with the TRAIN-split column mean. zero-fill is forbidden.

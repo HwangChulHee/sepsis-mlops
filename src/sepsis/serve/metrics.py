@@ -29,7 +29,7 @@ INPUT_MISSING = Counter("serve_input_missing_total", "missing (NaN) inputs per f
 # ★ 무한 카디널리티 footgun: /predict 는 실트래픽 핫패스, PhysioNet 환자 40,336명. patient_id 를
 # 라벨에 박으면 안 사라지는 시계열이 환자 수만큼 쌓인다. → 기본 OFF, SERVE_PER_PATIENT_GAUGE=1
 # 일 때만 기록(리플레이/데모 전용). 프로젝트 '결측 마스크 기본 OFF(옵트인)' 철학과 동형
-# (라운드 다 결정, design/replay/handoff_round_c.md §2). OFF 면 .labels() 를 안 불러 시계열 0개.
+# (라운드 다 결정, docs/design/replay/handoff_round_c.md §2). OFF 면 .labels() 를 안 불러 시계열 0개.
 PRED_PROB_LATEST = Gauge("serve_pred_prob_latest",
                          "latest predicted risk per patient (OPT-IN — unbounded label)",
                          ["patient_id"])

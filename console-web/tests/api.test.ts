@@ -1,6 +1,6 @@
 /**
  * API 클라이언트 계약 (성공기준 5 + API 클라 분기)
- * 권위: design/console/handoff_frontend.md (구현1 항목5·B1, api.ts 의사코드)
+ * 권위: docs/design/console/handoff_frontend.md (구현1 항목5·B1, api.ts 의사코드)
  *       src/sepsis/console/api.py (POST 경로·WriteRequest 스키마·422/403 분기)
  *       src/sepsis/console/service.py (_require_consistent: gru_<fs>@ 접두 강제)
  *

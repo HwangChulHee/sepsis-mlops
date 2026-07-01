@@ -86,7 +86,7 @@ def featureset_indices(name: str) -> list[int]:
     return [CACHE_FEATURES.index(c) for c in featureset_columns(name)]
 
 
-# EDA reference row-level missing % (reports/eda_findings.md §3) — for cache assert #4
+# EDA reference row-level missing % (docs/reports/eda_findings.md §3) — for cache assert #4
 EDA_LAB_MISSING_PCT = {
     "WBC": 93.59,
     "BUN": 93.13,

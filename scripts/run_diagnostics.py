@@ -1,4 +1,4 @@
-"""H1-c runner — diagnostic EDA -> reports/h1_diagnostics.md + reports/figures/.
+"""H1-c runner — diagnostic EDA -> docs/reports/h1_diagnostics.md + docs/reports/figures/.
 
     uv run python -m scripts.run_diagnostics
 
@@ -22,10 +22,10 @@ from sepsis import config as C
 from sepsis.eda import diagnostics as D
 
 ROOT = Path(__file__).resolve().parents[1]
-REPORTS = ROOT / "reports"
+REPORTS = ROOT / "docs" / "reports"
 FIGDIR = REPORTS / "figures"
 
-# EDA reference (reports/eda_findings.md) for the consistency check
+# EDA reference (docs/reports/eda_findings.md) for the consistency check
 EDA_N_SEPTIC = 2932
 EDA_ONSET_AT_ADMISSION = 370
 

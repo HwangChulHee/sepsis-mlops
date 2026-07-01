@@ -1,6 +1,6 @@
 """리플레이어 라운드 (가) — .psv 어댑터 TDD RED.
 
-권위 출처(이것만 신뢰): design/replay/handoff_round_a.md.
+권위 출처(이것만 신뢰): docs/design/replay/handoff_round_a.md.
 **src/sepsis/replay/ 구현 코드는 일절 읽지 않았다** — 핸드오프 §3.2(어댑터 계약)·
 §5.6(.psv 합격기준)·§5.7(정직성)이 못 박은 계약을 그대로 신뢰해 작성한다.
 구현(src/sepsis/replay/psv_source.py)이 아직 없으니 지금은 RED 가 정상이다.

@@ -30,8 +30,8 @@ MODELS_FS = [("xgboost", "vitals"), ("xgboost", "vitals_labs"),
              ("lightgbm", "vitals"), ("lightgbm", "vitals_labs"),
              ("gru", "vitals"), ("gru", "vitals_labs")]
 TRACKING = C.mlflow_uri()
-H2_RESULTS = C.ROOT / "reports" / "h2_results.md"
-REPORT = C.ROOT / "reports" / "h3_results.md"
+H2_RESULTS = C.ROOT / "docs" / "reports" / "h2_results.md"
+REPORT = C.ROOT / "docs" / "reports" / "h3_results.md"
 DATE = "2026-06-28"
 
 
@@ -235,7 +235,7 @@ def write_report(results, a_rank, b_rank, rank_reversed):
     L = ["# H3-b 결과 — cross-site (A→B) 채점\n",
          f"> 생성: H3-b (`scripts/h3b_crosssite.py`) · {DATE} · setB **1회 개봉**(채점 전용).",
          "> **A 동결 아티팩트만**(μ/σ·fill·clip·τ) 사용 — B 재계산·재튜닝·τ재선정 없음.",
-         "> A-val 점수는 `reports/h2_results.md` 인용(재계산 아님). gap = A_val − B.",
+         "> A-val 점수는 `docs/reports/h2_results.md` 인용(재계산 아님). gap = A_val − B.",
          "> ⚠️ **B는 관찰 전용** — 피처셋/모델 선택은 A-val+H4, B 점수로 고르지 않음.\n",
          "## 6조합 utility · PR-AUC (A-val rank 순)\n",
          "| 모델 | featureset | A_util | B_util | gap(util) | A_PR | B_PR | gap(PR) | τ |",

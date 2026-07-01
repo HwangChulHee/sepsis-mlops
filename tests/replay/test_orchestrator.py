@@ -1,6 +1,6 @@
 """리플레이어 라운드 (다) — 다중 동시 스트림 TDD.
 
-권위 출처(이것만 신뢰): design/replay/handoff_round_c.md.
+권위 출처(이것만 신뢰): docs/design/replay/handoff_round_c.md.
 **src/sepsis/replay/orchestrator.py 구현은 안 보고** 핸드오프 §3.2(시그니처)·§4(실패모드)·
 §5(합격기준)만 신뢰해 작성한다(출제자-응시자 분리). 구현 전이면 RED(ImportError)가 정상.
 

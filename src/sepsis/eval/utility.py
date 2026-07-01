@@ -1,7 +1,7 @@
 """PhysioNet/CinC 2019 official utility score (H2-a, 결정 4).
 
 Self-contained reimplementation of the official `evaluate_sepsis_score.py` utility,
-inlined per h2_handoff.md H2-a (research/03 not needed). Constants/slopes verified
+inlined per h2_handoff.md H2-a (docs/research/03 not needed). Constants/slopes verified
 against physionetchallenges/evaluation-2019 `evaluate_sepsis_score.py`
 (handoff review 16ba070).
 

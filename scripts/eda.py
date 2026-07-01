@@ -8,7 +8,7 @@ to avoid patient leakage in the statistics. No filling, no interpolation — we 
 measure missingness, never repair it.
 
 Run:  uv run python scripts/eda.py
-Outputs: console report + reports/eda_findings.md + reports/figures/*.png
+Outputs: console report + docs/reports/eda_findings.md + docs/reports/figures/*.png
 """
 
 from __future__ import annotations
@@ -25,8 +25,8 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "raw"
-FIG_DIR = ROOT / "reports" / "figures"
-REPORT = ROOT / "reports" / "eda_findings.md"
+FIG_DIR = ROOT / "docs" / "reports" / "figures"
+REPORT = ROOT / "docs" / "reports" / "eda_findings.md"
 
 EXPECTED_COLUMNS = [
     "HR", "O2Sat", "Temp", "SBP", "MAP", "DBP", "Resp", "EtCO2",
@@ -281,7 +281,7 @@ def main() -> int:
     fig.savefig(FIG_DIR / "vitals_hist.png", dpi=110)
     plt.close(fig)
 
-    out("\nFigures written to reports/figures/: "
+    out("\nFigures written to docs/reports/figures/: "
         "seq_length_hist.png, first_positive_iculos_hist.png, vitals_hist.png")
 
     # =====================================================================

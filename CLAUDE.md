@@ -2,7 +2,7 @@
 
 ICU 환자 시계열로 패혈증을 조기 예측하는 MLOps 프로젝트. PhysioNet/CinC 2019 데이터(공개 set A+B, 40,336명). 도메인 이전 MLOps 시리즈의 3번째(산업센서 → 의료영상 → **의료시계열**).
 
-> 이 파일은 매 세션 자동으로 읽힌다. 상세 규칙은 [`design/WORKFLOW.md`](design/WORKFLOW.md) 참고.
+> 이 파일은 매 세션 자동으로 읽힌다. 상세 규칙은 [`docs/design/WORKFLOW.md`](docs/design/WORKFLOW.md) 참고.
 
 ---
 
@@ -31,7 +31,7 @@ ICU 환자 시계열로 패혈증을 조기 예측하는 MLOps 프로젝트. Phy
 - **train-only 정규화** — 평균/표준편차는 학습 split에서만 계산.
 - **0으로 채우지 않음** — 의료에서 0은 진짜 값(예: 혈압 0 = 사망). 결측은 ffill→train 평균.
 - **ICULOS 제외** — 우측 절단 구조를 컨닝하는 시간 단서.
-- **결측 마스크는 기본 OFF(옵트인)** — 치료행동 누수 통로(근거: `research/04_*`). 검증 통과 시에만.
+- **결측 마스크는 기본 OFF(옵트인)** — 치료행동 누수 통로(근거: `docs/research/04_*`). 검증 통과 시에만.
 - **결측 처리는 모델별 분기** — XGBoost는 NaN 그대로, GRU는 ffill + train 평균.
 
 ## 평가 기조
@@ -40,9 +40,9 @@ ICU 환자 시계열로 패혈증을 조기 예측하는 MLOps 프로젝트. Phy
 ---
 
 ## 디렉토리
-- `research/` — 근거 탐구 Q1~Q5 (왜 이 방법이 맞나)
-- `design/` — 실행 결정 (DDD·검토·핸드오프) ← 개발은 여기서
-- `reports/` — EDA·스모크 측정 결과
+- `docs/research/` — 근거 탐구 Q1~Q5 (왜 이 방법이 맞나)
+- `docs/design/` — 실행 결정 (DDD·검토·핸드오프) ← 개발은 여기서
+- `docs/reports/` — EDA·스모크 측정 결과
 - `smoke/` — 검증된 시제품 파이프라인 (재사용)
 - `src/sepsis/` — 풀 학습 코드 (핸드오프로 생성)
 - `docs/adr/` — 아키텍처 결정 기록 (서빙·확장 등)

@@ -1,6 +1,6 @@
 """리플레이어 라운드 (가) — 스트림 엔진 TDD RED.
 
-권위 출처(이것만 신뢰): design/replay/handoff_round_a.md.
+권위 출처(이것만 신뢰): docs/design/replay/handoff_round_a.md.
 **src/sepsis/replay/ 구현 코드는 일절 읽지 않았다** — 핸드오프 §3(시그니처)·
 §4(실패모드)·§5(합격기준)가 못 박은 계약을 그대로 신뢰해 작성한다.
 구현(src/sepsis/replay/)이 아직 없으니 지금은 RED(ModuleNotFoundError)가 정상이다.

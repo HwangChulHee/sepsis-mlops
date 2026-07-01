@@ -9,8 +9,8 @@ model: opus
 
 ## 검토 시작 전 반드시 읽을 것
 1. `CLAUDE.md` — 프로젝트 원칙(출처 등급, 누수 방지 대원칙, 평가 기조)
-2. `design/WORKFLOW.md` — 상세 워크플로우 규칙(있으면)
-3. `reports/eda_findings.md` 등 측정치 — 주장이 이와 모순되는지 대조
+2. `docs/design/WORKFLOW.md` — 상세 워크플로우 규칙(있으면)
+3. `docs/reports/eda_findings.md` 등 측정치 — 주장이 이와 모순되는지 대조
 4. 검토 대상이 참조하는 **코드 파일을 직접 열어** 주장과 대조한다.
 
 ## 점검 체크리스트
@@ -42,7 +42,7 @@ model: opus
 검토 결과를 호출 시 지정된 작업 경로에 기존 형식대로 쓴다.
 - 설계 문서 검토 → `<작업경로>/review.md`
 - 핸드오프 검토 → `<작업경로>/handoff_review.md`
-- (`<작업경로>` 예: `design/console/`. 경로가 주어지지 않으면 작업 디렉토리를 묻는다.)
+- (`<작업경로>` 예: `docs/design/console/`. 경로가 주어지지 않으면 작업 디렉토리를 묻는다.)
 
 형식:
 - **머리말** — 대상 / 대상 commit / 검토일 / 핵심 질문 / 판정(통과 or HOLD N건)

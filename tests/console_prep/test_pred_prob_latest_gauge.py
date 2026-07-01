@@ -1,6 +1,6 @@
 """리플레이어 라운드 (다) — 환자별 최신 위험도 Gauge(옵트인) TDD.
 
-권위 출처(이것만 신뢰): design/replay/handoff_round_c.md §2(카디널리티 결정)·§3.1·§5-1·§5-2.
+권위 출처(이것만 신뢰): docs/design/replay/handoff_round_c.md §2(카디널리티 결정)·§3.1·§5-1·§5-2.
 환자별 라벨 Gauge는 무한 카디널리티 footgun이라 **기본 OFF**, `SERVE_PER_PATIENT_GAUGE=1`
 일 때만 기록한다(프로젝트 '결측 마스크 기본 OFF' 철학과 동형). 플래그는 호출 시점 동적 판독.
 

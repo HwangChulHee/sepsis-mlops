@@ -1,7 +1,7 @@
 """H2-d — aggregate 6-combo results, select representative baseline (h2_handoff.md H2-d).
 
 Reads A-val metrics from MLflow (B never touched), parses H2-b robustness from the log,
-writes reports/h2_results.md, and selects the representative tree baseline. The MAIN
+writes docs/reports/h2_results.md, and selects the representative tree baseline. The MAIN
 featureset is DEFERRED (not fixed) — recorded as 미결 with rationale. ⏸ human checkpoint.
 
     uv run python -m scripts.h2d_select
@@ -16,7 +16,7 @@ from sepsis.train import select
 
 DATE = "2026-06-28"
 SOURCE = "H2-b 0560de7 · H2-c 2252d6f"
-REPORT = C.ROOT / "reports" / "h2_results.md"
+REPORT = C.ROOT / "docs" / "reports" / "h2_results.md"
 H2B_LOG = C.ROOT / "logs" / "h2b.log"
 
 

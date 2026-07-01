@@ -32,7 +32,7 @@ def test_iculos_excluded_from_served_featureset():
         f"ICULOS 가 서빙 피처에 포함됨(시간 누수): {cols}"
 
 
-# ===== 마스크 기본 OFF — 치료행동 누수 통로(research/04) =====
+# ===== 마스크 기본 OFF — 치료행동 누수 통로(docs/research/04) =====
 def test_mask_off_by_default_in_served_columns():
     # 성공기준 8 — 결측 마스크 기본 OFF(옵트인)
     cols = list(C.featureset_columns("vitals"))

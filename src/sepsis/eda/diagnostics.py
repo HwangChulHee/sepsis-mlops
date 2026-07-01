@@ -5,7 +5,7 @@ Two diagnostics, both patient-aggregated (so large patients don't dominate):
 1. Measurement-density leak check: is a lab MEASURED (non-NaN that hour) more often
    in the positive region (SepsisLabel==1) than the negative region? Plus an
    onset-aligned trend around the first positive (t0). This is the informative-
-   missingness / treatment-action leak channel (research/04).
+   missingness / treatment-action leak channel (docs/research/04).
 
 2. Positive-timestep position: where do positive labels sit in the record
    (distance from the record end / relative position) — distribution-bias self-evidence.

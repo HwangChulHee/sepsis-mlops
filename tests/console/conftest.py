@@ -1,6 +1,6 @@
 """공유 픽스처/헬퍼 — console 백엔드 핸드오프 A TDD.
 
-출처(이 셋만 신뢰): design/console/handoff_backend.md(명세부, 주 출처),
+출처(이 셋만 신뢰): docs/design/console/handoff_backend.md(명세부, 주 출처),
 decisions.md(결정 4·5·5-A·5-B·6-A·7), handoff_backend_review.md(확정 계약).
 **src/ 구현 코드는 일절 읽지 않았다** — 핸드오프가 명세한 심볼/시그니처/필드를
 그대로 신뢰해 import·구성한다. 구현(src/sepsis/console/)이 없으니 지금은 RED 가 정상이다.

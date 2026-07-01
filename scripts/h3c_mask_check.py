@@ -33,7 +33,7 @@ from sepsis.util.progress import ProgressLogger
 SEED = 42
 FS = "vitals"           # representative combo
 TRACKING = C.mlflow_uri()
-REPORT = C.ROOT / "reports" / "h3_results.md"
+REPORT = C.ROOT / "docs" / "reports" / "h3_results.md"
 LOG = "logs/h3c.log"
 MAX_EPOCHS = 25
 PATIENCE = 4

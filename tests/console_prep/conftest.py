@@ -1,6 +1,6 @@
 """공유 픽스처/헬퍼 — console-prep H4 백엔드 보강 TDD.
 
-출처(이 셋만 신뢰): design/console-prep/handoff.md(명세부, 주 출처),
+출처(이 셋만 신뢰): docs/design/console-prep/handoff.md(명세부, 주 출처),
 decisions.md(결정 1~7), handoff_review.md(확정 계약).
 src/ 구현 코드는 일절 읽지 않았다 — 핸드오프가 명세한 심볼/시그니처/필드를 그대로 신뢰해
 import·구성한다. 구현이 없으니 지금은 RED 가 정상이다.

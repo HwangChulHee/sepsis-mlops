@@ -72,12 +72,10 @@ def _const_series(value: float, n: int = _N, spike: float = _SPIKE) -> list[floa
 def _assemble_bench_result(injected: dict):
     """주입된 원시 측정치(dict)를 받아 A0 스키마의 BenchResult를 조립해 돌려준다.
 
-    RED: 미구현 상태에서는 NotImplementedError → 결정론적 RED.
-    main은 이 함수 본문을 실제 조립 함수 호출로 교체한다.
+    구현 단계(main): 실제 조립 함수에 연결.
     """
-    raise NotImplementedError(
-        "spec-writer seam: main이 벤치 하니스의 실제 BenchResult 조립 함수에 연결한다"
-    )
+    from sepsis.bench.result import assemble_bench_result
+    return assemble_bench_result(injected)
 
 
 # ---------------------------------------------------------------------------
@@ -93,11 +91,10 @@ def _steady_state_cut(latency_array, k, threshold):
       - 수렴 시 (steady_state_start>=1, True) — index 0 무조건 제외(A5-c 1단계)
       - 비수렴 시 (-1, False) — run FAIL(A5-c 3단계)
 
-    RED: 미구현 상태에서는 NotImplementedError.
+    구현 단계(main): 실제 컷 함수에 연결.
     """
-    raise NotImplementedError(
-        "spec-writer seam: main이 하니스의 실제 정상상태 컷 함수에 연결한다"
-    )
+    from sepsis.bench.result import steady_state_cut
+    return steady_state_cut(latency_array, k, threshold)
 
 
 # ---------------------------------------------------------------------------

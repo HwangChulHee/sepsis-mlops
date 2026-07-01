@@ -65,7 +65,9 @@ def score_tree_frozen(booster, model_name: str, best_iter: int, tau: float,
     p_all = tree.booster_predict(booster, model_name, np.concatenate(summaries), best_iter)
     per_probs = np.split(p_all, np.cumsum(lengths)[:-1])
     per_labels = [lab for _, lab in b_data]
-    prauc = float(average_precision_score(np.concatenate(per_labels), p_all))
+    y_all = np.concatenate(per_labels)
+    # GRU 경로·validate._score 와 동일 가드: 양성 없는 슬라이스면 PR-AUC 는 정의되지 않아 NaN.
+    prauc = float(average_precision_score(y_all, p_all)) if y_all.max() > 0 else float("nan")
     util = threshold.utility_at(per_labels, per_probs, tau)
     return ScoreResult(prauc=prauc, utility=util)
 

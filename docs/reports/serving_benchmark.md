@@ -1,51 +1,59 @@
-# Serving Benchmark — GRU vs XGBoost (실측)
+# Serving Benchmark — GRU vs XGBoost (실측, 강화판)
 
-> 실측: uvicorn 서브프로세스(순차, 자원경합 배제) + 실제 환자 PSV 스트림(setB). 워밍업 제외, 전처리 포함 경계(GRU StreamPreprocessor / XGB 버퍼→lookback_summary 재구성).
+> uvicorn 서브프로세스(순차) + 실제 setB 환자 스트림. 워밍업 15 제외, 측정창 100×5회 반복. 전처리 포함 경계(GRU StreamPreprocessor / XGB 버퍼→lookback_summary 재구성).
 
-> **정직성**: 헤드라인은 (아키텍처 × featureset) **결합 배포 프로파일** — GRU/vitals9 vs XGB/vitals_labs18. 순수 아키텍처 운영비가 아니다. client−server 잔차는 arm-1 에서 "network"라 부르지 않는다(network+직렬화+핸들러 후처리). best_iter 절단·골든은 uv.lock(xgboost 3.3.0) 전제.
+> **정직성**: 헤드라인=(아키텍처×featureset) 결합 배포 프로파일. client−server 잔차는 arm-1 에서 "network"라 부르지 않음. best_iter 절단·골든은 uv.lock(xgboost 3.3.0) 전제.
 
-## 1. 헤드라인 — latency (정상상태, ms, p50/p95/p99)
+## 1. server 내부 추론 latency + 아키텍처/featureset 분리 (ms, 중앙값[min–max])
 
-| 모델(배포) | client 벽시계 | server 내부 | client_mean | server_mean | residual(mean) | tax(계측세금) |
+| featureset arm | server_mean 중앙값 | 반복 spread |
+|---|---|---|
+| GRU / vitals9 | 0.564 | [0.554–0.610] |
+| XGB / vitals9 (통제) | 2.294 | [2.279–2.328] |
+| XGB / vitals_labs18 (배포) | 2.280 | [2.253–2.326] |
+
+- **아키텍처 기여**(featureset=9 고정, XGB/9 − GRU/9) = **+1.730 ms**.
+- **featureset 기여**(XGB 9→18) = **-0.013 ms**.
+- 통제 arm(XGB/9)을 latency 로도 재서, 배포 arm(XGB/18)의 재구성 비용 중 아키텍처 몫과 featureset(입력차원 2배) 몫을 분리. GRU 는 hidden state 로 O(1), XGB 는 매 요청 8행 버퍼 lookback 재구성 + 트리 절단이라 무겁다.
+
+## 2. 헤드라인 — 배포 arm latency (client/server, ms)
+
+| 배포 arm | client 벽시계(p50/95/99) | server(p50/95/99) | client_mean | server_mean | residual | tax |
 |---|---|---|---|---|---|---|
-| GRU/vitals9 | 2.14/2.86/8.13 | 0.55/0.72/0.95 | 2.331 | 0.577 | 1.754 | -0.119 |
-| XGB/vitals_labs18 | 3.63/4.67/9.15 | 2.22/2.70/2.89 | 3.890 | 2.265 | 1.625 | -0.001 |
+| GRU/vitals9 | 2.13/3.12/7.20 | 0.55/0.70/0.86 | 2.358 | 0.571 | 1.787 | -0.061 |
+| XGB/vitals_labs18 | 3.65/8.34/9.60 | 2.23/2.70/2.98 | 4.039 | 2.283 | 1.756 | 0.102 |
 
-- `residual = client_mean − server_mean` (버킷 무관 평균, 동일 정상상태 슬라이스). `residual_label`='client_server_residual' — arm-1 에서 network 아님.
-- `tax = arm1.residual − arm2.residual` = 부가 계측(피처 히스토그램+drift 윈도우) 세금. arm-2(순수추론) network 추정: GRU 1.872 / XGB 1.626 ms (label='network_plus_serialization').
+- residual=client_mean−server_mean(버킷 무관, label='client_server_residual', arm-1 network 아님). tax=arm1−arm2 잔차(부가계측 세금). arm-2 network 추정: GRU 1.847/XGB 1.654 ms.
 
-## 2. throughput (동시 부하)
-
+## 3. throughput (동시 부하)
 | 모델 | n_streams | req/sec | wall(s) |
 |---|---|---|---|
-| GRU/vitals9 | 4 | 549.4 | 0.22 |
-| XGB/vitals_labs18 | 4 | 442.4 | 0.27 |
+| GRU/vitals9 | 4 | 679.3 | 0.18 |
+| XGB/vitals_labs18 | 4 | 434.8 | 0.28 |
 
-## 3. 메모리 (peak RSS, MB) + 3기여 분해
+## 4. 메모리 — peak RSS + 상태 메모리 sweep
 
-| 모델 | RSS(arm1) | peak | 계측 부속물(arm1−arm2) | 입력차원(control9−arm1) | state |
-|---|---|---|---|---|---|
-| GRU/vitals9 | 250 | 250 | 1 | 0 | (환자수 sweep, presence) |
-| XGB/vitals_labs18 | 228 | 228 | 1 | -2 | (presence) |
+| 모델 | RSS(arm1,MB) | peak | 계측 세금(arm1−arm2) | featureset(control9−arm1) |
+|---|---|---|---|---|
+| GRU/vitals9 | 262 | 262 | 12.3 | 0.0 |
+| XGB/vitals_labs18 | 237 | 237 | 10.4 | -8.7 |
 
-- **XGB 도 stateless 아님**(`stateless_claim=False`) — 환자별 8행 lookback 버퍼 = per-patient 상태. 메모리 차이를 아키텍처로 뭉뚱그리지 않고 3기여로 분해.
-- featureset 기여(memory.rss, XGB 9→18) = 2 MB (= −input_dim). 통제 arm XGB/vitals9 RSS = 226 MB.
+- **상태 메모리 기울기(환자 수 sweep [0, 1000, 3000, 6000])**: GRU **+1.823 MB/1k환자**, XGB **+1.476 MB/1k환자**. (GRU=hidden state, XGB=8행 버퍼 — 둘 다 환자 수에 증가하나 환자당 sub-KB 라 수천 명 규모에선 RSS 노이즈 근처. **XGB stateless 아님**을 기울기로 확인.)
+- 헤드라인 RSS 차(GRU 262 vs XGB 237)는 주로 torch vs xgboost 런타임 footprint. 계측 세금·입력차원 기여는 이 규모에서 노이즈 수준.
 
-## 4. 비용 환산 (수동)
+## 5. 비용 환산 (수동)
 
-- 목표 throughput 1000 req/s, 측정 per-instance 442.4 req/s → 인스턴스 3대 × $0.17/hr = **$0.51/hr**.
-- 인스턴스: c6i.xlarge (vCPU4/8GiB, us-east-1 예시). 요금 출처: https://aws.amazon.com/ec2/pricing/on-demand/ (2026-07 조회 예시).
-- (per-instance = XGB/vitals_labs arm-1 측정 req/s. GRU/XGB 비용 대비는 각 req/s 로 환산.)
+- 목표 1000 req/s, 측정 per-instance 434.8 req/s → 3대 × $0.17/hr = **$0.51/hr**. 인스턴스 c6i.xlarge (vCPU4/8GiB, 예시), 출처 https://aws.amazon.com/ec2/pricing/on-demand/ (2026-07 조회 예시).
 
-## 5. 공정성·정상상태·게이트 관측
+## 6. 공정성·게이트·노이즈 관측
 
-- 워밍업 15 요청 제외, 측정 창 120 요청. 정상상태 컷 index: GRU=2, XGB=2 (−1이면 비수렴 FAIL).
-- 부팅 비용(모델 로드+캘리브레이션) 분리: GRU boot=1.31s, XGB boot=1.27s.
-- 관측성 게이트 확인(A1): arm-1 피처 샘플라인 GRU=9/XGB=16 (>0), arm-2 GRU=0/XGB=0 (==0 이면 게이트 동작).
+- 정상상태 컷 index GRU=2/XGB=2(−1=비수렴 FAIL). 부팅 분리 GRU 1.30s/XGB 1.26s.
+- 게이트(A1): arm-1 피처라인 GRU=9/XGB=16(>0), arm-2 GRU=0/XGB=0(==0).
+- 노이즈: server_mean 반복 spread(위 §1). tax·계측세금·입력차원 기여가 spread 안에 들면 노이즈로 해석.
 
-## 6. 한계 (정직)
+## 7. 한계 (정직)
 
-- client 벽시계는 localhost httpx — 실 네트워크 왕복은 작다. 잔차의 network 성분은 arm-2 에서만 추정하며 여기선 직렬화+프레임워크가 주. 데이터센터 배포 network 는 별도.
-- server 요청별 latency 는 `_sum` 인접 델타(단일 스트림 순차라 깨끗). 분위수는 분포 참고(버킷 무관 평균이 load-bearing).
-- 단일 실행·소표본(1 실행). CI/다른 하드웨어에서 절대치 다름. best_iter 골든은 xgboost 3.3.0 전제.
-- throughput 은 소규모 동시 스트림(스모크 수준). 대규모 부하는 별도.
+- client 벽시계=localhost httpx(실 network 작음) — 잔차 network 성분은 arm-2 에서만 추정, 여기선 직렬화+프레임워크가 주.
+- 단일 머신·소표본. 반복 5회로 노이즈는 줄였으나 절대치는 하드웨어 의존. best_iter 골든=xgboost 3.3.0 전제.
+- 상태 sweep 은 합성 pid(고정 행)로 상태 엔트리만 적재 — 환자당 메모리는 sub-KB라 6000명에서도 소량. 대규모(10만+)는 별도.
+- throughput 은 소규모 동시 스트림(스모크). 대규모 부하·네트워크 배포는 별도.

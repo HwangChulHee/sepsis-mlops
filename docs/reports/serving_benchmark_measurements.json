@@ -1,0 +1,81 @@
+{
+  "injected": {
+    "gru": {
+      "arm1": "…series…",
+      "arm2": "…series…",
+      "control9": {
+        "rss": 250.00390625
+      },
+      "throughput": {
+        "n_streams": 4,
+        "patient_ids": [
+          "p100003",
+          "p100004",
+          "p100005",
+          "p100006"
+        ],
+        "req_per_sec": 549.4032690715167,
+        "wall_seconds": 0.21841879500061623
+      },
+      "boot_latency": 1.3144143109966535
+    },
+    "xgb": {
+      "arm1": "…series…",
+      "arm2": "…series…",
+      "control9": {
+        "rss": 226.2265625
+      },
+      "throughput": {
+        "n_streams": 4,
+        "patient_ids": [
+          "p100003",
+          "p100004",
+          "p100005",
+          "p100006"
+        ],
+        "req_per_sec": 442.35650861402223,
+        "wall_seconds": 0.2712744080017728
+      },
+      "boot_latency": 1.2726050819983357
+    },
+    "cost": {
+      "target_throughput": 1000.0,
+      "per_instance_throughput": 442.35650861402223,
+      "price_per_hr": 0.17,
+      "instance_type": "c6i.xlarge (vCPU4/8GiB, us-east-1 예시)",
+      "price_source": "https://aws.amazon.com/ec2/pricing/on-demand/ (2026-07 조회 예시)"
+    }
+  },
+  "runs_summary": {
+    "gru_arm1": {
+      "boot": 1.3144143109966535,
+      "rss": 250.00390625,
+      "peak": 250.00390625,
+      "feature_lines": 9
+    },
+    "gru_arm2": {
+      "boot": 1.2792791690008016,
+      "rss": 249.359375,
+      "peak": 249.359375,
+      "feature_lines": 0
+    },
+    "xgb_arm1": {
+      "boot": 1.2726050819983357,
+      "rss": 227.7890625,
+      "peak": 227.7890625,
+      "feature_lines": 16
+    },
+    "xgb_arm2": {
+      "boot": 1.2697633059979125,
+      "rss": 226.9765625,
+      "peak": 226.9765625,
+      "feature_lines": 0
+    },
+    "xgb9": {
+      "boot": 1.2708496459999878,
+      "rss": 226.2265625,
+      "peak": 226.2265625,
+      "feature_lines": 9
+    }
+  }
+}

@@ -164,3 +164,10 @@ def build_app(featureset: str = "vitals", *, metrics_set=None) -> FastAPI:
         return Response(content=body, media_type=content_type)
 
     return app
+
+
+def build_app_from_env() -> FastAPI:
+    """uvicorn `--factory` 진입점(zero-arg). featureset 은 env `SEPSIS_XGB_FEATURESET`
+    (기본 vitals)로, 관측성 게이트는 `SEPSIS_SERVE_AUX_METRICS` 로 제어 — 벤치 러너가
+    서브프로세스 env 로 arm/featureset 을 정한다."""
+    return build_app(os.environ.get("SEPSIS_XGB_FEATURESET", "vitals"))

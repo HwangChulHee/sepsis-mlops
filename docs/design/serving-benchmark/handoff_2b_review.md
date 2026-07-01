@@ -134,3 +134,50 @@
 ### 판정
 
 **blocker 1건(B-R2-1) → HOLD.** B-1·M-2·M-3·M-4·minor 실질 해소. 그러나 B-2 해소가 딛은 A9가 고아 fine-버킷을 handoff_2a에 거짓 귀속 → 사슬 단절·A2 정직성 공동화. major 2건(비수렴 경계·A6-c 산문)도 함께 정리 권장.
+
+---
+
+## 라운드 3
+
+- 대상: `handoff_2b.md` 명세부 **v3** (reviser B-R2-1·M-R2-1·M-R2-2·minor 반영)
+- 검토일: 2026-07-02
+- 판정: **HOLD — blocker 1건 (B-R3-1)** (major 1, minor 3)
+
+### R2 항목별 재판정
+
+- **B-R2-1 (A9 고아 fine-버킷) → 부분 해소, 새 blocker 파생(B-R3-1).**
+  - 버킷 무관성 = 참: `server_mean = _sum/_count`은 버킷 격자와 독립·정확, `mean(client)−mean(server)=mean(client−server)`는 평균 선형성상 항등식 → m-1 unpaired proxy 동일 집합 위에서 자동 해소. [확인됨: `metrics.py:18,46`]
+  - 고아 fine-버킷 삭제 = 참: A9가 handoff_2a 거짓 귀속 삭제, 선행은 arm-2 게이트만. [확인됨]
+  - **그러나** 평균 항등식·A5-c 정상상태 컷이 client_mean·server_mean **동일 요청집합**을 전제하는데 §B2가 server_mean을 단일 누적 `_sum/_count` 스크레이프로 산출 → 전제 붕괴 → B-R3-1.
+- **M-R2-1 (비수렴 경계) → 해소.** A5-c 폴백 `steady_state_start==−1`+FAIL 결정론. PASS.
+- **M-R2-2 (A6-c 산문) → 해소.** `attribution: list[Attribution]` 승격, featureset_contrib 값검증·arch_contrib presence(NB2). PASS.
+- **m-R2-1/2/3 → 해소.** boot_latency·steady_state_start presence, ControlArm→ModelBench(.memory.rss), gru9=gru 별칭. [확인됨]
+
+### PASS
+
+- **server_mean 버킷 독립 = 코드 사실.** `_sum/_count`은 버킷 무관 정확 평균. [확인됨: `metrics.py:18,46`]
+- **부가작업이 server 밖·client에만(평균에서도).** latency는 `predict()`(app.py:97)만 포착, 피처 루프·window.add는 이후 → server `_sum` 미포함, client 벽시계 포함. arm-2 게이트가 이 둘만 끔, `LATENCY.observe` 불변 → **동일 집합 전제 하에** tax≈부가계측 세금, network+직렬화 상쇄. [확인됨]
+- **tax 불변식·비수렴 폴백·attribution 스키마·§B 코드 앵커** 전부 정합. [확인됨]
+
+### blocker
+
+#### B-R3-1. server_mean이 단일 누적 `_sum/_count`라 client_mean과 요청집합 불일치 — A5-c 정상상태 컷과 모순 + 페어링 붕괴 + arm 비대칭 오염 재유입
+- **문제**: `mean(client)−mean(server)=mean(client−server)` 항등식과 A5-c("`*_mean`에 `index<steady_state_start` 섞이면 FAIL", `:137`)는 client_mean·server_mean이 **동일 요청집합**일 때만 성립. 그러나 client_mean은 벽시계 배열 정상상태 슬라이스 `[steady_state_start:T]`, server_mean은 §B2(`:185-186`)가 **단일 누적 `_sum/_count`**(프로세스 수명 스칼라 — index 0·warmup 전부 섞임, 슬라이싱 불가)로 산출 → 집합 불일치 → A5-c와 §B2 정면 모순, "페어링 암묵 성립"(`:106,194`) 붕괴.
+- **왜 blocker(비대칭)**: 오염이 arm 비대칭 — GRU index 0 torch 첫-호출 워밍업으로 predict가 정상상태 수~수십 배 → server_mean이 GRU만 부풀어 residual 비대칭 축소 → B-R2-1이 막으려던 거짓 귀속이 집합-불일치로 재유입.
+- **왜 blocker(RED 불가)**: 입력 주입 계약(`:18`)이 원시 입력을 "`/metrics` 스냅샷"(단수 스칼라)으로 줌 → per-index 정보 없어 "server_mean이 warmup 포함/제외" 두 시나리오 주입 구성 불가 → A5-c를 server_mean에 RED 고정 불가 → 출제자-응시자 분리 붕괴.
+- **근거**: `handoff_2b:137,185-186,18,106,194`, `app.py:94,97,102`·`metrics.py:46`(server 히스토그램=전체 스트림 누적, 슬라이싱 지점 없음). (300-trial 캘리브레이션은 `app.py:94` t0 이전이라 latency 밖 — 무관.) [확인됨]
+- **제안**: server_mean을 client_mean과 **동일 정상상태 집합**으로 산출. (a) `_sum/_count`을 요청마다 스크레이프해 인접 델타로 per-request server latency 계열 만들고 `[steady_state_start:T]` 슬라이스(명시적 페어링 생겨 "암묵 성립"도 정확해짐), 또는 (b) warmup 경계·run 종료 두 시점 스냅샷 델타로 정상상태 `_sum/_count` 산출. 주입계약을 두 개(또는 per-request) 스냅샷으로 갱신, A5-c가 server_mean에 RED 고정 가능하게 §A 반영. 현재 "단일 `_sum/_count`"는 A5-c와 양립 불가.
+
+### major
+
+- **M-R3-1. `residual == client_mean − server_mean`이 일급 성공기준 아님 — 스키마 주석·산문에만.** tax는 스키마 불변식+A2-c 둘 다인데 residual 정의는 스키마 주석(`:50`)·A2 산문(`:106`)에만, 대응 번호 기준 없음. **제안**: A2에 "`arm.residual == arm.client_mean − arm.server_mean`(부동소수 허용오차)" 성공기준을 A2-c와 병렬 추가.
+
+### minor
+
+- **m-R3-1.** `memory.input_dim`(=xgb9−xgb, 음수)과 `attribution.featureset_contrib`(=xgb−xgb9, 양수)가 동일 델타 반대 부호 중복. 관계(`input_dim == −featureset_contrib`) 명시 또는 통합 권고.
+- **m-R3-2.** §A에 src `파일:줄` 리터럴·§B 역참조 소폭 회귀 — A9의 `[확인됨: metrics.py:18]`(`:168`), `(§B2)`/`(§B1)`/`(§B5)` 역참조. `metrics.py:18` 인용 §B 이관 권고.
+- **m-R3-3.** A5-c ±15% 경계 inclusivity(≤ vs <) 미명시 → knife-edge flaky 여지. 상수 정의에 명시 권고.
+
+### 판정
+
+**blocker 1건(B-R3-1) → HOLD.** B-R2-1 버킷 무관성·고아 제거·M-R2-1·M-R2-2·minor 실질 해소. 그러나 평균 재작성이 딛은 "동일 요청집합" 전제가 server_mean 단일 누적 산출과 불일치 → A5-c 모순·arm 비대칭 오염·RED 불가. server_mean을 정상상태 집합으로 산출하는 기전을 §A·§B·주입계약에 명시해야 통과. major 1·minor 3 동반.

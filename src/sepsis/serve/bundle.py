@@ -138,6 +138,10 @@ def load_bundle(featureset: str = "vitals", *, artifacts_dir: str | None = None,
                & (runs["params.segment"] == "h2c")]
     if len(sel) == 0:
         raise RuntimeError(f"no h2c gru/{featureset} run in experiment {experiment!r}")
+    # 매칭 run 이 여럿이면(재실행 등) search_runs 의 기본 정렬 순서에 기대지 않고 최신 run 을
+    # 결정론적으로 고른다 — 그렇지 않으면 dev/MLflow 경로가 의도치 않은 run 을 서빙할 수 있다.
+    if "start_time" in sel.columns:
+        sel = sel.sort_values("start_time", ascending=False)
     run_id = sel.iloc[0]["run_id"]
 
     def fetch(path):  # ALWAYS from the same run_id -> atomic bundle

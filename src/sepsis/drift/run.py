@@ -30,7 +30,15 @@ def analyze(reference, window, thresholds, *, min_patients: int | None = None) -
     if not window.ready(mp):
         watch.publish_insufficient()
         return None
-    per_feature = synthetic.detect(reference, window.patient_summary(), thresholds)
+    # 검출 표본수를 보정 표본수(window_n)에 맞춘다. 임계값은 window_n 표본의 H0 분산으로
+    # 잡혔는데(synthetic.calibrate: bootstrap(ref.summary, window_n)), 더 큰 표본에 그대로
+    # 적용하면 H0 분산이 작아져 임계가 과대해지고 실제 드리프트를 과소검출한다. 슬라이딩
+    # 윈도우 의미대로 가장 최근 window_n 환자만 비교한다(가용 환자 < window_n 이면 게이트에서 이미 return).
+    summary = window.patient_summary()
+    n_cal = thresholds.window_n
+    if summary.shape[0] > n_cal:
+        summary = summary[-n_cal:]
+    per_feature = synthetic.detect(reference, summary, thresholds)
     det = to_detection(per_feature)
     watch.publish(det)
     return det

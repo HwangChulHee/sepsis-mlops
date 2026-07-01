@@ -122,6 +122,15 @@ def test_cross_site_patient_disjoint_and_b_sealed():
     assert len(val) == 2  # round(10*0.2)
 
 
+def test_cross_site_val_size_uses_rounding_not_floor():
+    # 뮤테이션 보강: 13*0.2=2.6 → round=3 (floor면 2). "반올림" 의미를 실제로 고정.
+    # (n_a=10 입력만으론 round/floor 가 구별 안 돼 변이가 생존했었다.)
+    m = _manifest(n_a=13, n_b=3)
+    sp = split_mod.split_cross_site(m, val_frac=0.2, seed=1)
+    assert len(sp["A_val"]) == 3, "A_val 크기가 round(13*0.2)=3 이 아님 (floor 로 새면 2)"
+    assert len(sp["A_train"]) == 10
+
+
 def test_cross_site_deterministic_by_seed():
     m = _manifest()
     assert split_mod.split_cross_site(m, seed=7) == split_mod.split_cross_site(m, seed=7)

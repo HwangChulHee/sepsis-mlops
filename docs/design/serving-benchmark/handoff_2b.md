@@ -13,50 +13,129 @@
 
 # §A. spec-writer 전용 — 계약·성공기준·실패모드
 
-> spec-writer는 이 절만 읽고 TDD를 작성한다. 벤치 하니스의 **관측 가능한 산출**(수집 함수의 입출력, 리포트 아티팩트의 구조·라벨·계산값)으로 검증한다. 서버를 실제로 띄우는 통합 시나리오는 **알려진 입력→알려진 산출**로 성공기준을 고정한다.
+> spec-writer는 이 절만 읽고 TDD를 작성한다. **TDD 대상은 손으로 쓰는 마크다운 리포트가 아니라 벤치 하니스가 반환하는 구조화 결과 객체(`BenchResult`, 아래 A0 스키마)다.** 마크다운 리포트는 이 객체의 하위 렌더링일 뿐, 성공기준은 전부 **명명 필드 assert**(substring/grep 아님)로 고정한다. 서버를 실제로 띄우는 통합 시나리오는 **알려진 입력→알려진 산출**로 성공기준을 고정한다.
+>
+> **입력 주입 계약 (M-2)**: spec-writer는 라이브 서버·라이브 관측성 게이트(arm-2 토글)를 **구동하지 않는다.** arm-1/arm-2의 원시 측정치(client 벽시계 배열, `/metrics` 스크레이프 스냅샷, `/proc` RSS 값)는 하니스에 **주입되는 알려진 입력**으로 취급하고, spec-writer는 하니스의 **집계·귀인·라벨링 로직**(주입값 → `BenchResult` 필드)만 검증한다. 라이브 arm-2 실행으로 실제 값을 채우는 것(end-to-end GREEN)은 handoff_2a 게이트 선행에 의존한다(A9 전제).
+
+## A0. 구조화 결과 객체 스키마 (`BenchResult`) — TDD 계약면
+
+벤치 하니스는 아래 필드를 가진 객체(dataclass 또는 동형 JSON)를 반환한다. **필드 이름·중첩·enum 값이 관측 계약**이며, 성공기준 A1~A7은 이 필드에 대한 assert로 재작성된다. (필드가 어느 함수에서 나오는지·직렬화 포맷은 §B 소관 — 여기선 이름·타입·불변식만.)
+
+```
+BenchResult
+  gru:  ModelBench          # 배포 arm 모델 1
+  xgb:  ModelBench          # 배포 arm 모델 2
+  headline_label: str       # enum — A6-a
+  control_arm:   ControlArm # presence 필수 — A6-b
+  cost:          CostResult # A7 / m-3
+
+ModelBench                  # 한 모델의 arm-1/arm-2 latency·throughput·memory
+  arm1: ArmLatency          # 부가 계측 ON (배포 계측 프로파일)
+  arm2: ArmLatency          # 부가 계측 OFF (순수 추론 프로파일)
+  tax:  float               # == arm1.residual − arm2.residual  (A2-c 불변식)
+  throughput: Throughput    # A3
+  memory: MemoryBreakdown   # A4
+  stateless_claim: bool     # 계약값 == False  (A4-c, grep 아님)
+
+ArmLatency
+  client:  Quantiles        # 벽시계 페어링 집계 추정량
+  server:  Quantiles        # 서버 히스토그램 '버킷보간' 추정량 (B-2: 추정량 종류 다름)
+  server_mean: float        # serve_predict_latency_seconds _sum/_count — 버킷 무관 평균 (A1-a 병기)
+  residual: float           # client.p50 − server.p50 — unpaired 분위수차 proxy (m-1 caveat)
+  residual_label: str       # enum, arm 별 고정값 — A2
+
+Quantiles: { p50: float, p95: float, p99: float }
+
+Throughput                  # A3 / M-3
+  n_streams: int            # 동시 스트림 수(설정 가능)
+  unique_patient_ids: int   # == n_streams (중복 pid 금지 — orchestrator ValueError, §B1)
+  req_per_sec: float
+  wall_seconds: float
+
+MemoryBreakdown             # A4-b
+  rss:  float               # A4-a
+  peak: float               # A4-a
+  instrumentation: float    # == rss_arm1 − rss_arm2  (값 검증되는 유일 기여, A4-b(3))
+  state:      float | None  # presence-only — 동일 featureset·환자수 sweep RSS 기울기 (M-4)
+  input_dim:  float | None  # presence-only — 동일 아키텍처 featureset delta(예 XGB/9→XGB/18 RSS차)로만 (M-4)
+
+ControlArm                  # A6-b — presence-only 계약
+  gru9: MemoryBreakdown|ModelBench  # GRU/vitals9
+  xgb9: MemoryBreakdown|ModelBench  # XGB/vitals9 (동일 featureset 통제)
+
+CostResult                  # A7 / m-3 — 손 표가 아니라 구조화 산출
+  target_throughput:        float   # 목표 처리량(예 병동 N환자/시간)
+  per_instance_throughput:  float   # 측정 기반 인스턴스당 처리량
+  instance_count:           int     # == ceil(target_throughput / per_instance_throughput)
+  price_per_hr:             float
+  cost_per_hr:              float    # == instance_count × price_per_hr
+  instance_type:            str      # 출처 명시 필드
+  price_source:             str      # 요금 출처 URL/문서(재현성)
+```
+
+### enum 고정값 (동등성 검사 — substring 아님)
+
+| 필드 | arm-1 / 배포 | arm-2 | 금지값 |
+|---|---|---|---|
+| `ArmLatency.residual_label` | `"client_server_residual"` | `"network_plus_serialization"` | arm-1에서 `"network"` (단독) |
+| `BenchResult.headline_label` | `"combined_deployment_profile"` | — | `"pure_architecture"` |
+
+성공기준은 이 enum에 **동등성 assert**(`== "client_server_residual"`, `!= "network"`)로 검사한다. arm-2 라벨이 `"network_plus_serialization"`을 포함해도 arm-1 필드는 별도 값이라 거짓양성이 원천 차단된다(B-1).
 
 ## A1. latency 수집 — 두 계측점 병행
 
 리플레이어가 각 `/predict` 요청을 보낼 때 **client 벽시계**(요청 직전~응답 직후)를 잰다. 동시에 서버가 노출하는 **서버 내부 latency 히스토그램**(`serve_predict_latency_seconds`, `/metrics`)도 수집한다.
 
-- **성공기준 A1-a (두 값 다 있음)**: 벤치 리포트에 각 모델별로 **client 벽시계 latency**의 p50/p95/p99와 **서버 히스토그램 latency**의 p50/p95/p99가 **둘 다** 기록된다. 하나만 있으면 FAIL.
-- **성공기준 A1-b (client ≥ server)**: 같은 요청 집합에서 client 벽시계 latency는 서버 히스토그램 latency보다 **크거나 같다**(client가 network+직렬화+핸들러 후처리를 포함하므로). 위반 시 계측 오류.
+- **성공기준 A1-a (두 값 다 있음 + 버킷 무관 평균 병기)**: 각 모델의 `arm.client`(p50/p95/p99)와 `arm.server`(p50/p95/p99)가 **둘 다** 채워진다(어느 하나라도 `None`이면 FAIL). 추가로 `arm.server_mean`(`_sum/_count`, **버킷과 무관한 평균**)을 병기한다 — 분위수 보간이 버킷 격자에 스냅되어도(B-2) 평균은 실측 유효.
+- **성공기준 A1-b (client ≥ server, eps 허용)**: 같은 요청 집합에서 `arm.client.pX ≥ arm.server.pX − EPS`(각 X∈{50,95,99})가 성립한다. **`arm.server`는 히스토그램 '버킷보간' 추정량이고 `arm.client`는 벽시계 페어링 추정량이라 추정량 종류가 다르다** — 버킷 경계 근처에서 server가 client를 근소하게 초과할 수 있으므로 `EPS`(권장 기본 = 서버 히스토그램 최소 유효 버킷 폭, A9에서 handoff_2a 버킷 설정으로 고정)를 허용오차로 둔다. `EPS` 초과로 위반해야만 계측 오류(FAIL). eps 이내 초과는 경고(sanity)로 강등.
 
 ## A2. 잔차 정직성 — arm에 따라 다르게 라벨링 (load-bearing)
 
-`client 벽시계 − 서버 히스토그램`을 **"client−server 잔차"**라 부른다. 이 잔차의 라벨링은 arm에 따라 다르다:
+`client 벽시계 − 서버 히스토그램`을 `ArmLatency.residual`(client.p50 − server.p50)로 계산하고, `residual_label` enum으로 라벨링한다. **이 잔차는 per-request 페어링이 아니라 분위수차 proxy임(m-1 caveat)** — arm1−arm2 차분이 노이즈로 음수가 될 수 있어 리포트 렌더링에 caveat를 병기한다(§B7).
 
-- **성공기준 A2-a (arm-1에서 network 금지)**: 부가 계측을 **켠 상태(arm-1)**로 측정한 리포트는 이 잔차를 **"network"라고 이름 붙이지 않는다** — "client−server 잔차(network+직렬화+핸들러 후처리)"로만 표기한다. arm-1 리포트에서 "network latency = X"라는 헤드라인이 나오면 FAIL.
-- **성공기준 A2-b (network 추정은 arm-2에서만)**: 부가 계측을 **끈 상태(arm-2)**의 잔차만 "network+직렬화 추정"으로 헤드라인할 수 있다.
-- **성공기준 A2-c (핸들러 후처리분 = 차분)**: 리포트는 **(arm-1 잔차 − arm-2 잔차)**를 "부가 계측 세금"으로 별도 표기한다 — network에 흡수하지 않는다.
+- **성공기준 A2-a (arm-1에서 network 금지 — enum 동등성)**: `gru.arm1.residual_label == "client_server_residual"` 그리고 `!= "network"`. `xgb.arm1.residual_label`도 동일. arm-1의 라벨이 `"network"`(금지값)면 FAIL. (substring이 아니라 필드 동등성이라, arm-2 라벨이 network를 포함해도 무관.)
+- **성공기준 A2-b (network 추정은 arm-2에서만)**: `arm2.residual_label == "network_plus_serialization"`. arm-2 잔차만 network 추정으로 해석된다.
+- **성공기준 A2-c (핸들러 후처리분 = 차분 불변식)**: `model.tax == model.arm1.residual − model.arm2.residual`(부동소수 허용오차 내). tax는 "부가 계측 세금" 필드로 별도 존재하며 network에 흡수되지 않는다.
 
 > **근거**: 서버 히스토그램은 순수 추론 구간만 재고, 핸들러의 부가작업(피처 루프·드리프트 적재)은 잔차에 섞인다. 이 부가작업은 GRU 9 vs XGB 18로 **비대칭**이라, arm-1 잔차를 통째로 network라 부르면 XGB network가 체계적으로 부풀려진다.
 
 ## A3. throughput — 동시 부하
 
-- **성공기준 A3**: 벤치는 **동시 N 스트림**(N을 설정 가능)으로 부하를 걸어 초당 처리 요청 수(또는 완료 시간)를 각 모델별로 리포트에 기록한다. 단일 스트림 latency와 별개 항목이다.
+- **성공기준 A3**: `model.throughput.n_streams`(설정 가능한 동시 스트림 수)로 부하를 걸어 `req_per_sec`(또는 `wall_seconds`)를 각 모델별로 채운다. 단일 스트림 latency와 별개 필드다. **불변식**: `throughput.unique_patient_ids == throughput.n_streams` — 동시 스트림은 **유일 patient_id N개**로 구성되어야 한다(중복 pid는 서버 hidden state를 섞어 시작 전 ValueError, §B1). "N 설정 가능"은 곧 "유일 pid N개 생성"을 의미한다.
 
 ## A4. 메모리 — RSS/peak + 3기여 분해
 
-- **성공기준 A4-a (측정 존재)**: 각 서빙 프로세스의 **RSS와 peak**를 리포트에 기록한다.
-- **성공기준 A4-b (3기여 분해)**: 메모리 차이를 하나의 숫자로 뭉뚱그리지 않고 **세 기여로 갈라** 기록한다 — (1) per-patient 상태(GRU hidden state vs XGB lookback 버퍼, **둘 다** 동시 환자 수에 증가), (2) 입력차원(9 vs 18), (3) 계측 부속물(드리프트 윈도우 + 피처 히스토그램). 특히 (3)은 **arm-1 RSS − arm-2 RSS**의 차분으로 실측 분리한다.
-- **성공기준 A4-c (stateless 금지)**: 리포트 어디에도 "XGB는 stateless"라는 서술이 없다 — XGB도 lookback 버퍼라는 per-patient 상태를 가진다.
+- **성공기준 A4-a (측정 존재)**: `memory.rss`·`memory.peak`가 각 서빙 프로세스에 대해 채워진다(`None`이면 FAIL).
+- **성공기준 A4-b (3기여 분해 — 값 검증 vs presence 정직 구분)**: 메모리 차이를 하나의 숫자로 뭉뚱그리지 않고 세 필드로 나눈다.
+  - **(3) 계측 부속물** `memory.instrumentation` — **값 검증**: `== rss_arm1 − rss_arm2`(같은 모델의 arm-1 RSS − arm-2 RSS). 동일 모델·동일 featureset·동일 환자수에서 계측 토글만 다르므로 깨끗한 차분.
+  - **(2) 입력차원** `memory.input_dim` — **동일 아키텍처 내 featureset delta로만** 실측 분리(예: XGB/9 RSS − XGB/18 RSS = `control_arm.xgb9` vs `xgb` 배포 arm). GRU/9 vs XGB/9로 재면 per-patient state 형태차(hidden state vs lookback 버퍼)가 섞이므로(NB2) **교차-아키텍처 분리 금지**. 이 축을 아키텍처 간 단일 값으로 검증할 수 없을 때는 `presence-only`(필드 존재 + 산출 공식 기재)로 정직 표시.
+  - **(1) per-patient state** `memory.state` — **동일 featureset·환자 수 sweep의 RSS 기울기**(ΔRSS/Δ동시환자수)로 정의. 절대값이 아니라 기울기라 단일 스냅샷으로 검증 불가 → `presence-only`(기울기 산출 근거 기재).
+  - 즉 값-검증 필드는 `instrumentation` 하나, 나머지 둘은 **분리 공식 + presence** 계약이다. 세 필드가 다 존재하지 않으면 FAIL.
+- **성공기준 A4-c (stateless 금지 — bool 계약)**: `model.stateless_claim == False`(양 모델). XGB도 lookback 버퍼라는 per-patient 상태를 가지므로 하니스는 이 필드를 하드-`False`로 계약한다(리포트 산문 grep이 아니라 필드값 assert).
 
 ## A5. 공정성 통제
 
-- **성공기준 A5-a (같은 스트림)**: 두 모델에 **동일한 `.psv` 소스·동일 순서**로 요청을 흘린다. inter-arrival sleep 없이(무압축 발사) throughput을 왜곡하지 않는다.
+- **성공기준 A5-a (같은 스트림 + 무sleep = no-op)**: 두 모델에 **동일한 `.psv` 소스·동일 순서**로 요청을 흘린다. throughput 측정 시 inter-arrival sleep은 **no-op sleep_fn 주입**(호출은 되지만 실제 대기 0)으로 제거한다 — 리플레이 엔진이 행마다 `sleep_fn(interval)`을 호출하고 interval은 0이 될 수 없으므로(§B5), "무sleep"은 speed 조작이 아니라 no-op 함수 주입으로만 달성한다.
 - **성공기준 A5-b (순차 실행)**: 두 서빙을 **동시에 띄우지 않고 순차** 측정한다(자원 경합 배제).
-- **성공기준 A5-c (정상상태 워밍업)**: 부팅 비용(모델 로드 + GRU의 경우 드리프트 캘리브레이션)을 정상상태 latency와 **분리**한다 — 워밍업 컷은 "연속 K요청의 p95가 안정 범위로 수렴한 시점"까지 실측 제외하고, 부팅 비용은 **별도 항목**으로 리포트(두 모델 부팅 프로파일 대칭 기재). 정상상태 집계에 부팅 비용이 섞이면 FAIL.
+- **성공기준 A5-c (정상상태 워밍업 — 결정론적 컷)**: 부팅 비용(모델 로드 + GRU의 경우 드리프트 캘리브레이션)을 정상상태 latency와 **분리**한다. 컷은 두 단계로 **결정론화**(같은 latency 배열 → 같은 컷):
+  1. **캘리브레이션 1회성 제외**: 첫 요청(index 0)은 무조건 워밍업으로 제외한다 — GRU 캘리브레이션은 lazy-load상 첫 요청에서만 1회 발생(§B5)하므로 index 0 제외로 대칭 흡수(XGB는 index 0에 모델 로드 tail).
+  2. **정상상태 시작**: index 1부터, 연속 K=20 요청 창의 p95가 **직전 창 p95의 ±15% 이내**로 든 **첫 창의 시작 index**를 `steady_state_start`로 고정, 그 이후만 정상상태 집계에 포함. (K·%는 하니스 상수로 노출 — 값은 조정 가능하나 계약상 존재·결정성이 핵심.)
+
+  워밍업/부팅 비용은 `boot_latency` 별도 항목으로 두 모델 대칭 기재. 정상상태 집계(`arm.client`/`arm.server`)에 index<`steady_state_start` 요청이 섞이면 FAIL.
 
 ## A6. featureset 목표 = 결합 배포 프로파일 + 통제 arm (필수 게이트)
 
-- **성공기준 A6-a (헤드라인 라벨)**: 헤드라인 프로파일은 **각 모델의 실제 배포 featureset**(GRU/vitals9, XGB/vitals_labs18)이며, 리포트는 이를 "(아키텍처 × featureset) 결합 배포 프로파일"로 명시한다. "순수 아키텍처 운영비"라는 표현을 쓰면 FAIL.
-- **성공기준 A6-b (통제 arm 필수)**: 배포 arm(GRU/9 vs XGB/18)뿐 아니라 **동일 featureset 통제 arm(GRU/9 vs XGB/9)**을 **반드시 함께** 측정·기록한다. 통제 arm 없이 배포 arm 숫자만 있는 리포트는 **FAIL**.
-- **성공기준 A6-c (귀인 명시)**: 모든 지표에 대해 "이 차이 중 featureset(9→18) 기여 vs 아키텍처 기여"를 분해 기재한다. 단 통제 arm 잔차엔 per-patient state 차이(hidden state vs lookback 버퍼)가 섞임을 명시한다(통제 arm은 featureset만 고정).
+- **성공기준 A6-a (헤드라인 라벨 — enum)**: `BenchResult.headline_label == "combined_deployment_profile"` 그리고 `!= "pure_architecture"`. 헤드라인은 각 모델 실제 배포 featureset(GRU/vitals9, XGB/vitals_labs18)의 "(아키텍처 × featureset) 결합 배포 프로파일"이며, `"pure_architecture"`(금지값)면 FAIL.
+- **성공기준 A6-b (통제 arm 필수 — presence)**: `BenchResult.control_arm.gru9`·`.xgb9`가 **둘 다 존재**한다(동일 featureset vitals9 통제 arm). 통제 arm 없이 배포 arm만 있으면(`control_arm is None` 또는 한쪽 결측) FAIL.
+- **성공기준 A6-c (귀인 명시)**: 모든 지표에 대해 "이 차이 중 featureset(9→18) 기여 vs 아키텍처 기여"를 분해 기재한다. 단 통제 arm 잔차엔 per-patient state 차이(hidden state vs lookback 버퍼)가 섞임을 명시한다(통제 arm은 featureset만 고정, A4-b(2) 교차-아키텍처 주의와 정합).
 
-## A7. 비용표
+## A7. 비용 — 구조화 산출 (손 표 아님)
 
-- **성공기준 A7**: 목표 throughput(예: 병동 N환자/시간)을 치는 데 필요한 **인스턴스 대수 × $/hr**를 수동 표로 환산한다. 인스턴스 타입·요금 **출처를 명시**하고 재현 가능해야 한다. CPU로 충분한지/GPU 필요한지도 측정 결과 기반으로 표에 기재.
+- **성공기준 A7 (환산 불변식)**: `BenchResult.cost`가 아래를 만족한다.
+  - `cost.instance_count == ceil(cost.target_throughput / cost.per_instance_throughput)`
+  - `cost.cost_per_hr == cost.instance_count × cost.price_per_hr`
+  - `cost.instance_type`·`cost.price_source`가 **비어있지 않다**(출처 명시·재현성).
+  - `per_instance_throughput`은 측정(A3) 기반이어야 하며, CPU로 충분한지/GPU 필요한지 판단이 이 값에 반영된다. 손 표는 이 구조체의 렌더링일 뿐 TDD 대상은 `cost` 필드다(m-3).
 
 ## A8. 범위 밖
 
@@ -65,6 +144,11 @@
 - 자동 비용 대시보드·리포트 — 2차 이후(수동 표로 시작).
 - 트랜스포머 벤치(가중치 없음).
 - 크로스-featureset 스트림 주의: 각 모델은 **자기 featureset의 full psv**를 흘린다(GRU vitals9를 XGB vitals_labs18 서버에 보내면 9키 결측→NaN 퇴화 입력). 벤치 스트림 구성 시 이를 지킨다.
+
+## A9. 선행 의존 (전제 — spec-writer 판단 아님)
+
+- **라이브 arm-2 값 채우기(end-to-end GREEN)**는 handoff_2a의 관측성 env 게이트(arm-2 토글) 구현에 **선행 의존**한다. 게이트 미구현 시 하니스는 주입 입력으로 집계·귀인 로직만 GREEN(A 입력 주입 계약), 라이브 값은 게이트 통과 후 채운다.
+- **A1 서버 분위수의 유효성**은 handoff_2a에서 `serve_predict_latency_seconds` 히스토그램의 **fine 버킷**이 GRU·XGB **양쪽**에 설정됨에 의존한다(B-2). 현재 코드는 버킷 미지정 → prometheus 기본 버킷(.005/.01/.025/…)이라 sub-25ms CPU predict가 격자로 스냅되어 분위수 보간이 무의미. **선행조건**: 2a가 sub-25ms 해상도 버킷을 양쪽에 고정해야 A1-a 서버 분위수·A1-b `EPS`가 유의미. 미충족 시 A1은 `server_mean`(버킷 무관 평균)으로만 성립하고 서버 분위수는 sanity 등급으로 강등.
 
 ---
 
@@ -75,38 +159,45 @@
 ## B1. 리플레이어 재사용 (예측 로직 불변)
 
 - 요청 전송·타이밍 래핑: `src/sepsis/replay/http_sender.py`의 `HttpSender.send`(POST 후 dict 반환) 바깥에 벽시계 래핑을 추가. 예측 로직 불변.
-- 동시 부하: `src/sepsis/replay/orchestrator.py`의 `replay_many`(ThreadPoolExecutor로 동시 스트림) 재사용 → A3 throughput 부하 생성기.
-- 스트림 무상태: `engine.py`의 `replay_stream`(환자 상태 미보유) 재사용. `speed` 파라미터는 벤치 시 무압축(sleep 최소, A5-a).
-- 추가되는 것은 (a) 벽시계 계측, (b) 벤치 러너(집계·리포트)뿐. 스트리밍/시퀀스 로직 불변.
+- 동시 부하: `src/sepsis/replay/orchestrator.py`의 `replay_many`(ThreadPoolExecutor로 동시 스트림) 재사용 → A3 throughput 부하 생성기. **throughput 소스는 유일 patient_id N개**로 구성한다 — `orchestrator.py:45-52`가 중복 patient_id를 시작 전 `ValueError`로 막는다(F-c1, 서버 hidden state 오염 방지). N 스트림은 `PsvRowSource(run_suffix=...)` 등으로 pid를 유일화(A3 `unique_patient_ids == n_streams` 불변식). [확인됨]
+- 스트림 무상태: `engine.py`의 `replay_stream`(환자 상태 미보유) 재사용. 리플레이 엔진은 행마다 `sleep_fn(interval)`을 호출(`engine.py:62-64`)하고 `interval = 3600/speed`는 0이 될 수 없으므로, "무sleep"(A5-a)은 speed 조작이 아니라 **no-op `sleep_fn` 주입**(호출은 되나 실제 대기 0)으로 달성. [확인됨]
+- 추가되는 것은 (a) 벽시계 계측, (b) 벤치 러너(집계·리포트), (c) `BenchResult` 구조체 조립뿐. 스트리밍/시퀀스 로직 불변. `BenchResult`(§A0 스키마)를 최종 반환하고, 마크다운 리포트(§B7)는 그 구조체를 렌더링만 한다(TDD 대상 = 구조체).
 
 ## B2. 서버 히스토그램 수집
 
-- `/metrics`에서 `serve_predict_latency_seconds`(Histogram)의 `_count`/`_sum`/`_bucket`을 스크레이프해 p50/p95/p99 산출(prometheus 히스토그램 분위수). GRU·XGB 서빙 양쪽이 동일 이름 히스토그램을 노출(handoff_2a 1차 명세). 관측 경계는 각 서빙이 코드로 보장(GRU predict의 StreamPreprocessor 포함 / XGB 버퍼 재구성+booster.predict 포함 — 1차 handoff §B5).
+- `/metrics`에서 `serve_predict_latency_seconds`(Histogram)의 `_count`/`_sum`/`_bucket`을 스크레이프. **버킷보간 분위수**(`_bucket`)로 `arm.server`(p50/p95/p99)를, **버킷 무관 평균**(`_sum/_count`)으로 `arm.server_mean`을 산출(A1-a 병기). GRU·XGB 서빙 양쪽이 동일 이름 히스토그램을 노출(handoff_2a 1차 명세).
+- **버킷 해상도 선행조건(B-2/A9)**: 현재 `metrics.py:18`은 `LATENCY = Histogram("serve_predict_latency_seconds", ...)`로 **버킷 미지정** → prometheus 기본 버킷(.005/.01/.025/…). CPU predict가 수ms~수십ms라 분위수가 격자에 스냅되어 `arm.server` 분위수는 무의미. **handoff_2a가 sub-25ms fine 버킷을 GRU·XGB 양쪽에 설정해야** A1 서버 분위수가 유효(그 전엔 `server_mean`으로만 A1 성립, 분위수는 sanity 강등). A1-b `EPS`는 최소 유효 버킷 폭으로 잡는다. [확인됨: 버킷 미지정 사실]
+- 관측 경계는 각 서빙이 코드로 보장(GRU predict의 StreamPreprocessor 포함 / XGB 버퍼 재구성+booster.predict 포함 — 1차 handoff §B5).
 
 ## B3. arm-1/arm-2 운영
 
 - arm-1: handoff_2a의 env 스위치를 **ON**(기본)으로 서버 기동 → 배포 계측 프로파일 측정.
 - arm-2: 같은 스위치 **OFF**로 서버 재기동 → 순수 추론 프로파일 측정.
 - 순차 실행(A5-b)이므로 arm 전환 = 서버 재기동으로 충분.
-- 잔차 계산: `client_p50 − server_p50` 등. arm-1 잔차엔 "network" 라벨 금지(A2-a), arm-2 잔차만 network 추정(A2-b), (arm-1−arm-2) 잔차 = 계측 세금(A2-c).
+- 잔차 계산: `residual = client.p50 − server.p50` (unpaired 분위수차 proxy — 히스토그램은 per-request를 안 들고 있어 페어링 잔차 아님; arm1−arm2 차분이 노이즈로 음수 가능, §B7 caveat). `residual_label` enum 고정: arm-1 = `"client_server_residual"`(A2-a, `"network"` 금지), arm-2 = `"network_plus_serialization"`(A2-b), `tax = arm1.residual − arm2.residual`(A2-c).
 
 ## B4. 메모리 측정
 
 - 서빙 프로세스 RSS/peak: `/proc/<pid>/status`(VmRSS/VmHWM) 또는 컨테이너 stat. 순차 측정이라 각 서버 단독 RSS.
-- 3기여 분해(A4-b): (3) 계측 부속물 = arm-1 RSS − arm-2 RSS 실측. (1) per-patient state·(2) 입력차원은 동시 환자 수·featureset을 바꿔가며 관측(예: 통제 arm과 배포 arm의 XGB RSS 차 = featureset 기여). state 축은 GRU hidden state vs XGB lookback 버퍼 — 둘 다 환자 수 증가(`config.py` LOOKBACK=8; predictor hidden state).
+- 3기여 분해(A4-b) — 값 검증 vs presence 구분:
+  - `memory.instrumentation`(값 검증) = **같은 모델의 arm-1 RSS − arm-2 RSS** 실측(계측 토글만 다름).
+  - `memory.input_dim`(presence + 공식) = **동일 아키텍처 내 featureset delta**로만 — `control_arm.xgb9`(XGB/9) RSS − 배포 `xgb`(XGB/18) RSS. GRU/9 vs XGB/9로 재면 state 형태차가 섞이므로 교차-아키텍처 분리 금지(NB2).
+  - `memory.state`(presence + 공식) = **동일 featureset·환자 수 sweep의 RSS 기울기**(ΔRSS/Δ동시환자수). 절대 스냅샷 아님 → presence-only. state 축은 GRU hidden state vs XGB lookback 버퍼 — 둘 다 환자 수 증가(`config.py` LOOKBACK=8; predictor hidden state).
 
 ## B5. 공정성 통제 구현
 
-- 같은 psv 소스·순서: 동일 입력 파일·동일 seed·정렬. 무압축 발사(speed 최대/무sleep).
-- 정상상태 워밍업(A5-c): 부팅 요청 latency 궤적을 기록해 p95 수렴점을 실측 컷. GRU 부팅 = 모델 로드 + `synthetic.calibrate(n_trials=300)`(app.py 부팅 시), XGB 부팅 = 모델 로드만 — 부팅 항목 대칭 기재.
+- 같은 psv 소스·순서: 동일 입력 파일·동일 seed·정렬. 무압축 발사는 **no-op `sleep_fn` 주입**(`replay_stream(..., sleep_fn=noop)`) — speed로는 interval을 0으로 못 만든다(`engine.py:55-56`이 speed>0 강제, interval=3600/speed>0). [확인됨]
+- 정상상태 워밍업(A5-c): latency 궤적에서 (1) index 0 무조건 제외(캘리브레이션 1회성), (2) K=20 창 p95가 직전 창 ±15% 이내 든 첫 창 시작 index를 `steady_state_start`로 결정론적 컷. GRU 부팅 = 모델 로드 + `synthetic.calibrate(n_trials=300)`(`app.py:73` lazy-load 첫 요청 시 1회), XGB 부팅 = 모델 로드만 — `boot_latency` 항목 대칭 기재. [확인됨]
 
 ## B6. featureset arm 구성
 
 - 배포 arm: GRU=vitals(9), XGB=vitals_labs(18). 통제 arm: 둘 다 vitals(9). XGB/9는 `xgboost_vitals.ubj`(1차 handoff B1 아티팩트), XGB/18은 `xgboost_vitals_labs.ubj`. 각 arm에서 해당 featureset full psv 스트림(A8).
 
-## B7. 리포트 산출물
+## B7. 리포트 산출물 (구조체의 하위 렌더링)
 
-- `docs/reports/serving_benchmark.md`에 결과. 결합 프로파일을 발견으로 서술하되 per-patient state/입력차원/계측 3기여 분해 후 아키텍처 기여를 말함. 한계 명시(2모델 한정·통제 arm 범위·network는 arm-2 잔차로만 추정·비용 가정 출처).
+- **TDD 대상은 `BenchResult` 구조체(§A0)**, `docs/reports/serving_benchmark.md`는 그 구조체를 표·산문으로 **렌더링**한 것일 뿐(성공기준은 구조체 필드 assert, 리포트 substring 아님).
+- 비용은 `BenchResult.cost` 구조체(A7 불변식: `instance_count=ceil(target/per_instance)`, `cost_per_hr=count×price`)를 표로 렌더 — 손 표 계산이 아니라 구조체 산출을 표기.
+- 결합 프로파일을 발견으로 서술하되 per-patient state/입력차원/계측 3기여 분해 후 아키텍처 기여를 말함. 한계 명시(2모델 한정·통제 arm 범위·**잔차는 unpaired 분위수차 proxy(m-1)**·network는 arm-2 잔차로만 추정·비용 가정 출처).
 
 ---
 

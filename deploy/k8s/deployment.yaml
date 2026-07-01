@@ -27,6 +27,9 @@ spec:
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
+      # terminationGracePeriod: SIGTERM 후 in-flight /predict drain 여유(기본 30s → 40s). preStop
+      # sleep 과 합쳐 "엔드포인트 디레지스터(kube-proxy 전파) → 신규 트래픽 중단 → SIGTERM drain" 순서.
+      terminationGracePeriodSeconds: 40
       # fsGroup: 공유 번들 PVC 를 비-root(uid 10001) 가 읽도록 볼륨 소유 그룹 정렬.
       # seccompProfile: 컨테이너 syscall 을 커널 기본 프로파일로 제한(공격면 축소).
       securityContext:
@@ -39,6 +42,12 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
+          # preStop: SIGTERM 전에 잠깐 대기 → 그 사이 Service 엔드포인트에서 이 파드가 빠져
+          # 신규 요청 유입이 멎는다(kube-proxy 전파 레이스 완화). 이후 SIGTERM → uvicorn drain.
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 5"]
           # 비-root 실행 + 권한상승/캡 전부 제거(공격면 축소).
           # readOnlyRootFilesystem: 루트FS 를 읽기전용으로 — 서빙은 디스크에 안 쓴다(번들은 PVC
           # 에서 읽기만). torch/tmp 용 /tmp 만 emptyDir 로 쓰기 허용(아래 volumeMount).

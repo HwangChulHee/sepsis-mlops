@@ -151,6 +151,10 @@ kubectl port-forward svc/prometheus 9090:9090    # 타겟 확인: /targets, up{j
 `[확인됨]` 검증: 타겟 health=up, 예측 트래픽 → `serve_predict_requests_total` 증가가 Prometheus에
 반영. 대시보드 재생성: `kubectl create configmap grafana-dashboards --from-file=deploy/grafana/dashboards/ --dry-run=client -o yaml`.
 
+**알림 규칙**(관측의 나머지 절반 — `prometheus-rules` ConfigMap, Prometheus `/alerts`에 노출):
+`ServingDown`(`up==0` 1분+·critical) · `SepsisInputDrift`(`drift_dataset_share>0.3` 5분+) ·
+`HighAlarmRate`(알람률 50%+ 10분+). Alertmanager는 미배포(규칙만) — 라우팅은 후속.
+
 > 데모라 tsdb·grafana-db는 emptyDir(재시작 시 초기화). 영속 필요하면 PVC로. 익명 Admin은 로컬 전용.
 
 ## 9. 보안 하드닝 (적용됨)
@@ -168,9 +172,19 @@ NetworkPolicy 미강제라 **선언적/이식성용**(Calico·Cilium 등 실 CNI
 **남은 부채**(운영 전): Ingress `/console` 무인증(basic-auth 주석 준비됨)·TLS 없음(M4 범위),
 강제 CNI 로 전환(현재 정책들이 실제 격리되게).
 
+## 10. 빌드 재현성 · CI 게이트
+
+- **이미지 의존성 핀**: `deploy/Dockerfile`·`Dockerfile.api` 의 torch/numpy/scipy/fastapi 등을
+  `uv.lock` 버전과 **정확히 일치**시켰다(예: `torch==2.12.1`). 미고정이면 컨테이너가 dev/test 와
+  다른 버전을 받아 모델 로드·수치가 갈라진다(train/serve 스큐). **lock 갱신 시 Dockerfile 도 함께 올릴 것.**
+- **CI 배포물 게이트**(`.github/workflows/ci.yml` `manifests` 잡): `kubeconform -strict` 로 k8s
+  매니페스트 스키마 + `hadolint` 로 Dockerfile 린트. 손으로 고친 YAML 오류가 머지되는 걸 막는다.
+- **graceful shutdown**: serving 에 `preStop: sleep 5` + `terminationGracePeriodSeconds: 40` —
+  종료 시 엔드포인트 디레지스터 후 uvicorn 이 in-flight 요청을 drain.
+
 ---
 
-## 10. 정리
+## 11. 정리
 
 ```bash
 minikube stop          # 삭제 아님 — 상태 보존, 다음에 그대로 재사용

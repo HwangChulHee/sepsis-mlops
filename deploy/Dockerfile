@@ -6,10 +6,13 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # torch CPU wheel from the official CPU index, then the lightweight serving deps.
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+# ★ 버전은 uv.lock 과 정확히 일치시킨다 — 안 그러면 컨테이너가 dev/test 와 다른 torch/numpy 를
+# 받아(빌드 시점 최신) 모델 로드·수치가 갈라진다(train/serve 스큐, 재현 불가 빌드). lock 갱신 시
+# 여기도 함께 올릴 것.
+RUN pip install --no-cache-dir torch==2.12.1 --index-url https://download.pytorch.org/whl/cpu \
  && pip install --no-cache-dir \
-      "fastapi>=0.110" "uvicorn[standard]>=0.29" "prometheus-client>=0.20" \
-      "numpy>=2.0,<3" "pandas>=2.2,<3" "scipy>=1.11" "pydantic>=2"
+      "fastapi==0.138.1" "uvicorn[standard]==0.49.0" "prometheus-client==0.25.0" \
+      "numpy==2.5.0" "pandas==2.3.3" "scipy==1.18.0" "pydantic==2.13.4"
 # pandas·scipy: app.py → drift.{reference,run,synthetic} import 체인에 필요
 #   (data.cache→pandas, drift.distance→scipy.spatial/stats). 빠지면 컨테이너에서 app import
 #   자체가 ModuleNotFoundError로 실패(잠복 버그, E2E에서 발견). mlflow는 bundle.py에서 함수내

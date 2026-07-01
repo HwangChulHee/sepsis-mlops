@@ -51,6 +51,16 @@ spec:
                 configMapKeyRef:
                   name: sepsis-serving-config
                   key: LOG_LEVEL
+            # BLAS 스레드 캡(★ 부팅 캘리브레이션 스로틀 방지). numpy/BLAS 는 기본적으로 *노드*
+            # 코어 수(예: 20)만큼 스레드를 띄우는데, cgroup CPU limit(아래 2코어)이 그보다 작으면
+            # 스레드들이 소수 코어를 두고 thrash 해 300-trial 캘리브레이션이 10s→60s+ 로 폭발,
+            # startupProbe(timeout 10s)를 무한 실패시켜 파드가 0/1 에 갇힌다(검증됨). CPU 할당에
+            # 맞춰 스레드를 캡하면 oversubscription 이 사라져 정상 속도로 부팅된다. limits.cpu 와
+            # 함께 조정할 것(값 = 대략 CPU 코어 수).
+            - {name: OMP_NUM_THREADS, value: "2"}
+            - {name: OPENBLAS_NUM_THREADS, value: "2"}
+            - {name: MKL_NUM_THREADS, value: "2"}
+            - {name: NUMEXPR_NUM_THREADS, value: "2"}
           # startupProbe: 첫 /health 는 state()→_load_all 로 torch 로드 + 300-trial 캘리브레이션을
           # _LOCK 아래 동기 수행한다(app.py, synthetic.calibrate n_trials=300). liveness 가
           # 그 부팅창에 걸리면 기본 1s 타임아웃/3회 실패로 파드가 죽어 크래시루프가 된다.
@@ -86,10 +96,10 @@ spec:
               mountPath: /app/deploy/artifacts
           resources:
             requests:
-              cpu: "250m"
+              cpu: "500m"          # 부팅 캘리브레이션(CPU-bound) 여유 — 스로틀 시 probe 실패
               memory: "512Mi"
             limits:
-              cpu: "1"
+              cpu: "2"             # BLAS 스레드 캡(env *_NUM_THREADS=2)과 정렬 — 초과 시 thrash
               memory: "1Gi"
       volumes:
         - name: artifacts

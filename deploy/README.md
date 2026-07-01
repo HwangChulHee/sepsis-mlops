@@ -107,31 +107,25 @@ uv run python scripts/replay/replay_patient.py \
 
 ---
 
-## 7. ⚠️ 알려진 함정 — 캘리브레이션 vs startup probe 타임아웃
+## 7. 캘리브레이션 vs startup probe 타임아웃 (해결됨 — 근본원인 기록)
 
-`[확인됨]` **증상**: 새 파드가 `0/1 Running`에서 안 넘어가고 `Startup probe failed: context
-deadline exceeded`가 반복. 5분+ 크래시루프처럼 보인다.
+`[확인됨]` **증상(수정 전)**: 새 파드가 `0/1 Running`에서 안 넘어가고 `Startup probe failed:
+context deadline exceeded`가 반복. 5분+ 크래시루프처럼 보였다.
 
-**원인**: 첫 `/health`가 드리프트 캘리브레이션(`DRIFT_CAL_TRIALS` 기본 300 trial)을 `_LOCK`
-아래 **동기 수행**한다. 호스트 ~10.7s인데 **CPU limit 1코어 파드에선 BLAS 스로틀로 60s+**.
-`startupProbe.timeoutSeconds: 10`을 매번 넘겨 무한 재시도. (이 캘리브레이션은 `/drift`
-엔드포인트 전용 — **`/predict` 위험도 곡선과는 무관**하다.)
+**근본 원인**: 첫 `/health`가 드리프트 캘리브레이션(300 trial)을 `_LOCK` 아래 **동기 수행**한다.
+느렸던 진짜 이유는 trial 수가 아니라 **BLAS 스레드 oversubscription** — numpy/BLAS는 기본적으로
+*노드* 코어 수(여기선 20)만큼 스레드를 띄우는데, cgroup CPU limit(1코어)이 그보다 작아 20스레드가
+1코어를 두고 thrash → 호스트 ~10.7s 캘리브레이션이 **60s+로 폭발** → `timeoutSeconds: 10` probe를
+무한 실패. (이 캘리브레이션은 `/drift` 전용 — `/predict` 위험도 곡선과는 무관.)
 
-**즉효 완화(라이브 패치, 매니페스트엔 없음 → 재생성 시 회귀 주의):**
-```bash
-kubectl patch deployment sepsis-serving --type=json -p '[
-  {"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"DRIFT_CAL_TRIALS","value":"30"}},
-  {"op":"replace","path":"/spec/template/spec/containers/0/resources/limits/cpu","value":"2"}
-]'
-```
-`DRIFT_CAL_TRIALS=30`(≈1s 호스트) + CPU 여유면 한 번에 부팅된다. 노드 CPU가 넉넉하면 limit
-상향이 특히 잘 듣는다.
+**항구 수정(`deploy/k8s/deployment.yaml`에 반영됨):** `[확인됨]`
+- `OMP_NUM_THREADS`·`OPENBLAS_NUM_THREADS`·`MKL_NUM_THREADS`·`NUMEXPR_NUM_THREADS=2` — 스레드를
+  CPU 할당에 맞춰 캡해 oversubscription 제거(근본 해결).
+- `resources.limits.cpu 1→2`, `requests.cpu 250m→500m` — 캘리브레이션(CPU-bound) 여유.
+- **300 trial 유지** — 드리프트 임계 추정 품질을 안 깎고 고쳤다(trial 감축은 품질 저하라 회피).
 
-**항구적 조치(`[우리 결정]` — 매니페스트 반영 필요, 방향 택1):**
-1. `startupProbe`의 `timeoutSeconds`·`failureThreshold` 상향 (probe만 손봄, 캘리 품질 유지).
-2. 부팅 캘리브레이션을 백그라운드/lazy 로 분리 (구조 변경, readiness 정의 재검토).
-3. CPU request/limit 상향 (스로틀 완화).
-> 설계 변경이므로 `.claude` review-loop(redteam)을 태워 반영 권장.
+→ 결과: `[확인됨]` **300 trial 그대로 부팅 16s, probe 실패 0회**. 노드 CPU가 적은 환경으로 옮기면
+`*_NUM_THREADS`와 `limits.cpu`를 함께(값 ≈ 코어 수) 조정할 것.
 
 ---
 

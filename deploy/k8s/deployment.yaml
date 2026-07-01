@@ -20,10 +20,19 @@ spec:
     metadata:
       labels:
         app: sepsis-serving
+      # Prometheus 파드 SD 스크레이프 대상 표시(deploy/k8s/monitoring). in-cluster Prometheus 가
+      # 이 애노테이션으로 /metrics:8000 을 긁는다 — 없으면 서빙 지표(SLO·드리프트)가 관측 안 됨.
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
     spec:
       # fsGroup: 공유 번들 PVC 를 비-root(uid 10001) 가 읽도록 볼륨 소유 그룹 정렬.
+      # seccompProfile: 컨테이너 syscall 을 커널 기본 프로파일로 제한(공격면 축소).
       securityContext:
         fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: serving
           image: sepsis-serving:h4s
@@ -31,10 +40,13 @@ spec:
           ports:
             - containerPort: 8000
           # 비-root 실행 + 권한상승/캡 전부 제거(공격면 축소).
+          # readOnlyRootFilesystem: 루트FS 를 읽기전용으로 — 서빙은 디스크에 안 쓴다(번들은 PVC
+          # 에서 읽기만). torch/tmp 용 /tmp 만 emptyDir 로 쓰기 허용(아래 volumeMount).
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           env:
@@ -94,6 +106,9 @@ spec:
             # 보려면 같은 PVC를 같은 경로에 마운트해야 한다(빠지면 전파 silent 단절).
             - name: artifacts
               mountPath: /app/deploy/artifacts
+            # readOnlyRootFilesystem 아래 유일한 쓰기 지점 — torch/라이브러리 임시파일용.
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: "500m"          # 부팅 캘리브레이션(CPU-bound) 여유 — 스로틀 시 probe 실패
@@ -105,3 +120,5 @@ spec:
         - name: artifacts
           persistentVolumeClaim:
             claimName: sepsis-artifacts
+        - name: tmp
+          emptyDir: {}

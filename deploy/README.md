@@ -65,6 +65,8 @@ kubectl apply -f deploy/k8s/configmap.yaml -f deploy/k8s/service.yaml -f deploy/
 # (3) 콘솔 (세부: k8s/console/README.md)
 kubectl apply -f deploy/k8s/console/console-api.yaml -f deploy/k8s/console/console-web.yaml
 kubectl apply -f deploy/k8s/console/networkpolicy.yaml -f deploy/k8s/console/ingress.yaml
+# (4) 관측 스택(in-cluster Prometheus + Grafana) — §8 참고
+kubectl apply -f deploy/k8s/monitoring/
 ```
 
 ## 5. ★★ 번들을 PVC에 시딩 (헤매기 쉬운 핵심)
@@ -129,7 +131,41 @@ context deadline exceeded`가 반복. 5분+ 크래시루프처럼 보였다.
 
 ---
 
-## 8. 정리
+## 8. 관측 스택 (in-cluster Prometheus + Grafana)
+
+`[확인됨]` 기존 `deploy/monitoring/`(docker-compose)은 *호스트* uvicorn을 긁어 **k8s 파드는 관측
+못 한다**. `deploy/k8s/monitoring/`이 클러스터 안에서 서빙 파드의 `/metrics`를 긁는다.
+
+- 서빙 파드에 `prometheus.io/scrape` 애노테이션 → Prometheus 파드 SD가 자동 발견(`job=sepsis-serving`).
+- Grafana datasource(uid `Prometheus`, `http://prometheus:9090`) + 기존 대시보드(`deploy/grafana/
+  dashboards/`) 프로비저닝. 대시보드 ConfigMap은 그 JSON에서 생성(`grafana-dashboards.yaml`).
+
+```bash
+kubectl apply -f deploy/k8s/monitoring/
+kubectl rollout status deploy/prometheus && kubectl rollout status deploy/grafana
+# 접속
+kubectl port-forward svc/grafana 3000:3000      # http://localhost:3000 (익명 Admin)
+kubectl port-forward svc/prometheus 9090:9090    # 타겟 확인: /targets, up{job="sepsis-serving"}
+```
+`[확인됨]` 검증: 타겟 health=up, 예측 트래픽 → `serve_predict_requests_total` 증가가 Prometheus에
+반영. 대시보드 재생성: `kubectl create configmap grafana-dashboards --from-file=deploy/grafana/dashboards/ --dry-run=client -o yaml`.
+
+> 데모라 tsdb·grafana-db는 emptyDir(재시작 시 초기화). 영속 필요하면 PVC로. 익명 Admin은 로컬 전용.
+
+## 9. 보안 하드닝 (적용됨)
+
+`[확인됨]` 4개 워크로드(serving·console-api·console-web·prometheus) 전부:
+- `securityContext.seccompProfile: RuntimeDefault` — syscall 제한.
+- `readOnlyRootFilesystem: true` — 쓰기 경로만 emptyDir로 노출(serving `/tmp`, console-api `/tmp`,
+  console-web `/tmp`+`/var/cache/nginx`, prometheus `/prometheus`). 감사 DB·번들은 PVC(쓰기가능).
+- 비-root(`runAsNonRoot`) + `capabilities.drop:[ALL]` + `allowPrivilegeEscalation:false`.
+
+**남은 부채**(운영 전): Ingress `/console` 무인증(basic-auth 주석 준비됨)·TLS 없음(M4 범위),
+serving NetworkPolicy 부재(네임스페이스 내 개방 — Prometheus 격리와 함께 후속).
+
+---
+
+## 10. 정리
 
 ```bash
 minikube stop          # 삭제 아님 — 상태 보존, 다음에 그대로 재사용

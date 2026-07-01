@@ -1,0 +1,140 @@
+# in-cluster Prometheus — 서빙 파드 /metrics 를 파드 SD 로 스크레이프.
+#
+# WHY: 기존 deploy/monitoring/ 은 docker-compose 로 *호스트* uvicorn(host.docker.internal:8000)
+# 을 긁는다 — k8s 서빙 파드는 관측 못 한다. 이 매니페스트가 클러스터 안에서 서빙 파드의
+# annotation(prometheus.io/scrape)을 보고 /metrics 를 긁어 Grafana(같은 폴더 grafana.yaml)에
+# 넘긴다. 대시보드가 참조하는 라벨 계약: job="sepsis-serving"(up{job="sepsis-serving"}).
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  labels: {app: prometheus}
+---
+# 파드 SD 는 API 서버에서 pod/endpoint 목록을 읽어야 한다 → 최소 read RBAC.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  labels: {app: prometheus}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "nodes"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  labels: {app: prometheus}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: default
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  labels: {app: prometheus}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 5s        # 데모: 리플레이 곡선 촘촘히. 운영 기본 15s 권장.
+      evaluation_interval: 5s
+    scrape_configs:
+      - job_name: sepsis-serving
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          # prometheus.io/scrape=true 파드만 유지(서빙만 애노테이션 보유 → console 등 제외).
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          # annotation 의 path/port 로 스크레이프 주소 구성.
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          # job = 파드 app 라벨 → "sepsis-serving"(대시보드 up{job=} 계약과 일치).
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: job
+          # 편의 라벨: pod 이름.
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: pod
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels: {app: prometheus}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}      # tsdb 는 emptyDir(단일 writer) — 롤링 시 2파드 동시쓰기 방지.
+  selector:
+    matchLabels: {app: prometheus}
+  template:
+    metadata:
+      labels: {app: prometheus}
+    spec:
+      serviceAccountName: prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534          # nobody (prom 이미지 기본)
+        fsGroup: 65534
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.54.1
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=6h   # 데모 — 디스크 절약
+          ports:
+            - {containerPort: 9090}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true          # 쓰기는 /prometheus(emptyDir)만
+            capabilities: {drop: ["ALL"]}
+          readinessProbe:
+            httpGet: {path: /-/ready, port: 9090}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /-/healthy, port: 9090}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 6
+          resources:
+            requests: {cpu: "100m", memory: "256Mi"}
+            limits: {cpu: "500m", memory: "512Mi"}
+          volumeMounts:
+            - {name: config, mountPath: /etc/prometheus}
+            - {name: tsdb, mountPath: /prometheus}
+      volumes:
+        - name: config
+          configMap: {name: prometheus-config}
+        - name: tsdb
+          emptyDir: {}            # 데모 — 파드 재시작 시 지표 초기화. 영속 필요하면 PVC 로.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus              # ★ Grafana datasource url = http://prometheus:9090 (고정)
+  labels: {app: prometheus}
+spec:
+  type: ClusterIP
+  selector: {app: prometheus}
+  ports:
+    - {name: http, port: 9090, targetPort: 9090}

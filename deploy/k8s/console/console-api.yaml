@@ -32,8 +32,11 @@ spec:
     spec:
       # fsGroup: 마운트한 PVC(번들·감사 DB) 볼륨 소유 그룹을 10001 로 맞춰 비-root(uid 10001)
       # 컨테이너가 쓰기 가능하게 한다. 빠지면 runAsNonRoot 가 PVC 에 write 못 해 부팅 실패.
+      # seccompProfile: syscall 을 커널 기본 프로파일로 제한(공격면 축소).
       securityContext:
         fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: console-api
           # [검증 필요] 이미지: console API용 이미지(uvicorn sepsis.console.api:app) 빌드 필요.
@@ -49,9 +52,11 @@ spec:
             runAsNonRoot: true
             runAsUser: 10001
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-            # readOnlyRootFilesystem: sqlite WAL/임시파일 때문에 이번엔 생략 — 후속(M4 빚).
+            # readOnlyRootFilesystem 활성: sqlite WAL/DB 는 PVC(/app/auditdb, 쓰기가능)에 있고,
+            # 그 외 임시파일은 /tmp(emptyDir, 아래)로 흡수 — 루트FS 는 읽기전용이어도 안전.
           env:
             - name: SERVE_URL
               value: "http://sepsis-serving"        # serving Service(port 80) — 전파 확인 대상
@@ -66,9 +71,20 @@ spec:
               mountPath: /app/deploy/artifacts       # serving과 동일 고정 경로(B2)
             - name: auditdb
               mountPath: /app/auditdb                # 감사 DB 영속(CONSOLE_AUDIT_DB_URL)
+            - name: tmp
+              mountPath: /tmp                         # readOnlyRootFilesystem 하 유일 쓰기 지점
+          # startupProbe: 부팅 lifespan(alias↔감사 reconcile·seed)이 라우팅 개시 전 끝나야 한다.
+          # 그게 느려지면 liveness 가 부팅창에 걸려 파드를 죽일 수 있어(크래시루프), startupProbe
+          # 로 부팅 예산(20×5s=100s)을 먼저 확보한다. 통과 후 liveness/readiness 개시.
+          startupProbe:
+            httpGet:
+              path: /console/versions?fs=vitals
+              port: 8000
+            periodSeconds: 5
+            failureThreshold: 20
           readinessProbe:
             httpGet:
-              path: /console/versions?fs=vitals      # [검증 필요] 빈 클러스터에서도 200인지 확인
+              path: /console/versions?fs=vitals      # 빈 클러스터(번들 0개)에서도 200 확인됨
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -96,6 +112,8 @@ spec:
         - name: auditdb
           persistentVolumeClaim:
             claimName: sepsis-console-audit
+        - name: tmp
+          emptyDir: {}
 ---
 # console-api Service (ClusterIP) — Ingress가 /console/* 를 여기로 보낸다.
 apiVersion: v1

@@ -1,0 +1,111 @@
+# in-cluster Grafana — Prometheus(같은 폴더) 를 데이터소스로, 기존 대시보드를 프로비저닝.
+#
+# 대시보드 JSON 은 deploy/grafana/dashboards/ 가 단일 출처 — 별도 ConfigMap(grafana-dashboards)
+# 으로 주입한다(grafana-dashboards.yaml, kubectl create configmap --from-file 로 생성). 이 파일은
+# datasource·provider·Deployment·Service 만 선언한다. datasource uid=Prometheus, provider
+# path=/etc/grafana/dashboards 는 대시보드 JSON 의 바인딩 계약(변경 금지).
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  labels: {app: grafana}
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        uid: Prometheus            # 대시보드 패널이 참조하는 고정 uid
+        access: proxy
+        url: http://prometheus:9090   # in-cluster Prometheus Service
+        isDefault: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  labels: {app: grafana}
+data:
+  provider.yaml: |
+    apiVersion: 1
+    providers:
+      - name: sepsis-drift
+        orgId: 1
+        folder: sepsis
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /etc/grafana/dashboards
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  labels: {app: grafana}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: grafana}
+  template:
+    metadata:
+      labels: {app: grafana}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472            # grafana 이미지 기본 uid
+        fsGroup: 472
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.2.0
+          env:
+            # 데모: 익명 접속 Admin(로컬 전용). 운영은 인증 필수(M4).
+            - {name: GF_AUTH_ANONYMOUS_ENABLED, value: "true"}
+            - {name: GF_AUTH_ANONYMOUS_ORG_ROLE, value: "Admin"}
+            - {name: GF_AUTH_BASIC_ENABLED, value: "false"}
+            - {name: GF_ANALYTICS_REPORTING_ENABLED, value: "false"}
+          ports:
+            - {containerPort: 3000}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          readinessProbe:
+            httpGet: {path: /api/health, port: 3000}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: 3000}
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            failureThreshold: 6
+          resources:
+            requests: {cpu: "50m", memory: "128Mi"}
+            limits: {cpu: "300m", memory: "256Mi"}
+          volumeMounts:
+            - {name: datasources, mountPath: /etc/grafana/provisioning/datasources}
+            - {name: provider, mountPath: /etc/grafana/provisioning/dashboards}
+            - {name: dashboards, mountPath: /etc/grafana/dashboards}
+            - {name: data, mountPath: /var/lib/grafana}   # grafana sqlite/플러그인 쓰기
+      volumes:
+        - name: datasources
+          configMap: {name: grafana-datasources}
+        - name: provider
+          configMap: {name: grafana-dashboard-provider}
+        - name: dashboards
+          configMap: {name: grafana-dashboards}      # grafana-dashboards.yaml 에서 생성
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  labels: {app: grafana}
+spec:
+  type: ClusterIP
+  selector: {app: grafana}
+  ports:
+    - {name: http, port: 3000, targetPort: 3000}

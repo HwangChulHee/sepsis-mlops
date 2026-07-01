@@ -181,3 +181,11 @@
 ### 판정
 
 **blocker 1건(B-R3-1) → HOLD.** B-R2-1 버킷 무관성·고아 제거·M-R2-1·M-R2-2·minor 실질 해소. 그러나 평균 재작성이 딛은 "동일 요청집합" 전제가 server_mean 단일 누적 산출과 불일치 → A5-c 모순·arm 비대칭 오염·RED 불가. server_mean을 정상상태 집합으로 산출하는 기전을 §A·§B·주입계약에 명시해야 통과. major 1·minor 3 동반.
+
+> **[지휘자 보완 — 라운드 3 blocker/major/minor]** reviser 에이전트 비활성으로 지휘자가 직접 handoff_2b.md v4 수정:
+> - **B-R3-1 (server_mean 집합 불일치) 해소**: server latency를 **요청별 계열**(`_sum` 인접 델타 — latency arm은 단일 스트림 순차라 요청별 복원 가능)로 규정하고, `server_mean`을 `client_mean`과 **동일 `[steady_state_start:T]` 슬라이스** 평균으로 산출. 단일 누적 `_sum/_count`(수명 전체) 사용 **금지** 명시(집합 어긋나면 FAIL). 입력 주입 계약을 "단일 스냅샷"→"client·server 동일 길이 요청별 계열 (ii)"로 갱신 → A5-c 정상상태 컷이 server에도 적용·RED 고정 가능, GRU 첫-predict 워밍업 비대칭 오염 차단, 페어링 항등식 성립 조건 명문화. (§A 주입계약·A1-a·A2 근거·A5-c 마무리·스키마 server_mean 주석·§B2·§B3 일관 수정. 대안으로 경계·종료 두 스냅샷 델타도 §B2에 병기.)
+> - **M-R3-1 (residual 일급 기준화) 해소**: A2에 **A2-a2** 신설 — `arm.residual == arm.client_mean − arm.server_mean`(부동소수 허용오차) 불변식 성공기준. 스키마 주석에만 있던 residual 정의를 A2-c와 병렬 번호 기준으로 승격.
+> - **m-R3-1**: `Attribution.featureset_contrib` 스키마에 "memory.rss에서 `featureset_contrib == −input_dim`(같은 델타 반대 부호, presence라 값충돌 없음)" 관계 명시.
+> - **m-R3-2**: §A A9의 `[확인됨: metrics.py:18]` src 리터럴 제거("구현 근거는 §B2"로 이관), §B2엔 유지 — §A src 리터럴 회귀 해소.
+> - **m-R3-3**: A5-c ±15% 경계 inclusivity를 `|Δ| <= 0.15`(경계 포함)로 명시 — knife-edge flaky 제거.
+> 다음 redteam 라운드가 대조 요망: server 요청별 계열 산출이 latency arm(단일 스트림 순차)에서 실제 복원 가능한지, 두 평균 슬라이스 동일 집합이 주입계약으로 RED 고정되는지, A2-a2 불변식이 스키마와 정합한지.

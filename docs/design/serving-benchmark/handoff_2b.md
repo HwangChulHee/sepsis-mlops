@@ -3,7 +3,7 @@
 > **전제**: `docs/design/serving-benchmark/decisions.md`(설계부) v5, 5라운드 검토 통과(blocker 0). 본 문서는 그 **결정 3(계측점·지표)·결정 4(공정성 통제·arm 운영·featureset 귀인)·결정 5(비용)**를 명세한다. 관측성 env 게이트(arm-2 토글)는 **handoff_2a**로 분리 — 본 문서는 그 스위치가 "존재한다"를 전제로 arm-1/arm-2를 **운영**한다.
 > **워크플로우**: 검토(`handoff_2b_review.md`) 통과 → spec-writer가 §A만 보고 TDD(RED) → main이 §A+§B로 구현(GREEN). 푸시는 사람 게이트(자동 금지).
 > **출제자-응시자 분리**: §A(계약·성공기준·실패모드)는 **spec-writer 전용** — src 라인 참조 없이 관측 가능한 행동으로만. §B(구현 참조)는 **main 전용**.
-> **상태**: 명세부 v1 — 레드팀 검토 전.
+> **상태**: 명세부 v4 — 라운드 1~3 검토 반영(B-1·B-2·M-R2·B-R2-1·B-R3-1·M-R3-1·minor). 라운드 4 재검토 대기.
 
 ## 0. 한 줄 요약
 
@@ -15,7 +15,7 @@
 
 > spec-writer는 이 절만 읽고 TDD를 작성한다. **TDD 대상은 손으로 쓰는 마크다운 리포트가 아니라 벤치 하니스가 반환하는 구조화 결과 객체(`BenchResult`, 아래 A0 스키마)다.** 마크다운 리포트는 이 객체의 하위 렌더링일 뿐, 성공기준은 전부 **명명 필드 assert**(substring/grep 아님)로 고정한다. 서버를 실제로 띄우는 통합 시나리오는 **알려진 입력→알려진 산출**로 성공기준을 고정한다.
 >
-> **입력 주입 계약 (M-2)**: spec-writer는 라이브 서버·라이브 관측성 게이트(arm-2 토글)를 **구동하지 않는다.** arm-1/arm-2의 원시 측정치(client 벽시계 배열, `/metrics` 스크레이프 스냅샷, `/proc` RSS 값)는 하니스에 **주입되는 알려진 입력**으로 취급하고, spec-writer는 하니스의 **집계·귀인·라벨링 로직**(주입값 → `BenchResult` 필드)만 검증한다. 라이브 arm-2 실행으로 실제 값을 채우는 것(end-to-end GREEN)은 handoff_2a 게이트 선행에 의존한다(A9 전제).
+> **입력 주입 계약 (M-2)**: spec-writer는 라이브 서버·라이브 관측성 게이트(arm-2 토글)를 **구동하지 않는다.** arm-1/arm-2의 원시 측정치는 하니스에 **주입되는 알려진 입력**으로 취급하고, spec-writer는 하니스의 **집계·귀인·라벨링 로직**(주입값 → `BenchResult` 필드)만 검증한다. 주입 입력은 (i) **client 벽시계 배열**(요청별 1값), (ii) **server latency 요청별 계열**(= 요청마다 `serve_predict_latency_seconds_sum` 스크레이프의 인접 델타 배열 — 단일 누적 스칼라가 아니라 client 배열과 **같은 길이·같은 요청집합**의 배열, B-R3-1), (iii) `/proc` RSS 값이다. **client·server 두 latency 계열은 반드시 동일 요청집합**이라야 `steady_state_start` 슬라이스와 잔차 페어링이 성립한다. 라이브 arm-2 실행으로 실제 값을 채우는 것(end-to-end GREEN)은 handoff_2a 게이트 선행에 의존한다(A9 전제).
 
 ## A0. 구조화 결과 객체 스키마 (`BenchResult`) — TDD 계약면
 
@@ -45,9 +45,10 @@ ModelBench                  # 한 모델의 arm-1/arm-2 latency·throughput·mem
 ArmLatency
   client:  Quantiles        # 벽시계 분위수 — 분포 리포트 용도(load-bearing 아님, B-R2-1)
   server:  Quantiles        # 서버 히스토그램 '버킷보간' 분위수 — 분포 리포트 용도(load-bearing 아님, B-R2-1)
-  client_mean: float        # client 벽시계 배열 산술평균 — 버킷과 무관 (B-R2-1)
-  server_mean: float        # serve_predict_latency_seconds _sum/_count 평균 — 버킷 무관
-  residual: float           # == client_mean − server_mean — 버킷 무관 평균 잔차 (load-bearing, B-R2-1)
+  client_mean: float        # client 벽시계 배열의 [steady_state_start:T] 슬라이스 산술평균 — 버킷 무관 (B-R2-1)
+  server_mean: float        # server latency 요청별 계열(_sum 인접 델타)의 [steady_state_start:T] 슬라이스 평균
+                            #   — client_mean과 동일 요청집합(B-R3-1). 단일 누적 _sum/_count 아님. 버킷 무관.
+  residual: float           # == client_mean − server_mean — 동일 정상상태 집합 위 버킷 무관 평균 잔차 (load-bearing, B-R2-1/B-R3-1)
   residual_label: str       # enum, arm 별 고정값 — A2
 
 Quantiles: { p50: float, p95: float, p99: float }   # 분포 참고용, 정직성 논증(A2)은 residual=평균 기반
@@ -72,6 +73,8 @@ ControlArm                  # A6-b — presence-only 계약
 
 Attribution                 # A6-c — 지표별 featureset vs 아키텍처 기여 분해 (M-R2-2)
   featureset_contrib: float # 값 검증 — 동일 아키텍처 내 9→18 delta (XGB: xgb.M − control_arm.xgb9.M)
+                            #   부호 주의(m-R3-1): memory.rss 지표에선 featureset_contrib(=xgb−xgb9) == −input_dim
+                            #   (memory.input_dim은 xgb9−xgb로 정의) — 같은 델타의 반대 부호. presence라 값충돌 없음.
   arch_contrib:       float # presence-only — 동일 featureset 아키텍처차 (gru9.M vs xgb9.M), NB2 state 형태차 섞임
   metric:             str   # 어느 지표의 분해인지 (예 "memory.rss", "residual") — 렌더링 라벨
 
@@ -98,18 +101,19 @@ CostResult                  # A7 / m-3 — 손 표가 아니라 구조화 산출
 
 리플레이어가 각 `/predict` 요청을 보낼 때 **client 벽시계**(요청 직전~응답 직후)를 잰다. 동시에 서버가 노출하는 **서버 내부 latency 히스토그램**(`serve_predict_latency_seconds`, `/metrics`)도 수집한다.
 
-- **성공기준 A1-a (load-bearing 평균 + 분포 분위수 둘 다 있음)**: 각 모델의 **load-bearing 평균** `arm.client_mean`(client 벽시계 배열 산술평균)·`arm.server_mean`(히스토그램 `_sum/_count`)이 채워진다(둘 다 **버킷 무관**, 어느 하나라도 `None`이면 FAIL). 추가로 **분포 리포트용** `arm.client`·`arm.server`(각 p50/p95/p99)를 병기한다 — 이 분위수는 분포 참고값일 뿐이며 A2 정직성 논증에 쓰이지 않는다. 서버 분위수가 버킷 격자에 스냅되어도(§B2) load-bearing 지표(평균 기반 residual/tax)는 영향받지 않는다(B-R2-1).
+- **성공기준 A1-a (load-bearing 평균 + 분포 분위수 둘 다 있음)**: 각 모델의 **load-bearing 평균** `arm.client_mean`·`arm.server_mean`이 채워진다(둘 다 **버킷 무관**, 어느 하나라도 `None`이면 FAIL). 두 평균은 **동일 요청집합의 정상상태 슬라이스 `[steady_state_start:T]`** 위에서 계산된다 — `client_mean`은 client 벽시계 배열의, `server_mean`은 server latency 요청별 계열(주입 계약 (ii))의 같은 슬라이스 평균(B-R3-1). 추가로 **분포 리포트용** `arm.client`·`arm.server`(각 p50/p95/p99)를 병기한다 — 이 분위수는 분포 참고값일 뿐이며 A2 정직성 논증에 쓰이지 않는다. 서버 분위수가 버킷 격자에 스냅되어도(§B2) load-bearing 지표(평균 기반 residual/tax)는 영향받지 않는다(B-R2-1).
 - **성공기준 A1-b (client ≥ server sanity, EPS 허용 — 분위수 sanity)**: 같은 요청 집합에서 `arm.client.pX ≥ arm.server.pX − EPS`(각 X∈{50,95,99})가 성립한다. **이는 분포 분위수에 대한 sanity 체크**(load-bearing 아님)다 — client(벽시계, 서버+네트워크 포함)가 server(순수 추론)보다 낮으면 계측 오류. `arm.server`는 히스토그램 '버킷보간' 추정량, `arm.client`는 벽시계 추정량이라 추정량 종류가 달라 버킷 경계서 server가 근소 초과 가능하므로 `EPS`(하니스 상수, 권장 기본 = 서버 히스토그램 최소 유효 버킷 폭)를 허용오차로 둔다. `EPS` 초과로 위반해야만 sanity FAIL, eps 이내 초과는 경고로 강등. (default 버킷이면 server 분위수가 sub-25ms에서 격자 스냅되지만, 이는 sanity 체크의 관용 폭을 넓힐 뿐 load-bearing residual과 무관.)
 
 ## A2. 잔차 정직성 — arm에 따라 다르게 라벨링 (load-bearing)
 
-`client 벽시계 평균 − 서버 히스토그램 평균`을 `ArmLatency.residual`(`client_mean − server_mean`, **버킷 무관**)로 계산하고, `residual_label` enum으로 라벨링한다. **평균 기반이라 `mean(client) − mean(server) = mean(client − server)`로 per-request 페어링이 암묵 성립**한다 — 라운드1의 분위수차 unpaired proxy 문제(m-1)와 라운드2의 fine 버킷 의존(B-R2-1)이 이로써 함께 해소되고, arm1−arm2 tax 차분도 정확해진다(분위수차 proxy의 음수 노이즈 없음).
+`client 벽시계 평균 − 서버 latency 평균`을 `ArmLatency.residual`(`client_mean − server_mean`, **버킷 무관**)로 계산하고, `residual_label` enum으로 라벨링한다. **두 평균이 동일 요청집합(정상상태 슬라이스) 위에 있으므로 `mean(client) − mean(server) = mean(client − server)`로 per-request 페어링이 성립**한다 — client·server가 같은 요청집합이라는 전제(주입 계약 (ii)·B-R3-1)가 이 항등식의 성립 조건이다. 라운드1의 분위수차 unpaired proxy 문제(m-1)와 라운드2의 fine 버킷 의존(B-R2-1)이 이로써 함께 해소되고, arm1−arm2 tax 차분도 정확해진다(분위수차 proxy의 음수 노이즈 없음).
 
 - **성공기준 A2-a (arm-1에서 network 금지 — enum 동등성)**: `gru.arm1.residual_label == "client_server_residual"` 그리고 `!= "network"`. `xgb.arm1.residual_label`도 동일. arm-1의 라벨이 `"network"`(금지값)면 FAIL. (substring이 아니라 필드 동등성이라, arm-2 라벨이 network를 포함해도 무관.)
+- **성공기준 A2-a2 (residual 정의 불변식 — 일급 기준, M-R3-1)**: `arm.residual == arm.client_mean − arm.server_mean`(부동소수 허용오차 내, 각 arm). residual은 스키마 주석이 아니라 이 assert로 고정된다 — server latency가 (단일 누적이 아니라) client와 동일 정상상태 슬라이스의 요청별 계열 평균임을 spec-writer가 주입값으로 RED 검증한다.
 - **성공기준 A2-b (network 추정은 arm-2에서만)**: `arm2.residual_label == "network_plus_serialization"`. arm-2 잔차만 network 추정으로 해석된다.
 - **성공기준 A2-c (핸들러 후처리분 = 차분 불변식)**: `model.tax == model.arm1.residual − model.arm2.residual`(부동소수 허용오차 내). tax는 "부가 계측 세금" 필드로 별도 존재하며 network에 흡수되지 않는다.
 
-> **근거**: 서버 히스토그램은 순수 추론 구간(`LATENCY.observe` 이후 부가작업은 미포함)만 재고, 핸들러의 부가작업(피처 루프·드리프트 적재)은 client 벽시계에만 잡혀 `client_mean − server_mean` 잔차에 섞인다. 평균은 per-request 페어링이 정확히 성립하므로(위) 이 귀속이 분위수 proxy보다 깨끗하다. 이 부가작업은 GRU 9 vs XGB 18로 **비대칭**이라, arm-1 잔차를 통째로 network라 부르면 XGB network가 체계적으로 부풀려진다. tax(= arm1.residual − arm2.residual)는 부가계측만 남기고 network+직렬화는 양 arm residual에 공통이라 상쇄된다.
+> **근거**: 서버 히스토그램은 순수 추론 구간(`LATENCY.observe` 이후 부가작업은 미포함)만 재고, 핸들러의 부가작업(피처 루프·드리프트 적재)은 client 벽시계에만 잡혀 `client_mean − server_mean` 잔차에 섞인다. **두 평균이 동일 요청집합의 정상상태 슬라이스라야** per-request 페어링이 정확히 성립하고(B-R3-1) 이 귀속이 분위수 proxy보다 깨끗하다 — 만약 server가 프로세스 수명 누적(warmup 포함)이고 client가 정상상태 슬라이스면 집합이 어긋나 GRU 첫-predict 워밍업이 server_mean만 비대칭으로 부풀려 귀속이 오염된다(그래서 주입 계약 (ii)가 server를 요청별 계열로 규정). 이 부가작업은 GRU 9 vs XGB 18로 **비대칭**이라, arm-1 잔차를 통째로 network라 부르면 XGB network가 체계적으로 부풀려진다. tax(= arm1.residual − arm2.residual)는 부가계측만 남기고 network+직렬화는 양 arm residual에 공통이라 상쇄된다.
 
 ## A3. throughput — 동시 부하
 
@@ -131,10 +135,10 @@ CostResult                  # A7 / m-3 — 손 표가 아니라 구조화 산출
 - **성공기준 A5-b (순차 실행)**: 두 서빙을 **동시에 띄우지 않고 순차** 측정한다(자원 경합 배제).
 - **성공기준 A5-c (정상상태 워밍업 — 결정론적 컷)**: 부팅 비용(모델 로드 + GRU의 경우 드리프트 캘리브레이션)을 정상상태 latency와 **분리**한다. 컷은 두 단계로 **결정론화**(같은 latency 배열 → 같은 컷):
   1. **캘리브레이션 1회성 제외**: 첫 요청(index 0)은 무조건 워밍업으로 제외한다 — GRU 캘리브레이션은 lazy-load상 첫 요청에서만 1회 발생(§B5)하므로 index 0 제외로 대칭 흡수(XGB는 index 0에 모델 로드 tail).
-  2. **정상상태 시작**: index 1부터, 연속 K=20 요청 창의 p95가 **직전 창 p95의 ±15% 이내**로 든 **첫 창의 시작 index**를 `steady_state_start`로 고정, 그 이후만 정상상태 집계에 포함. (K·%는 하니스 상수로 노출 — 값은 조정 가능하나 계약상 존재·결정성이 핵심.)
+  2. **정상상태 시작**: index 1부터, 연속 K=20 요청 창의 p95가 **직전 창 p95의 ±15% 이내**(경계 포함 = `|Δ| <= 0.15`, m-R3-3)로 든 **첫 창의 시작 index**를 `steady_state_start`로 고정, 그 이후만 정상상태 집계에 포함. (K·경계%·`<=`는 하니스 상수로 노출 — 값은 조정 가능하나 계약상 존재·결정성이 핵심. 경계 포함/배제를 명시해 정확히 15%인 배열에서 컷 index가 뒤집히지 않게 한다.)
   3. **비수렴 폴백 (M-R2-1, 결정론)**: run의 총 요청 수 안에서 ±15% 이내 창이 **하나도 없으면** `steady_state_start == −1`로 고정하고 해당 모델 run은 **명시적 FAIL**(집계 산출 금지 — 노이즈 궤적을 정상상태로 오인해 배달하지 않기 위함). 폴백은 "임의 컷 후 진행"이 아니라 FAIL이므로, 같은 비수렴 배열은 항상 `steady_state_start=−1`+FAIL로 결정론적 산출(spec-writer가 비수렴 입력→알려진 산출로 RED 고정 가능). CPU 노이즈로 인한 비수렴이 잦으면 K·% 상수를 조정하되, 조정 없이 "적당히 자르고 진행"하는 경로는 없다.
 
-  워밍업/부팅 비용은 `boot_latency` 별도 항목으로 두 모델 대칭 기재. 정상상태 집계(`arm.client`/`arm.server`/`*_mean`)에 index<`steady_state_start` 요청이 섞이면 FAIL. `steady_state_start`·`boot_latency`는 `ModelBench` presence 필드로 노출(m-R2-1) — spec-writer가 컷 index·부팅비용을 필드로 assert.
+  워밍업/부팅 비용은 `boot_latency` 별도 항목으로 두 모델 대칭 기재. **정상상태 집계는 client·server latency 둘 다 동일한 `[steady_state_start:T]` 슬라이스**로 계산한다 — `client_mean`은 client 벽시계 배열의, `server_mean`은 server latency 요청별 계열(주입 계약 (ii))의 같은 슬라이스 평균. 둘 중 하나라도 index<`steady_state_start` 요청이 섞이면(예: server를 프로세스 수명 누적 `_sum/_count`로 산출) FAIL — 집합이 어긋나면 잔차 페어링(A2)이 깨지기 때문(B-R3-1). `steady_state_start`·`boot_latency`는 `ModelBench` presence 필드로 노출(m-R2-1) — spec-writer가 컷 index·부팅비용을 필드로 assert.
 
 ## A6. featureset 목표 = 결합 배포 프로파일 + 통제 arm (필수 게이트)
 
@@ -165,7 +169,7 @@ CostResult                  # A7 / m-3 — 손 표가 아니라 구조화 산출
 
 - **라이브 arm-2 값 채우기(end-to-end GREEN)**는 handoff_2a의 관측성 env 게이트(arm-2 부가계측 OFF 토글, `SEPSIS_SERVE_AUX_METRICS`)에 **선행 의존**한다. 게이트 미구현 시 하니스는 주입 입력으로 집계·귀인 로직만 GREEN(A 입력 주입 계약), 라이브 값은 게이트 통과 후 채운다. **이것이 handoff_2a에 대한 유일한 선행 의존이다** — 버킷 관련 선행 의존은 없다(B-R2-1).
 - **load-bearing 지표는 버킷 정밀도에 무관 (B-R2-1)**: A2 정직성 논증의 `residual`·`tax`는 `client_mean − server_mean`(`_sum/_count`, **버킷 무관 정확값**)이라 히스토그램 버킷 해상도와 독립이다. 따라서 A1-a의 load-bearing 평균·A2 residual/tax는 **어느 핸드오프의 버킷 설정에도 의존하지 않는다.** (라운드2의 fine-버킷 handoff_2a 거짓 귀속은 삭제 — fine 버킷은 어느 핸드오프도 소유하지 않는 고아였고, 평균 기반 재정의로 그 의존 자체가 사라졌다.)
-- **서버 분위수는 분포 참고값 (버킷 의존은 여기에만, load-bearing 아님)**: `arm.server`(p50/p95/p99)는 분포 리포트용이다. 현재 코드는 버킷 미지정 → prometheus 기본 버킷(.005/.01/.025/…, `metrics.py:18`)이라 sub-25ms CPU predict가 격자로 스냅된다. 이는 **A1-b sanity 체크의 관용 폭을 넓힐 뿐**(EPS로 흡수) 정직성 논증(A2)에 영향 없다. 서버 분위수를 sub-25ms에서 정밀하게 보고 싶으면 fine 버킷이 필요하나, 이는 **load-bearing 요구가 아닌 분포 리포트 품질 개선**이며 별도 백로그 사안이다(어느 핸드오프에도 선행조건으로 걸지 않는다). [확인됨: `metrics.py:18` 버킷 미지정]
+- **서버 분위수는 분포 참고값 (버킷 의존은 여기에만, load-bearing 아님)**: `arm.server`(p50/p95/p99)는 분포 리포트용이다. 서버 히스토그램이 기본 버킷이면 sub-25ms CPU predict가 격자로 스냅된다(구현 근거는 §B2). 이는 **A1-b sanity 체크의 관용 폭을 넓힐 뿐**(EPS로 흡수) 정직성 논증(A2)에 영향 없다. 서버 분위수를 sub-25ms에서 정밀하게 보고 싶으면 fine 버킷이 필요하나, 이는 **load-bearing 요구가 아닌 분포 리포트 품질 개선**이며 별도 백로그 사안이다(어느 핸드오프에도 선행조건으로 걸지 않는다).
 
 ---
 
@@ -182,7 +186,7 @@ CostResult                  # A7 / m-3 — 손 표가 아니라 구조화 산출
 
 ## B2. 서버 히스토그램 수집
 
-- `/metrics`에서 `serve_predict_latency_seconds`(Histogram)의 `_count`/`_sum`/`_bucket`을 스크레이프. **load-bearing 평균**(`_sum/_count`)으로 `arm.server_mean`을 산출(A1-a·A2 residual의 근거). **분포 참고 분위수**(`_bucket` 보간)로 `arm.server`(p50/p95/p99)를 산출(A1-b sanity·리포트용). GRU·XGB 서빙 양쪽이 동일 이름 히스토그램을 노출(handoff_2a 1차 명세).
+- `/metrics`에서 `serve_predict_latency_seconds`(Histogram)의 `_count`/`_sum`/`_bucket`을 스크레이프. **latency arm은 단일 스트림 순차**(A5-b)이므로, **요청마다 `_sum`을 스크레이프해 인접 델타**(`_sum_i − _sum_{i-1}`)를 취하면 그 요청의 서버 내부 latency가 복원된다 → **server latency 요청별 계열**을 만든다(client 벽시계 배열과 동일 길이·동일 요청집합). **load-bearing `arm.server_mean`은 이 계열의 `[steady_state_start:T]` 슬라이스 평균**으로 산출한다 — `client_mean`과 같은 정상상태 집합이라야 잔차 페어링이 성립(B-R3-1). **단일 누적 `_sum/_count`(프로세스 수명 전체) 사용 금지** — warmup·index 0이 섞여 client 슬라이스와 집합이 어긋나고 GRU 첫-predict 워밍업이 비대칭 오염을 낳는다. (대안: warmup 경계·run 종료 두 시점 `_sum`/`_count` 스냅샷 델타로 정상상태 누적을 계산해도 동일 집합 보장 — 요청별 계열이 어려운 환경용.) **분포 참고 분위수**(`_bucket` 보간)로 `arm.server`(p50/p95/p99)를 산출(A1-b sanity·리포트용). GRU·XGB 서빙 양쪽이 동일 이름 히스토그램을 노출(handoff_2a 1차 명세).
 - **버킷은 load-bearing이 아님 (B-R2-1)**: `residual = client_mean − server_mean`은 `_sum/_count` 평균이라 버킷과 무관·정확하다 — A2 정직성 논증은 버킷 정밀도에 의존하지 않는다. 현재 `metrics.py:18`은 `LATENCY = Histogram("serve_predict_latency_seconds", ...)`로 **버킷 미지정** → prometheus 기본 버킷(.005/.01/.025/…)이라 `arm.server` **분위수**가 sub-25ms에서 격자 스냅되지만, 이는 **분포 리포트 품질**만 낮출 뿐 load-bearing 평균·residual/tax엔 영향 없다. A1-b `EPS`(분위수 sanity)는 최소 유효 버킷 폭으로 잡아 격자 스냅을 흡수. fine 버킷은 분포 리포트 개선용 별도 백로그이지 A9 선행조건이 아니다(라운드2 고아 의존 제거). [확인됨: `metrics.py:18` 버킷 미지정]
 - 관측 경계는 각 서빙이 코드로 보장(GRU predict의 StreamPreprocessor 포함 / XGB 버퍼 재구성+booster.predict 포함 — 1차 handoff §B5).
 
@@ -191,7 +195,7 @@ CostResult                  # A7 / m-3 — 손 표가 아니라 구조화 산출
 - arm-1: handoff_2a의 env 스위치를 **ON**(기본)으로 서버 기동 → 배포 계측 프로파일 측정.
 - arm-2: 같은 스위치 **OFF**로 서버 재기동 → 순수 추론 프로파일 측정.
 - 순차 실행(A5-b)이므로 arm 전환 = 서버 재기동으로 충분.
-- 잔차 계산: `residual = client_mean − server_mean` (**버킷 무관 평균 기반**, B-R2-1). `client_mean`은 client 벽시계 배열의 산술평균, `server_mean`은 히스토그램 `_sum/_count`. `mean(client) − mean(server) = mean(client − server)`라 per-request 페어링이 암묵 성립 → 라운드1 unpaired proxy(m-1)·라운드2 fine 버킷 의존(B-R2-1) 동시 해소, arm1−arm2 tax 차분도 정확. `residual_label` enum 고정: arm-1 = `"client_server_residual"`(A2-a, `"network"` 금지), arm-2 = `"network_plus_serialization"`(A2-b), `tax = arm1.residual − arm2.residual`(A2-c). 분위수(`client.pX`/`server.pX`)는 분포 리포트·A1-b sanity에만 쓰고 residual/tax엔 안 씀.
+- 잔차 계산: `residual = client_mean − server_mean` (**버킷 무관 평균 기반**, B-R2-1). `client_mean`·`server_mean`은 각각 client 벽시계 계열·server latency 요청별 계열(§B2 인접 델타)의 **동일 `[steady_state_start:T]` 슬라이스 평균**(B-R3-1). 동일 요청집합이라 `mean(client) − mean(server) = mean(client − server)`로 per-request 페어링 성립 → 라운드1 unpaired proxy(m-1)·라운드2 fine 버킷 의존(B-R2-1) 동시 해소, arm1−arm2 tax 차분도 정확. `residual_label` enum 고정: arm-1 = `"client_server_residual"`(A2-a, `"network"` 금지), arm-2 = `"network_plus_serialization"`(A2-b), `tax = arm1.residual − arm2.residual`(A2-c), `residual == client_mean − server_mean`(A2-a2 불변식). 분위수(`client.pX`/`server.pX`)는 분포 리포트·A1-b sanity에만 쓰고 residual/tax엔 안 씀.
 
 ## B4. 메모리 측정
 

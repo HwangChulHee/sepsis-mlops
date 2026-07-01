@@ -10,10 +10,9 @@ venv/
 # 데이터·실험 산출물 (553MB+) — 학습/EDA 산출물, 이미지와 무관
 data/
 mlruns/
-mlflow.db
 logs/
-reports/
-research/
+docs/            # 문서 트리(research·design·reports·adr) — 이미지에 불필요
+var/             # 런타임 산출물(mlflow.db·console_audit.db·pytest/ruff 캐시) — var/ 로 통합
 
 # 모델 번들 — 런타임에 공유 PVC 가 /app/deploy/artifacts 를 덮어 마운트(B2).
 # 이미지에 굽지 않는다(Dockerfile 도 빈 디렉토리만 만듦).

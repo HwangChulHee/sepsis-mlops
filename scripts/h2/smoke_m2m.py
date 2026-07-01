@@ -8,7 +8,7 @@ per-timestep PR-AUC with the padding EXCLUDED.
 
 Goal is PLUMBING, not performance. Metric values are by-products; do not gate on them.
 
-    uv run python -m scripts.smoke_m2m                 # ~1000 patients, 3 epochs
+    uv run python -m scripts.h2.smoke_m2m                 # ~1000 patients, 3 epochs
 
 PASS gate (4):
   1. end-to-end completes without error

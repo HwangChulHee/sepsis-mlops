@@ -7,7 +7,7 @@ All length/label/missing stats are aggregated PER PATIENT (one .psv = one patien
 to avoid patient leakage in the statistics. No filling, no interpolation — we only
 measure missingness, never repair it.
 
-Run:  uv run python scripts/eda.py
+Run:  uv run python scripts/data/eda.py
 Outputs: console report + docs/reports/eda_findings.md + docs/reports/figures/*.png
 """
 
@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data" / "raw"
 FIG_DIR = ROOT / "docs" / "reports" / "figures"
 REPORT = ROOT / "docs" / "reports" / "eda_findings.md"

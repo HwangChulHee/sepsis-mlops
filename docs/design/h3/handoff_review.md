@@ -76,4 +76,4 @@
 - PASS 번호 일관: H3-c가 4→5개로(마스크 무결성 #2 삽입, 이후 순번 정연). H3-b 5개 유지. ✓
 
 ### 결론
-HOLD 0 → **H3-b 구현 착수**(`eval/official_compat.py`·`eval/crosssite.py` + `scripts/h3b_crosssite.py`). 잔여는 없음(v1 권고 전부 흡수).
+HOLD 0 → **H3-b 구현 착수**(`eval/official_compat.py`·`eval/crosssite.py` + `scripts/h3/h3b_crosssite.py`). 잔여는 없음(v1 권고 전부 흡수).

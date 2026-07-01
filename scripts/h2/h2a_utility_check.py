@@ -2,7 +2,7 @@
 
 5 programmatic asserts; all PASS -> H2-a complete. Any FAIL -> stop & report.
 
-    uv run python -m scripts.h2a_utility_check
+    uv run python -m scripts.h2.h2a_utility_check
 
 NOTE on the 14-row table: the handoff inlines expected values rounded to 2 decimals
 (e.g. +0.89 = 8/9), so a literal ±1e-6 compare against the *displayed* table is

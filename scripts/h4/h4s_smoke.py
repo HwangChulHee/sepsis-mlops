@@ -2,7 +2,7 @@
 
 5 programmatic asserts; all PASS -> H4s-a complete. Any FAIL -> stop & report.
 
-    uv run python -m scripts.h4s_smoke
+    uv run python -m scripts.h4.h4s_smoke
 """
 
 from __future__ import annotations

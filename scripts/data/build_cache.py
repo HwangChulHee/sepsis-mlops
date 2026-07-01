@@ -1,8 +1,8 @@
 """H1-a runner — build the raw NaN-preserving cache and run the 5 PASS asserts.
 
-    uv run python -m scripts.build_cache              # full build (40,336 patients)
-    uv run python -m scripts.build_cache --limit 500  # quick wiring check
-    uv run python -m scripts.build_cache --verify-only
+    uv run python -m scripts.data.build_cache              # full build (40,336 patients)
+    uv run python -m scripts.data.build_cache --limit 500  # quick wiring check
+    uv run python -m scripts.data.build_cache --verify-only
 
 STOP on any FAIL: exits non-zero and does not proceed to H1-b.
 """

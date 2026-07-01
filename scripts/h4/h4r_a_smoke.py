@@ -2,7 +2,7 @@
 
 3 programmatic asserts; all PASS -> H4r-a done. Any FAIL -> stop & report.
 
-    uv run python -m scripts.h4r_a_smoke
+    uv run python -m scripts.h4.h4r_a_smoke
 """
 
 from __future__ import annotations

@@ -21,7 +21,7 @@ SERVE_PER_PATIENT_GAUGE=1 SERVE_FEATURESET=vitals DRIFT_CAL_TRIALS=20 \
   PYTHONPATH=src uv run uvicorn sepsis.serve.app:app --host 127.0.0.1 --port 8000
 
 # 병동 — 3명 동시 재생
-PYTHONPATH=src uv run python scripts/replay_ward.py \
+PYTHONPATH=src uv run python scripts/replay/replay_ward.py \
   --psv data/raw/training_setA/p000018.psv \
   --psv data/raw/training_setA/p000001.psv \
   --psv data/raw/training_setA/p000002.psv \

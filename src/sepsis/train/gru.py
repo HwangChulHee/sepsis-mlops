@@ -1,4 +1,4 @@
-"""H2-c — GRU many-to-many (full-scale promotion of scripts/smoke_m2m.py) (결정 5·6).
+"""H2-c — GRU many-to-many (full-scale promotion of scripts/h2/smoke_m2m.py) (결정 5·6).
 
 Unidirectional (causal) GRU, per-timestep logits. per-timestep BCE + pos_weight with
 LOSS MASKING (padding excluded from loss AND eval). Early stopping on A-val loss;

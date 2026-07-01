@@ -2,7 +2,7 @@
 
 5 programmatic asserts; all PASS -> H4-retrain complete = MLOps loop closed.
 
-    uv run python -m scripts.h4r_c_smoke
+    uv run python -m scripts.h4.h4r_c_smoke
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import ast
 import sys
 from types import SimpleNamespace
 
-import scripts.h4s_export_bundle as export_mod
+import scripts.h4.h4s_export_bundle as export_mod
 
 from sepsis import config as C
 from sepsis.retrain import deploy, pipeline, validate

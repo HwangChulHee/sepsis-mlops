@@ -1,6 +1,6 @@
 """H1-c runner — diagnostic EDA -> docs/reports/h1_diagnostics.md + docs/reports/figures/.
 
-    uv run python -m scripts.run_diagnostics
+    uv run python -m scripts.data.run_diagnostics
 
 ⏸ Human checkpoint: review whether measurement density rises near onset
 (informative-missingness / treatment-action leak) -> is mask-OFF justified.
@@ -21,7 +21,7 @@ import numpy as np
 from sepsis import config as C
 from sepsis.eda import diagnostics as D
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 REPORTS = ROOT / "docs" / "reports"
 FIGDIR = REPORTS / "figures"
 

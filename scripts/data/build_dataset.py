@@ -4,9 +4,9 @@ Wires split -> missing -> normalize -> sequence / features / class_balance per t
 runtime order (결정 8), then runs the 10 asserts on the CROSS_SITE split (the
 leakage frontier). Also confirms the unified split is well-formed.
 
-    uv run python -m scripts.build_dataset                       # full gate (cross_site)
-    uv run python -m scripts.build_dataset --featureset vitals   # 9-feature set
-    uv run python -m scripts.build_dataset --limit-tree 4000     # cap tree pass (wiring)
+    uv run python -m scripts.data.build_dataset                       # full gate (cross_site)
+    uv run python -m scripts.data.build_dataset --featureset vitals   # 9-feature set
+    uv run python -m scripts.data.build_dataset --limit-tree 4000     # cap tree pass (wiring)
 
 STOP on any FAIL: exits non-zero, do not proceed to re-smoke.
 """

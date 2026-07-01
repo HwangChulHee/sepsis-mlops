@@ -4,7 +4,7 @@ Closes the recommendation from h4/retrain/handoff_review v2 #1: the drift monito
 the reference FROM THE ACTIVE BUNDLE (so rollback restores the matching baseline), not a
 standalone data/drift file. 5 asserts; all PASS -> loop wired.
 
-    uv run python -m scripts.h4_drift_loop_smoke
+    uv run python -m scripts.h4.h4_drift_loop_smoke
 """
 
 from __future__ import annotations

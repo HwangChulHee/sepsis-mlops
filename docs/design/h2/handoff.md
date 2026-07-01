@@ -17,7 +17,7 @@
 ### 환경 / 입력
 - WSL2 Ubuntu, 기존 `pyproject.toml` 환경. **CPU로 충분**(트리 분 단위, GRU m2m도 CPU 가능 — 재스모크 검증).
 - 입력 = H1 산출물: 캐시(`data/cache/h1/`), `src/sepsis/data/`(split·missing·normalize·sequence·features·class_balance), `src/sepsis/config.py`(featureset·GRU_BIDIRECTIONAL=False). 외부 레포 참조 금지.
-- 재사용: GRU m2m 모델·loss 마스킹·masked PR-AUC는 `scripts/smoke_m2m.py`에 검증된 배선 존재 → 풀 규모로 승격.
+- 재사용: GRU m2m 모델·loss 마스킹·masked PR-AUC는 `scripts/h2/smoke_m2m.py`에 검증된 배선 존재 → 풀 규모로 승격.
 
 ### 분할 / 누수 (결정 3·5)
 - cross_site 3분할: **A-train 학습 / A-val 튜닝·선택·τ선정 / B 봉인**(H2 전 구간 미접촉).

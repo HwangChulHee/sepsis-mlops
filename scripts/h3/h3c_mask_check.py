@@ -8,7 +8,7 @@ A-val->B utility gap. Mask ON learning the in-site benefit but losing it on B (g
 features ffill->fill->clip->z-score separately; concat([norm_feats, mask]) (mask NOT
 z-scored, kept 0/1). B scored frozen-only (A stats), B never trains/tunes/selects.
 
-    uv run python -m scripts.h3c_mask_check
+    uv run python -m scripts.h3.h3c_mask_check
 """
 
 from __future__ import annotations

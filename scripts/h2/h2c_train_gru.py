@@ -6,7 +6,7 @@ A-val loss), HP* frozen and applied to BOTH featuresets; τ re-selected per feat
 MLflow (sqlite) logs params/metrics/state_dict + preprocessing (μ/σ·fill·clip·pos_weight·τ).
 6 programmatic asserts.
 
-    uv run python -m scripts.h2c_train_gru [--n-trials 6] [--max-epochs 25]
+    uv run python -m scripts.h2.h2c_train_gru [--n-trials 6] [--max-epochs 25]
 """
 
 from __future__ import annotations

@@ -8,8 +8,8 @@
 
 사용:
   SERVE_PER_PATIENT_GAUGE=1  # (서버 쪽 env)
-  python scripts/replay_ward.py --glob "data/.../p0000*.psv" --speed 7200 --base-url http://localhost:8000
-  python scripts/replay_ward.py --psv a.psv --psv b.psv --limit 8
+  python scripts/replay/replay_ward.py --glob "data/.../p0000*.psv" --speed 7200 --base-url http://localhost:8000
+  python scripts/replay/replay_ward.py --psv a.psv --psv b.psv --limit 8
 """
 from __future__ import annotations
 

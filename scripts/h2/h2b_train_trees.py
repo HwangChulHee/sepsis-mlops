@@ -5,7 +5,7 @@ featuresets; τ re-selected per (model×featureset). robustness = vitals self-op
 vs frozen-HP vitals. MLflow logs params/metrics/model/preprocess. B sealed (dynamic
 guard). 7 programmatic asserts; all PASS -> H2-c (next step).
 
-    uv run python -m scripts.h2b_train_trees [--n-trials 20]
+    uv run python -m scripts.h2.h2b_train_trees [--n-trials 20]
 """
 
 from __future__ import annotations

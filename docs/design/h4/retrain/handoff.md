@@ -15,7 +15,7 @@
 
 ### 환경 / 입력
 - 기존 환경. CPU(재학습은 배포 조합만이라 가벼움). 외부 레포 참조 금지.
-- 입력: drift watch 신호(`drift/watch.py`의 DRIFT_STATE·DATASET_DRIFT_SHARE), H1~H2 학습 파이프라인(`train/`), setB(H1 캐시), export 패턴(`scripts/h4s_export_bundle.py` → 버전드 확장), 서빙 번들·ConfigMap RUN.
+- 입력: drift watch 신호(`drift/watch.py`의 DRIFT_STATE·DATASET_DRIFT_SHARE), H1~H2 학습 파이프라인(`train/`), setB(H1 캐시), export 패턴(`scripts/h4/h4s_export_bundle.py` → 버전드 확장), 서빙 번들·ConfigMap RUN.
 
 ### ★ 핵심 원칙 (DDD)
 - **드리프트 주도·성능 보조**: 드리프트 = 성능 하락 *위험* 신호(≠ 확정). action = "조사 권고", 자동 재학습 아님.
@@ -82,7 +82,7 @@ scripts/
 ## H4r-c — 안전 교체 + 롤백 (배포 레이어)
 
 ### 구현
-- `scripts/h4s_export_bundle.py` **버전드 확장**: 고정 dir 덮어쓰기(rmtree) → **`gru_vitals@<timestamp>` 버전 dir** 생성. **이전 버전 미삭제(보존), 살아있는 번들 미덮어씀**. ★ **`gru_vitals`는 활성 버전 별칭으로 유지**(H4s-c가 `gru_vitals`를 하드코딩 — Dockerfile SERVE_BUNDLE_DIR·ConfigMap RUN; 별칭이 현재 활성 버전 dir을 가리킴 → 기존 서빙 미파괴). **★ drift reference를 번들에 포함**(버전 dir 안에 reference.npz) — 모델과 한 단위로 이동. 원자 번들(model+통계+τ+input_dim+**reference** 동일 버전).
+- `scripts/h4/h4s_export_bundle.py` **버전드 확장**: 고정 dir 덮어쓰기(rmtree) → **`gru_vitals@<timestamp>` 버전 dir** 생성. **이전 버전 미삭제(보존), 살아있는 번들 미덮어씀**. ★ **`gru_vitals`는 활성 버전 별칭으로 유지**(H4s-c가 `gru_vitals`를 하드코딩 — Dockerfile SERVE_BUNDLE_DIR·ConfigMap RUN; 별칭이 현재 활성 버전 dir을 가리킴 → 기존 서빙 미파괴). **★ drift reference를 번들에 포함**(버전 dir 안에 reference.npz) — 모델과 한 단위로 이동. 원자 번들(model+통계+τ+input_dim+**reference** 동일 버전).
 - `deploy.py`: **검증 게이트 통과(H4r-b) + 사람 승인** 후에만 교체. 교체 = **활성 별칭 `gru_vitals`를 새 버전 dir로 전환**(원자 스왑). **롤백**: 별칭을 이전 버전 dir로 되돌림 → **모델·전처리·τ·reference가 함께 복원**(번들에 reference 포함이라 정합). 별도 reference 덮어쓰기 없음(롤백 시 거짓 드리프트 방지).
 - **사람 승인 시뮬레이션 체크포인트**: `deploy.swap(approved)`가 **기본값 없이 approved=False면 raise**(자동 통과 금지). 교체 전 명시적 승인 필요.
 

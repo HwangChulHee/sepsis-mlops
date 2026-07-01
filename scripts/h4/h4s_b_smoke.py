@@ -2,7 +2,7 @@
 
 4 programmatic asserts via FastAPI TestClient (no server needed). All PASS -> H4s-b done.
 
-    uv run python -m scripts.h4s_b_smoke
+    uv run python -m scripts.h4.h4s_b_smoke
 """
 
 from __future__ import annotations

@@ -5,9 +5,9 @@
   2. kubectl --dry-run=client validates the manifests.
   3. RUN (ConfigMap) -> SERVE_BUNDLE_DIR -> atomic bundle load (run swap keeps atomicity).
 
-    uv run python -m scripts.h4s_c_smoke
+    uv run python -m scripts.h4.h4s_c_smoke
 
-Prereq: scripts/h4s_export_bundle.py has populated deploy/artifacts/ (this runner does it).
+Prereq: scripts/h4/h4s_export_bundle.py has populated deploy/artifacts/ (this runner does it).
 A running cluster (minikube) is needed for #2's client validation.
 """
 
@@ -41,7 +41,7 @@ def main() -> int:
         lines.append(f"[{'PASS' if cond else 'FAIL'}] {label}: {detail}")
 
     # ensure exported bundles present (build COPYs them)
-    import scripts.h4s_export_bundle as exporter
+    import scripts.h4.h4s_export_bundle as exporter
     for fs in ("vitals", "vitals_labs"):
         exporter.export(fs)
 

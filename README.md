@@ -83,10 +83,10 @@ H4 서빙·운영의 **인프라 선택마다 "규모 기반 근거"**를 정리
 각 구현 토막은 프로그램적 assert로 닫힌다(데이터·MLflow 런 필요):
 
 ```bash
-uv run python -m scripts.h4r_a_smoke         # watch→action 조사권고 + 지연라벨 백필
-uv run python -m scripts.h4r_b_smoke         # 재학습 (B=운영데이터, in-distribution 검증)
-uv run python -m scripts.h4r_c_smoke         # 버전드 안전 교체 + 롤백
-uv run python -m scripts.h4_drift_loop_smoke # 서빙이 활성 번들 reference로 드리프트 관측
+uv run python -m scripts.h4.h4r_a_smoke         # watch→action 조사권고 + 지연라벨 백필
+uv run python -m scripts.h4.h4r_b_smoke         # 재학습 (B=운영데이터, in-distribution 검증)
+uv run python -m scripts.h4.h4r_c_smoke         # 버전드 안전 교체 + 롤백
+uv run python -m scripts.h4.h4_drift_loop_smoke # 서빙이 활성 번들 reference로 드리프트 관측
 ```
 
 ---
@@ -130,7 +130,7 @@ serve `/admin/reload` → **`/health.run_id`가 synthA→synthC로 실제 변경
   (기본 1시간=1초). 결측은 **null 그대로**(0/평균 채움 금지 — 전처리는 서버 몫). 30 tests GREEN.
 - **소스**: 추상 인터페이스 + `.psv` 어댑터 → 모델 없이도 "행이 제 박자·제 순서·null 처리 맞게
   꽂힌다"를 TDD로 검증. 진짜 위험도 곡선은 실모델로 별도 실측(아래).
-- **병동(라운드 다)**: 무상태 엔진 위에 N명 동시 재생(`replay_many` + `scripts/replay_ward.py`,
+- **병동(라운드 다)**: 무상태 엔진 위에 N명 동시 재생(`replay_many` + `scripts/replay/replay_ward.py`,
   중복 `patient_id` 가드). 환자별 위험도 선은 `serve_pred_prob_latest` Gauge로 Grafana에 — 단
   무한 카디널리티 footgun이라 **기본 OFF**, `SERVE_PER_PATIENT_GAUGE=1`일 때만 기록(옵트인).
 
@@ -193,14 +193,14 @@ in-distribution A 환자 3명 관측:
 - **커밋 안 함** — `data/`는 git-ignore. 재현 방법:
 
   ```bash
-  bash scripts/download_data.sh    # 약 315 MB, PhysioNet S3 미러에서 40,336개 파일 전부 내려받음
+  bash scripts/data/download_data.sh    # 약 315 MB, PhysioNet S3 미러에서 40,336개 파일 전부 내려받음
   ```
 
 ## EDA & 스모크 파이프라인
 
 ```bash
 uv sync
-uv run python scripts/eda.py          # EDA: 콘솔 리포트 + docs/reports/eda_findings.md + docs/reports/figures/*.png
+uv run python scripts/data/eda.py          # EDA: 콘솔 리포트 + docs/reports/eda_findings.md + docs/reports/figures/*.png
 uv run python -m smoke.train_smoke    # 스모크: 1000명 CPU 서브셋으로 end-to-end 배선 검증
 ```
 

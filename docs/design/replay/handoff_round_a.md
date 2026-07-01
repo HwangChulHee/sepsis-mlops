@@ -52,7 +52,7 @@ src/sepsis/replay/__init__.py
 src/sepsis/replay/engine.py        # 핵심 엔진 + RowSource/Sender 프로토콜
 src/sepsis/replay/psv_source.py    # PhysioNet .psv 어댑터
 src/sepsis/replay/http_sender.py   # httpx POST /predict (httpx>=0.28 이미 의존성에 있음)
-scripts/replay_patient.py          # CLI 배선
+scripts/replay/replay_patient.py          # CLI 배선
 tests/replay/test_engine.py        # 가짜 source+sender+sleep
 tests/replay/test_psv_source.py    # 임시 .psv → 행
 ```
@@ -112,7 +112,7 @@ class PsvRowSource:
 ### 3.3 CLI
 
 ```
-scripts/replay_patient.py
+scripts/replay/replay_patient.py
   --psv PATH            (필수) 환자 .psv 경로
   --base-url URL        (기본 http://localhost:8000)
   --speed FLOAT         (기본 3600.0 = 1시간을 1초로)

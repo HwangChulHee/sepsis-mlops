@@ -8,7 +8,7 @@
 이 파일의 SUITES 는 큐레이션된 변이 명세다 — "테스트가 어떤 버그를 막는지"의 살아있는 문서.
 새 로직·테스트를 추가하면 여기에도 대표 변이 몇 개를 넣어 방어력을 회귀로 고정한다.
 
-실행:  uv run python scripts/mutation_test.py
+실행:  uv run python scripts/tools/mutation_test.py
 동작:  각 변이마다 원본→변이→scoped 테스트→원본 복구. 생존 변이가 있으면 exit 1.
 
 주의(하네스 위생): PYTHONDONTWRITEBYTECODE=1 로 .pyc 를 안 남긴다. 같은 바이트 길이 변이
@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 # 각 스위트 = {모듈군 이름, 검증 테스트 스코프, 변이 목록[(파일, 원본조각, 변이조각, 설명)]}.
 SUITES = [

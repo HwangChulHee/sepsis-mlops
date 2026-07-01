@@ -20,7 +20,7 @@
   무상태 엔진을 source당 스레드 1개로 동시 구동. 환자 분리는 **서버 hidden state(patient_id) +
   source별 독립 커서**로 보장(엔진은 여전히 환자 0보유, F5).
 - **Grafana 패널**: drift 대시보드에 "Per-patient risk (latest p)" timeseries 추가.
-- **병동 CLI**: `scripts/replay_ward.py` — glob/목록의 .psv N개를 동시 재생(데모 가시성).
+- **병동 CLI**: `scripts/replay/replay_ward.py` — glob/목록의 .psv N개를 동시 재생(데모 가시성).
 
 **제외 (범위 밖 — 정직하게 분리):**
 - 알람 라벨 정밀 정렬(임상 onset vs τ 교차 시점). → utility score 몫(h2). (나) §4와 동일 입장.
@@ -87,7 +87,7 @@ def replay_many(sources, sender, *, speed,
 
 ## 6. 데모 배선 (CLI)
 
-`scripts/replay_ward.py --glob "data/.../p*.psv" --speed 7200 --base-url ... [--limit N]`
+`scripts/replay/replay_ward.py --glob "data/.../p*.psv" --speed 7200 --base-url ... [--limit N]`
 → 각 .psv를 유일 run_suffix로 PsvRowSource화 → 공유 HttpSender → `replay_many`.
 서버는 `SERVE_PER_PATIENT_GAUGE=1`로 띄워야 Grafana 라인이 보인다(README에 명시).
 

@@ -2,7 +2,7 @@
 
 > **전제**: `docs/design/console-prep/decisions.md`(설계부) 2라운드 검토 통과(blocker 0). 본 문서는 그 결정 1~7의 *구현 방법*을 자립형으로 명세한다. 설계 근거는 decisions.md 참조.
 > **워크플로우**: 검토(`handoff_review.md`) 통과 → spec-writer TDD → 구현.
-> **대상 파일**: `src/sepsis/retrain/{pipeline.py, deploy.py, validate.py}`, `src/sepsis/serve/app.py`, `scripts/h4r_c_smoke.py`(호출부 갱신). (콘솔 API/UI·FS↔DB 일관성은 범위 외.)
+> **대상 파일**: `src/sepsis/retrain/{pipeline.py, deploy.py, validate.py}`, `src/sepsis/serve/app.py`, `scripts/h4/h4r_c_smoke.py`(호출부 갱신). (콘솔 API/UI·FS↔DB 일관성은 범위 외.)
 > **상태**: 명세부 v2 — 레드팀 라운드 1 반영(B1 reload↔drift 정합 재명세, MJ-a~e, mn1~5).
 
 ## 코드 현황 (구현 시작점)
@@ -114,7 +114,7 @@ def _atomic_write_json(path, obj):
 - `validated_at`는 UTC(`time.gmtime()`)에 `Z` 접미사로 타임존 명시(mn5) — 다중 환경 감사 모호성 제거.
 
 ### 호출부 갱신 + 항상-materialize 불변 (MJ-b)
-- **기존 호출부 갱신**: `validation`이 keyword-only 필수가 되므로 `scripts/h4r_c_smoke.py:51`을
+- **기존 호출부 갱신**: `validation`이 keyword-only 필수가 되므로 `scripts/h4/h4r_c_smoke.py:51`을
   `deploy.materialize(rr, "v1-retrain", root=ROOT)` → `deploy.materialize(rr, "v1-retrain", validation=vr, root=ROOT)`로 고친다(`vr`은 직전 `validate.validate(rr, old)` 결과).
 - **불변 — 항상 materialize**: `materialize`는 **게이트 통과/실패와 무관하게 항상 호출**한다(REGRESSED 버전도 challenger로 영속·표시돼야 콘솔이 게이트 결과를 보여줄 수 있다). 게이트 강제는 `materialize`가 아니라 `swap`에서만 일어난다(deploy.py:61, `no_regression` 미통과 시 swap raise).
 

@@ -1,6 +1,6 @@
 # H2 결과 — 6조합 A-val 집계 · 대표 baseline 선정
 
-> 생성: H2-d (`scripts/h2d_select.py`) · 2026-06-28 · 입력 H2-b 0560de7 · H2-c 2252d6f
+> 생성: H2-d (`scripts/h2/h2d_select.py`) · 2026-06-28 · 입력 H2-b 0560de7 · H2-c 2252d6f
 > **A-val 전용** 집계(cross_site의 학습 split). **B는 봉인** — H3에서만 펼침.
 > 지표: PR-AUC(GRU는 masked) · 공식 utility(τ는 A-val utility 최대화로 선정) · 정확도 미사용.
 

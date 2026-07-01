@@ -151,7 +151,7 @@ scripts/
 ### 범위
 스모크 GRU는 many-to-one·고정 8윈도우였으므로 **m2m 배선은 미검증**. 작은 규모로 m2m end-to-end를 재검증.
 
-### 구현 (`scripts/smoke_m2m.py`)
+### 구현 (`scripts/h2/smoke_m2m.py`)
 - 소수 환자(~1,000명) subset으로: 캐시 → 분할 → 변환(H1-b) → **m2m GRU 학습(매시점 예측·loss 마스킹) → per-timestep 평가**. 배선 검증이 목적, 성능 아님.
 
 ### PASS 기준 (프로그래매틱)

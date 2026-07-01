@@ -23,11 +23,11 @@
 
 ### HOLD-1 — 버전드 전환이 H4s-c 서빙 규약을 깨고, drift reference 롤백 불일치
 
-- **항목**: H4r-c `scripts/h4s_export_bundle.py` 버전드 확장(`:81`), `deploy.py` reference 갱신(`:82`), PASS c#1·c#4
+- **항목**: H4r-c `scripts/h4/h4s_export_bundle.py` 버전드 확장(`:81`), `deploy.py` reference 갱신(`:82`), PASS c#1·c#4
 - **문제**:
-  1. **버전드 export가 배포된 서빙을 깬다**: 핸드오프는 export를 "고정 dir → `gru_vitals@<timestamp>`"로 바꾼다(`:81`). 그러나 H4s-c 서빙은 **`gru_vitals` 이름을 하드코딩**한다 — `deploy/Dockerfile:20` `SERVE_BUNDLE_DIR=/app/deploy/artifacts/gru_vitals`, `deploy/k8s/configmap.yaml:13` `RUN: gru_vitals`, `scripts/h4s_c_smoke.py`의 `export(fs)`→`gru_{fs}` 매핑(`:45-47,75`). export가 `gru_vitals@<ts>`만 만들면 **SERVE_BUNDLE_DIR가 가리키는 `gru_vitals`가 부재 → 컨테이너 기동 실패/번들 로드 실패**. 즉 "버전드"가 기존 서빙과 비양립.
+  1. **버전드 export가 배포된 서빙을 깬다**: 핸드오프는 export를 "고정 dir → `gru_vitals@<timestamp>`"로 바꾼다(`:81`). 그러나 H4s-c 서빙은 **`gru_vitals` 이름을 하드코딩**한다 — `deploy/Dockerfile:20` `SERVE_BUNDLE_DIR=/app/deploy/artifacts/gru_vitals`, `deploy/k8s/configmap.yaml:13` `RUN: gru_vitals`, `scripts/h4/h4s_c_smoke.py`의 `export(fs)`→`gru_{fs}` 매핑(`:45-47,75`). export가 `gru_vitals@<ts>`만 만들면 **SERVE_BUNDLE_DIR가 가리키는 `gru_vitals`가 부재 → 컨테이너 기동 실패/번들 로드 실패**. 즉 "버전드"가 기존 서빙과 비양립.
   2. **drift reference가 버전 비분리 → 롤백 baseline 불일치**: reference는 단일 파일 `data/drift/reference_{featureset}.npz`(`reference.py:71`, 덮어쓰기)다. deploy가 재학습 후 reference를 새 분포(A+B-retrain)로 갱신(`:82`)하면, **롤백(RUN→이전 버전)** 시 모델은 옛 버전으로 돌아가지만 reference는 **새 분포 그대로** → 롤백된 옛 모델이 *자신이 학습한 적 없는 baseline*에 대해 드리프트 측정 → 거짓 신호. 롤백이 안전하지 않다.
-- **근거**: `h4_retrain_handoff:81,82`; `deploy/Dockerfile:20`, `deploy/k8s/configmap.yaml:13`, `scripts/h4s_c_smoke.py:45-47,75`(gru_vitals 고정); `src/sepsis/drift/reference.py:71`(단일 파일).
+- **근거**: `h4_retrain_handoff:81,82`; `deploy/Dockerfile:20`, `deploy/k8s/configmap.yaml:13`, `scripts/h4/h4s_c_smoke.py:45-47,75`(gru_vitals 고정); `src/sepsis/drift/reference.py:71`(단일 파일).
 - **제안**:
   - **버전 규약을 서빙과 일관**되게: 모든 번들을 버전 이름으로(베이스라인 포함, 예 `gru_vitals@v0`/`@<ts>`), **ConfigMap RUN·Dockerfile·h4s_c_smoke를 버전 RUN으로 갱신**(마이그레이션 명시). 또는 export가 **버전 dir + 활성 버전 별칭(`gru_vitals` → 활성 버전 심링크/복사)**을 유지해 SERVE_BUNDLE_DIR가 항상 유효하게. 어느 쪽이든 "기존 서빙 미파괴"를 PASS c#1에 assert.
   - **drift reference를 번들 버전에 키잉**(예 `reference_{fs}@<ts>.npz` 또는 메타에 bundle_version): 교체 시 새 reference, **롤백 시 이전 reference도 함께 복원**. PASS c#4를 "reference가 배포 버전과 키 일치 + 롤백 시 복원"으로 강화. 실패 모드에 "롤백 후 reference-모델 버전 불일치" 추가.

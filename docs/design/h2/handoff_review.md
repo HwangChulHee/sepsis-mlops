@@ -16,7 +16,7 @@
 - **H2-b HP 정책** — "vitals_labs 1회 탐색→동결→두 피처셋 공통"(`:77,83`), 모델당 동일 trial 수·동일 search space(`:81`,PASS `:89-90`), `scale_pos_weight` 고정(경미 반영, `:81,94`). 결정 6+v2 경미 정확 반영. PASS.
 - **H2-b robustness [A]/[B]** — vitals 자체최적 vs 동결HP-vitals 차이를 **수치 산출·로깅**(`:84`), PASS는 "차이 수치 산출"(`:93`)이라 *magnitude 게이트가 아닌 산출-여부 게이트* → 진단용으로 적절. H2-d 결과표에 병기(`:134`)되어 **사람 체크포인트에 편향 크기가 판단 재료로 실제 제공**됨. [B] 두 번째 질문 충족. PASS.
 - **자동 vs 사람 [B]** — 자동 a→b→c→d이되 "첫 실행이므로 각 토막 PASS 보고하고 멈춤"(`:32`)으로 매 토막 사람 확인 삽입. PASS 항목 중 *사람 눈*이 필요한 건 H2-a #3(12시점 표)뿐인데 이는 값 인라인 시 기계판정 가능(→HOLD-1). 그 외 숨은 사람판단 없음. PASS.
-- **H2-c ↔ smoke 정합 [C]** — 단방향(`bidirectional=False`)·loss 마스킹·masked PR-AUC(`:107-108`)가 `scripts/smoke_m2m.py`의 `GRUm2m`(:39-48)·`run_train_epoch`(:103-114, `(loss_el*V).sum()/V.sum()`)·`evaluate`(:117-138, masked vs unmasked)와 일치. 풀 규모 추가분(조기종료·HP탐색·MLflow)도 식별됨. PASS *(단 utility 평가·τ 결합 순서는 HOLD-2).*
+- **H2-c ↔ smoke 정합 [C]** — 단방향(`bidirectional=False`)·loss 마스킹·masked PR-AUC(`:107-108`)가 `scripts/h2/smoke_m2m.py`의 `GRUm2m`(:39-48)·`run_train_epoch`(:103-114, `(loss_el*V).sum()/V.sum()`)·`evaluate`(:117-138, masked vs unmasked)와 일치. 풀 규모 추가분(조기종료·HP탐색·MLflow)도 식별됨. PASS *(단 utility 평가·τ 결합 순서는 HOLD-2).*
 - **utility 인라인 상수값** — `dt −12/−6/+3`, `max_u_tp=+1`, `min_u_fn=−2`, `u_fp=−0.05`, `u_tn=0`, `m1=+1/6·m2=−1/9·m3=−2/9`(`:57-59`)이 공식 코드와 **전부 일치**(§1차 확인). 값 자체는 PASS. *(완전성은 HOLD-1.)*
 
 ---
@@ -131,4 +131,4 @@
 1. **best 종료 경계 표현** (`:80`): "끝"은 공식 `t_sepsis+dt_late+1`과 *값 등가*지만 표현이 다름. 구현 시 공식대로 `min(t_sepsis+4, n)`로 두면 1:1 대조가 더 깔끔(선택).
 2. **τ\* per-featureset 명확화** (`:121` vs `:122`): "(HP\*,τ\*) 동시 동결"의 τ\*는 *vitals_labs의 τ*이고, `vitals`는 `:122`대로 **자기 featureset에서 τ 재선정**(HP만 공유, τ는 모델×featureset별 — 결정 4 v2). 한 줄 명확화 권장 — τ\*를 두 피처셋에 공유하면 featureset 비교 공정성이 깨지므로(careless 구현 방지).
 
-**결론: HOLD 0 → H2-a(`eval/utility.py` + `scripts/h2a_utility_check.py`) 구현 착수.** nit 2건은 구현 중 반영(핸드오프 재라운드 불필요).
+**결론: HOLD 0 → H2-a(`eval/utility.py` + `scripts/h2/h2a_utility_check.py`) 구현 착수.** nit 2건은 구현 중 반영(핸드오프 재라운드 불필요).

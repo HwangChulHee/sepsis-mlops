@@ -43,10 +43,10 @@
 
 #### MJ-b — materialize 시그니처를 validation 필수로 바꾸면서 기존 호출부 미식별
 - 위치: handoff:54 (def materialize(retrain_result, version, *, validation, ...)).
-- 문제: validation이 keyword-only 필수 인자가 된다. 기존 호출부 scripts/h4r_c_smoke.py:51(deploy.materialize(rr, "v1-retrain", root=ROOT))은 validation 없이 호출 → 깨진다. 또 게이트 실패(no_regression=False) 버전도 콘솔이 표시해야 하므로 materialize는 검증 통과/실패 무관하게 호출돼야 하는데, 그 불변(항상 materialize)도 명시 안 됨.
+- 문제: validation이 keyword-only 필수 인자가 된다. 기존 호출부 scripts/h4/h4r_c_smoke.py:51(deploy.materialize(rr, "v1-retrain", root=ROOT))은 validation 없이 호출 → 깨진다. 또 게이트 실패(no_regression=False) 버전도 콘솔이 표시해야 하므로 materialize는 검증 통과/실패 무관하게 호출돼야 하는데, 그 불변(항상 materialize)도 명시 안 됨.
 - 제안: 기존 materialize 호출부(h4r_c_smoke.py:51) 갱신을 명세에 포함. "검증 결과와 무관하게 materialize 호출(REGRESSED도 challenger로 표시)"을 한 줄 못 박아라.
 
-> **[reviser 응답]** 해소: 구현 3에 (1) 기존 호출부 갱신을 명세 — `scripts/h4r_c_smoke.py:51`을 `deploy.materialize(rr, "v1-retrain", validation=vr, root=ROOT)`로(handoff.md 구현 3 "호출부 갱신"절). (2) "**materialize는 게이트 통과/실패 무관하게 항상 호출**(REGRESSED도 challenger로 영속·표시); 게이트는 `swap`에서만 강제"라는 불변을 한 줄 못 박음. 대상 파일에 `scripts/h4r_c_smoke.py` 추가.
+> **[reviser 응답]** 해소: 구현 3에 (1) 기존 호출부 갱신을 명세 — `scripts/h4/h4r_c_smoke.py:51`을 `deploy.materialize(rr, "v1-retrain", validation=vr, root=ROOT)`로(handoff.md 구현 3 "호출부 갱신"절). (2) "**materialize는 게이트 통과/실패 무관하게 항상 호출**(REGRESSED도 challenger로 영속·표시); 게이트는 `swap`에서만 강제"라는 불변을 한 줄 못 박음. 대상 파일에 `scripts/h4/h4r_c_smoke.py` 추가.
 
 #### MJ-c — 영속 eps를 하드코딩 → 실제 게이트 epsilon과 silent desync 가능
 - 위치: handoff:59 ("eps": 0.02), 78.

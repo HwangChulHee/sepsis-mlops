@@ -27,7 +27,7 @@
 PYTHONPATH=src uv run uvicorn sepsis.serve.app:app --host 127.0.0.1 --port 8000
 
 # 재생 + 캡처 (speed 36000 = 행당 0.1초; p값은 speed 무관)
-PYTHONPATH=src uv run python scripts/replay_patient.py \
+PYTHONPATH=src uv run python scripts/replay/replay_patient.py \
   --psv data/raw/training_setA/p000018.psv --base-url http://localhost:8000 --speed 36000 \
   | tee docs/reports/replay/replay_p000018_septic.txt
 # 대조군: p000001, p000002 동일

@@ -23,10 +23,10 @@
 ### HOLD-1 — "안전 교체·롤백"이 export-overwrite 패턴과 비양립 (★안전)
 
 - **항목**: 결정 5(`h4_retrain_decisions:71`), PASS #4
-- **문제**: 결정 5는 "export 번들 패턴(`scripts/h4s_export_bundle.py`)으로 새 번들 생성 → ConfigMap RUN 전환, **이전 번들 보존·롤백**"이라 한다. 그러나 `h4s_export_bundle.export`는 **고정 dir `gru_<featureset>`를 `shutil.rmtree` 후 재생성**(덮어쓰기, 버전 없음)이다. 재학습이 같은 featureset를 export하면:
+- **문제**: 결정 5는 "export 번들 패턴(`scripts/h4/h4s_export_bundle.py`)으로 새 번들 생성 → ConfigMap RUN 전환, **이전 번들 보존·롤백**"이라 한다. 그러나 `h4s_export_bundle.export`는 **고정 dir `gru_<featureset>`를 `shutil.rmtree` 후 재생성**(덮어쓰기, 버전 없음)이다. 재학습이 같은 featureset를 export하면:
   1. **살아있는 서빙 번들을 in-place 덮어씀**(서빙 중 교체 위험).
   2. **이전 버전이 남지 않음 → 롤백 타깃 부재.** ConfigMap RUN은 *dir 이름*으로 전환(`deploy/k8s/configmap.yaml:13` RUN=gru_vitals, `deployment.yaml:34` `$(RUN)`)인데 이름이 동일해 **버전 구분·롤백 불가**.
-- **근거**: `scripts/h4s_export_bundle.py`(`out=…/gru_{fs}; if out.exists(): shutil.rmtree(out)`); `deploy/k8s/configmap.yaml:13`, `deployment.yaml:34`.
+- **근거**: `scripts/h4/h4s_export_bundle.py`(`out=…/gru_{fs}; if out.exists(): shutil.rmtree(out)`); `deploy/k8s/configmap.yaml:13`, `deployment.yaml:34`.
 - **제안**: **버전드 번들 dir**(예 `gru_vitals@<timestamp>` 또는 `gru_vitals_vN`)로 export(덮어쓰기 금지), **ConfigMap RUN을 그 버전 이름으로** 지정 → 새 버전 추가 후 RUN 스왑(원자), 이전 버전 보존(롤백=RUN을 이전 버전으로). export 스크립트에 versioned-out 옵션 추가. PASS #4에 "이전 번들 보존됨(롤백 타깃 존재) + 살아있는 번들 미덮어씀" assert.
 
 ### HOLD-2 — 재학습 검증이 봉인 B를 반복 재사용 → selection-on-test 누수 (★누수)
@@ -40,7 +40,7 @@
 
 ## 1차 확인 결과
 
-- **export 덮어쓰기(롤백 불가)** [확인됨: `scripts/h4s_export_bundle.py`] — 고정 dir rmtree·재생성, 버전 없음.
+- **export 덮어쓰기(롤백 불가)** [확인됨: `scripts/h4/h4s_export_bundle.py`] — 고정 dir rmtree·재생성, 버전 없음.
 - **ConfigMap RUN = dir 이름 전환** [확인됨: `deploy/k8s/configmap.yaml:13`, `deployment.yaml:34`] — 동일 이름이면 버전 구분 불가(HOLD-1).
 - **개입/처방 컬럼 부재** [확인됨: `config.py:21-39`] — 우산장수 태깅 근거 없음, 결정 3 한계 정직.
 - **H3 cross-site 수치** [확인됨: `h3_results.md:12`] gru/vitals A 0.4087→B 0.2466(≈0.41→0.25). 결정 1 근거 유효.

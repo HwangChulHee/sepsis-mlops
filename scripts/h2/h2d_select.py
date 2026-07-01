@@ -4,7 +4,7 @@ Reads A-val metrics from MLflow (B never touched), parses H2-b robustness from t
 writes docs/reports/h2_results.md, and selects the representative tree baseline. The MAIN
 featureset is DEFERRED (not fixed) — recorded as 미결 with rationale. ⏸ human checkpoint.
 
-    uv run python -m scripts.h2d_select
+    uv run python -m scripts.h2.h2d_select
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ H2B_LOG = C.ROOT / "logs" / "h2b.log"
 def render(df, robust, choice) -> str:
     L = []
     L.append("# H2 결과 — 6조합 A-val 집계 · 대표 baseline 선정\n")
-    L.append(f"> 생성: H2-d (`scripts/h2d_select.py`) · {DATE} · 입력 {SOURCE}")
+    L.append(f"> 생성: H2-d (`scripts/h2/h2d_select.py`) · {DATE} · 입력 {SOURCE}")
     L.append("> **A-val 전용** 집계(cross_site의 학습 split). **B는 봉인** — H3에서만 펼침.")
     L.append("> 지표: PR-AUC(GRU는 masked) · 공식 utility(τ는 A-val utility 최대화로 선정) · 정확도 미사용.\n")
 

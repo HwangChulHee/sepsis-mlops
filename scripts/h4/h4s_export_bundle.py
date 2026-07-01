@@ -9,8 +9,8 @@ add new versions + roll back without overwriting the live bundle. One version di
 atomic bundle (model+stats+τ+reference, same version). reference.npz is in the bundle so it
 moves/rolls back WITH the model (drift monitor reads the active alias's reference.npz).
 
-    uv run python -m scripts.h4s_export_bundle               # exports vitals + vitals_labs
-    uv run python -m scripts.h4s_export_bundle vitals        # just one
+    uv run python -m scripts.h4.h4s_export_bundle               # exports vitals + vitals_labs
+    uv run python -m scripts.h4.h4s_export_bundle vitals        # just one
 """
 
 from __future__ import annotations

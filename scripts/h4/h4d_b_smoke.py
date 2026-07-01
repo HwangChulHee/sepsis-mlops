@@ -2,7 +2,7 @@
 
 5 programmatic asserts; all PASS -> H4-drift done.
 
-    uv run python -m scripts.h4d_b_smoke
+    uv run python -m scripts.h4.h4d_b_smoke
 """
 
 from __future__ import annotations

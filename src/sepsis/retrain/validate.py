@@ -20,6 +20,10 @@ from sepsis.train import gru
 
 
 def _score(model, data, tau):
+    # 빈 입력(병적으로 작은 B → b_holdout=[])은 게이트를 깨지 말고 NaN 으로 degrade(backfill 과 동형).
+    # np.concatenate([]) 가 ValueError 를 던져 재학습 전체를 중단시키던 경로 차단.
+    if len(data) == 0:
+        return float("nan"), float("nan")
     pl, pp, prauc, _ = gru.evaluate(model, data, batch_size=64)
     util = threshold.utility_at(pl, pp, tau)
     y = np.concatenate([np.asarray(l) for l in pl])

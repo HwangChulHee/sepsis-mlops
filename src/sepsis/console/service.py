@@ -28,6 +28,7 @@ ARTIFACTS: Path = deploy.ARTIFACTS                  # = C.ROOT/deploy/artifacts 
 # 프로덕션은 env가, 테스트는 fixture(conftest monkeypatch)가 이 전역을 교체한다.
 audit: AuditStore = AuditStore(os.environ.get("CONSOLE_AUDIT_DB_URL", "sqlite:///console_audit.db"))
 MLFLOW_UI_BASE = os.environ.get("MLFLOW_UI_BASE")   # None → mlflow_link 폴백 null(6-A)
+MLFLOW_EXPERIMENT_ID = os.environ.get("MLFLOW_EXPERIMENT_ID", "0")  # retrain/h2 런의 실험 id(≠0)로 지정
 
 _LOCKS: dict[str, threading.Lock] = defaultdict(threading.Lock)   # featureset 단위 락(1프로세스 전제)
 _log = logging.getLogger("console")
@@ -241,7 +242,10 @@ def list_versions(fs: str) -> dict:
 def _mlflow_link(run_id: str | None) -> str | None:
     if not run_id or not MLFLOW_UI_BASE:            # run_id 없으면 죽은 링크 금지 → null(6-A 폴백)
         return None
-    return f"{MLFLOW_UI_BASE}/#/experiments/0/runs/{run_id}"
+    # 실험 id 는 하드코딩하지 않는다: retrain 런은 experiment "retrain"(id≠0), h2 런은 "h2"(id≠0)에
+    # 산다. `0`(Default)로 박으면 experiment 소속을 검증하는 MLflow UI 버전에서 링크가 404 난다.
+    # MLFLOW_UI_BASE 와 함께 MLFLOW_EXPERIMENT_ID 를 배포에서 지정한다(미지정 시 "0" 폴백).
+    return f"{MLFLOW_UI_BASE}/#/experiments/{MLFLOW_EXPERIMENT_ID}/runs/{run_id}"
 
 
 def get_version_detail(fs: str, version: str) -> dict:

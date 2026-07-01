@@ -81,6 +81,17 @@
       "targets": [
         {"expr": "serve_pred_prob_latest", "legendFormat": "{{patient_id}}"}
       ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Serving input missing rate (per feature)",
+      "description": "피처별 결측(NaN) 입력 유입률 — 공변량 드리프트의 결측 축(serve_input_missing_total). serve_input_feature_value 의 값 축과 짝을 이룬다.",
+      "datasource": {"type": "prometheus", "uid": "Prometheus"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "targets": [
+        {"expr": "rate(serve_input_missing_total[5m])", "legendFormat": "{{feature}}"}
+      ]
     }
   ]
 }

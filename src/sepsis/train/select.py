@@ -84,6 +84,10 @@ def select_baseline(df: pd.DataFrame) -> BaselineChoice:
     for _, r in df.iterrows():
         if r["model"] in TREE_MODELS:
             util[r["model"]][r["featureset"]] = r["utility"]
+    missing = [m for m, fs in util.items() if not fs]
+    if missing:   # 빈 dict 면 max() 가 불명확한 ValueError → 무엇이 없는지 명시적으로 실패
+        raise ValueError(f"no rows for tree model(s) {missing} in df — "
+                         f"select_baseline 은 각 TREE_MODELS 에 최소 1개 결과를 요구한다")
     best_per_model = {m: max(fs.values()) for m, fs in util.items()}
     winner = max(best_per_model, key=best_per_model.get)
     other = [m for m in TREE_MODELS if m != winner][0]

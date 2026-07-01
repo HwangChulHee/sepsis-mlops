@@ -53,6 +53,13 @@ def materialize(retrain_result, version: str, *, validation, root: Path = ARTIFA
 
     rr = retrain_result
     out = root / f"gru_{rr.featureset}@{version}"
+    # 무결성 가드: 이미 .ready(최종화)된 버전은 덮어쓰지 않는다. 외부에서 같은 version 문자열을
+    # 재사용하면 감사·rollback 이 신뢰하는 archived 버전의 model/stats/reference 바이트가 제자리에서
+    # 바뀌어(run_id/git_commit 은 옛 것 유지), 이후 rollback 이 검증된 것과 '다른' 가중치를 복원하게 된다.
+    # 미완성(.ready 없음) 디렉토리로의 재시도는 허용한다.
+    if (out / ".ready").exists():
+        raise FileExistsError(f"version already materialized (finalized): {out.name} — "
+                              "재료화된 버전 덮어쓰기 금지(rollback 무결성). 새 version 문자열을 쓰라.")
     out.mkdir(parents=True, exist_ok=True)
     torch.save(rr.model.state_dict(), out / "model.pt")
     np.savez(out / "pre.npz", **rr.stats)

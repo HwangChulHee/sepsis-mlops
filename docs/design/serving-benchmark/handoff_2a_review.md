@@ -58,3 +58,46 @@
 ### 판정
 
 **blocker 2건 → HOLD.** B-1(env 이름 은닉→통과 불가)·B-2(A1-a 프로메테우스 부정합) 해소돼야 spec-writer가 A1 핵심 RED를 기계 작성 가능. major M-1(XGB 대칭 미검증·선행 전제)도 함께 보완 권고.
+
+---
+
+## 라운드 2
+
+- 대상: `handoff_2a.md` 명세부 **v2** (reviser B-1·B-2·M-1·m-1·m-2 반영)
+- 검토일: 2026-07-02
+- 판정: **HOLD — blocker 1건 (R2-B1)** (minor 2). M-1 보완(A0-대칭)이 새 blocker를 만듦.
+
+### R1 항목별 판정
+
+- **B-1 (env 이름 은닉) → 해소됨.** §A A0(`:21`) `SEPSIS_SERVE_AUX_METRICS`가 §B2(`:88`)와 문자 단위 일치, 해석표 §A/§B 일관. [확인됨]
+- **B-2 (A1-a 프로메테우스 부정합) → 해소됨.** 라벨 샘플 라인 부재/증감으로 재작성, 실제 노출 동작과 일치. [확인됨: `metrics.py:23-27` 라벨드 등록, 라벨 미관측 시 HELP/TYPE만]
+- **M-1 (XGB 대칭·선행 전제) → 부분 해소 + 새 문제.** 선행 의존 헤더·A0-대칭 추가됐으나 A0-대칭이 요구하는 XGB 부가 계측 부재 → 새 blocker R2-B1.
+- **m-1, m-2 → 해소됨.** §B 오기 정정, A2-b 행동 서술 대체. [확인됨]
+
+### PASS
+
+- **B-2 A1-a 프로메테우스 실동작 정합** — `INPUT_FEATURE`/`INPUT_MISSING`(라벨 `feature`, `metrics.py:23-27`)는 `.labels()` 최초 호출 전 자식 없어 `# HELP`/`# TYPE`만. A1-a가 `serve_input_*{feature=…}` 0줄로 조인 것 정확. 라벨드 Histogram엔 무라벨 `_count` 없음. 대조로 `LATENCY`(무라벨)는 `_count` 항상 존재→A3 감시자 유효. [확인됨]
+- **A2 예측 격리 구조 보장** — predict(`app.py:97`)가 record(`:98`)·window.add(`:102`)보다 먼저 실행돼 `out` 확정. 피처 루프는 `raw_row` 관측만, window는 별도 store(`window.py:6` "SEPARATE… no contamination"), predictor는 `self._h`/`self.pre`만. ON/OFF 응답 바이트 동일 구조적 성립. [확인됨]
+- **A4-b 관대한 파싱·기본값 역전 정합** — "unknown→ON, 500 금지"가 §B2 "0/false/off만 OFF, 그 외/미설정 ON"과 정합. 기존 `_per_patient_enabled`(미설정 OFF)와 역전을 §B가 명시. [확인됨]
+- **선행 의존 헤더 비순환** — `handoff.md:102`가 게이트를 1차 밖("2차")으로 두므로 handoff.md는 게이트 없이 GREEN, 2A가 게이트 얹는 주체 — 순환 아님. [확인됨]
+- **§A/§B 분리 유지** — §A에 src 리터럴 누수 없음(env 이름·계열 이름·응답 키만). [확인됨]
+
+### blocker
+
+#### R2-B1. A0-대칭이 요구하는 XGB 부가 계측이 실재하지 않는다 — A1(및 §B1 앵커·A3 requests_total)이 XGB에서 충족 불가
+- **문제**: A0-대칭(`:27-31`)은 A1~A4가 GRU·XGB 두 인스턴스 각각 성립을 요구하고 A1을 두 인스턴스로 파라미터화하라 지시. 그러나 A1이 게이트하는 **부가 계측(피처별 입력 히스토그램 + 드리프트 윈도우)이 XGB 최소 서빙 앱에 존재하지 않는다.** 선행 `handoff.md`(1차)는 XGB에 **latency 히스토그램만** 요구(`handoff.md:88-95`), `serve_input_feature_value`·`get_window().add`는 요구 안 함. handoff.md B6(`:166`)은 **독립 신규 앱 권장** → XGB는 `sepsis.serve.metrics.record`(피처 루프)·`app.py:102`(window.add)를 거치지 않음.
+  - 귀결1: XGB ON 기동해도 `serve_input_feature_value_count{feature=…}` 영원히 부재 → A1-b(ON→출현) XGB FAIL → A0-대칭 FAIL.
+  - 귀결2: §B1(`:76`)이 "XGB 18회 루프"를 `metrics.py:52-56`·`app.py:102`로 앵커하나 독립 XGB 앱엔 그 라인 부재 → 가드 대상 없음.
+  - 귀결3: A3 `serve_predict_requests_total`도 XGB가 `metrics.record`(=`PREDICT_REQUESTS.inc`) 재사용해야 성립 — 미요구라 불확정.
+  - **벤치 논리 모순**: A0-대칭 존재 이유 = "부가 계측 세금을 두 서버 대칭으로 져야 arm 비교 공정". 그런데 XGB엔 그 세금 자체가 없어 세금이 GRU에만 → A0-대칭이 막으려던 비대칭이 이미 구조적으로 성립. 2A는 XGB가 대칭 계측을 갖췄다 **가정만** 하고 누가 만드는지 미해결.
+- **근거**: `handoff.md:88-95`(XGB §A=latency만), `:166`(B6 독립 앱 권장), handoff.md에 `INPUT_FEATURE`/`window.add` grep 0. 대비 `handoff_2a:27-31,76,53`. 참고: decisions.md 결정4 arm-1은 "XGB 최소 앱도 GRU와 같은 계측 표면(동일 metrics.record + drift window add)"을 **이미 요구** — 이 요구가 1차 핸드오프로 안 내려온 갭(1차는 계측을 2차로 미룸). [확인됨]
+- **제안**: 흐름(계측 생성→게이트→관측)을 끝까지 잇게 명문화. 권장: **2A가 "XGB 최소 앱은 공유 `sepsis.serve.metrics.record`(피처 루프)+`get_window().add`를 재사용해 GRU와 동형 부가 계측 표면을 갖춘다"를 선행 계약으로 못박고**(handoff.md B6 "독립 앱" 재량을 이 지점서 제약), §B에 그 재사용 앵커 추가. 그래야 게이트가 얹을 대상(피처 루프·window)이 XGB에도 존재. (대안: handoff.md 1차에 대칭 계측을 성공기준으로 추가하도록 요구하고 2A 선행을 "부가계측 포함 XGB 앱 GREEN"으로 조임.)
+
+### minor
+
+- **m2-1. §A A0 [확인됨] 태그 stale 라인** — `:25` "§B2·B79와 동일"의 79는 v2 편집으로 밀려 실제 env 이름은 `:88`. 이름 일치라 데드락 무관하나 인용을 `:88`로 정정. [확인됨]
+- **m2-2. §A/§B 파싱 예시 미세 비대칭** — §A A0(`:22`) ON 예시 `1/true/on`, §B2(`:88`) `1/true/yes/on`(yes 추가). "0/false/off만 OFF" 규칙 하 동일 결과라 행동 불일치 없음. A0에 "그 외 값은 A4-b대로 ON" 한 줄 덧붙이면 폐집합 오독 방지. [확인됨]
+
+### 판정
+
+**라운드 2 blocker 1건(R2-B1) → HOLD.** B-1·B-2·minor 실질 해소, A2·A3·A4·§분리 PASS. 그러나 A0-대칭이 실재하지 않는 XGB 부가 계측을 전제해 A1·§B1 앵커·A3가 XGB에서 충족 불가. "누가 XGB 대칭 부가 계측을 만드나"가 handoff.md(latency만)에서 끊김 → PASS 아님.

@@ -1,10 +1,11 @@
 # Serving-Benchmark 구현 핸드오프 (명세부) — 2A: 관측성 env 게이트 (arm-2 토글)
 
 > **전제**: `docs/design/serving-benchmark/decisions.md`(설계부) v5, 5라운드 검토 통과(blocker 0). 본 문서는 그 **결정 1 격리 예외 + 결정 4 계측 대칭성(arm-2 토글) + NB3**만 자립형으로 명세한다. 계측 수집·실험 프로토콜·비용은 **handoff_2b**(벤치 하니스)로 분리한다.
-> **선행 의존**: 이 핸드오프는 **GRU 서빙**(`src/sepsis/serve/app.py`, 기존)과 **XGB 최소 서빙** 두 인스턴스 모두에 게이트를 심는다(결정 4 대칭성). XGB 최소 서빙 앱은 이 문서가 만들지 않는다 — **`handoff.md`(1차)가 생성**하며, 본 2A 게이트 작업은 **`handoff.md`(1차) XGB 최소 서빙 구현 완료(GREEN)**를 선행 전제로 한다. [확인됨: `handoff.md:102`가 관측성 env 게이트를 1차 범위 밖("2차")으로 명시 → 2A가 그 앱에 게이트를 얹는 주체]
+> **선행 의존 + 소유 경계**: 이 핸드오프는 **GRU 서빙**(`src/sepsis/serve/app.py`, 기존)과 **XGB 최소 서빙** 두 인스턴스 모두에 게이트를 심는다(결정 4 대칭성). XGB 최소 서빙 앱의 **뼈대**(예측·응답 스키마·`serve_predict_latency_seconds` latency 히스토그램)는 이 문서가 만들지 않는다 — **`handoff.md`(1차)가 생성**하며, 본 2A는 **`handoff.md`(1차) XGB 최소 서빙 구현 완료(GREEN)**를 선행 전제로 한다.
+> **그러나 XGB의 부가 계측 표면(피처별 입력분포 히스토그램 + 드리프트 윈도우 적재)은 1차가 명시적으로 2차로 미뤘으므로, 그 표면의 구축 자체가 2A의 소유다** [확인됨: `handoff.md:102` "arm-1/arm-2 계측 대칭, 통제 arm, 관측성 env 게이트 — 2차", `handoff.md:90-95`(A4)가 XGB에 latency 히스토그램만 요구, 부가계측 계열은 미요구]. 즉 소유 경계는 — **1차 = XGB 예측/응답/latency 히스토그램**, **2A = XGB 부가계측 표면(피처 히스토그램·드리프트 윈도우) 구축 + 그 위에 얹는 게이트**. 이로써 흐름(부가계측 표면 구축 → 게이트 → 관측)이 2A 안에서 끝까지 이어진다. 2A가 GRU에 대해선 기존 표면에 게이트만 얹지만, XGB에 대해선 **표면 구축까지** 소유한다(비대칭 소유이나 관측 계약은 대칭 — A0-대칭).
 > **워크플로우**: 검토(`handoff_2a_review.md`) 통과 → spec-writer가 §A만 보고 TDD(RED) → main이 §A+§B로 구현(GREEN). 푸시는 사람 게이트(자동 금지).
 > **출제자-응시자 분리**: §A(계약·성공기준·실패모드)는 **spec-writer 전용** — src 라인 참조 없이 관측 가능한 행동으로만. §B(구현 참조)는 **main 전용**.
-> **상태**: 명세부 v2 — 라운드 1 검토 반영(blocker 2 + major 1 + minor 2 해소).
+> **상태**: 명세부 v3 — 라운드 2 검토 반영(R2-B1 blocker: XGB 부가계측 표면 소유·구축을 2A로 확정 + minor 2 해소). v2 = 라운드 1(blocker 2 + major 1 + minor 2).
 
 ## 0. 한 줄 요약
 
@@ -21,14 +22,22 @@
 서빙에는 **부가 계측 on/off를 정하는 문서화된 운영 env 스위치**가 있다. 이 스위치의 정확한 이름은 **`SEPSIS_SERVE_AUX_METRICS`**이며, 이는 문서화된 운영 인터페이스(블랙박스 입력 계약)이므로 spec-writer가 테스트에서 직접 사용한다 — 형제 핸드오프가 운영 env `SEPSIS_XGB_BEST_ITER_OVERRIDE`를 §A에 노출한 것과 동일한 선례다. 해석:
 - **미설정 / `1`·`true`·`on`** → **ON (기본값 = 배포 프로파일 arm-1)**: 서빙이 부가 계측을 전부 수행한다.
 - **`0`·`false`·`off`** → **OFF (순수 추론 프로파일 arm-2)**: 부가 계측을 하지 않는다.
+- **그 외 값**(위 두 폐집합에 없는 임의 문자열) → **A4-b대로 ON**(관대한 파싱, 500 금지). 즉 위 예시는 폐집합이 아니라 "`0/false/off`일 때만 OFF, 나머지 전부 ON"이 실제 규칙이다.
 
-> spec-writer 주의: 테스트는 이 env를 `monkeypatch.setenv("SEPSIS_SERVE_AUX_METRICS", "0")`(OFF) / 미설정 또는 `"1"`(ON)으로 세팅해 "부가계측 OFF로 기동한 서버"와 "ON으로 기동한 서버" 두 인스턴스의 관측 차이로 성공기준을 검증한다(같은 프로세스에서 런타임 토글이 필요하진 않다 — 기동 시점 결정으로 충분). **이 env 이름은 §B 구현이 읽는 이름과 동일함을 문서상 보장한다**(§B2 참조). [확인됨: 구현이 읽을 이름 `SEPSIS_SERVE_AUX_METRICS`는 §B2·B79와 동일]
+> spec-writer 주의: 테스트는 이 env를 `monkeypatch.setenv("SEPSIS_SERVE_AUX_METRICS", "0")`(OFF) / 미설정 또는 `"1"`(ON)으로 세팅해 "부가계측 OFF로 기동한 서버"와 "ON으로 기동한 서버" 두 인스턴스의 관측 차이로 성공기준을 검증한다(같은 프로세스에서 런타임 토글이 필요하진 않다 — 기동 시점 결정으로 충분). **이 env 이름은 §B 구현이 읽는 이름과 동일함을 문서상 보장한다**(§B2 참조). [확인됨: 구현이 읽을 이름 `SEPSIS_SERVE_AUX_METRICS`는 §B2와 문자 단위로 동일]
 
 ### A0-대칭. 두 서빙 인스턴스 모두에서 동일 성공기준 (결정 4 대칭성 — load-bearing)
 
 **성공기준 A0-대칭**: 아래 A1~A4의 모든 성공기준은 **GRU 서빙**과 **XGB 최소 서빙** **두 인스턴스 각각에서 독립적으로 성립**해야 한다. 즉 두 서버 모두 동일한 `SEPSIS_SERVE_AUX_METRICS` env로 게이트되고, 각 서버에서 A1(OFF 샘플 라인 부재/ON 출현)·A2(예측 불변)·A3(latency 계측 유지)·A4(기본 ON·관대한 파싱)가 각각 관측 검증된다. **한 서버(예: GRU)만 통과하고 다른 서버(XGB)가 게이트를 안 달았으면 이 핸드오프는 실패**다 — arm-1/arm-2 계측 대칭이 한쪽에서만 성립하면 벤치의 두 모델 비교가 비대칭 세금으로 오염되기 때문이다. spec-writer는 A1~A4 테스트를 **두 인스턴스 각각에 대해** 파라미터화(또는 복제)해 작성한다.
 
-> XGB 최소 서빙의 응답 스키마·피처 개수(18키)·featureset 이름은 GRU와 다를 수 있으나, **게이트의 관측 계약(OFF→피처 샘플 라인 부재, ON→출현, 예측 불변, latency 유지)은 두 서버에서 동형**이다. 각 서버의 구체적 응답 키·피처 목록은 해당 서버의 핸드오프(GRU=기존 serve, XGB=`handoff.md` 1차)를 따른다.
+**성공기준 A0-대칭-표면 (부가 계측 표면 자체가 두 서버에 동형으로 존재 — load-bearing)**: A0-대칭은 "게이트만 대칭"이 아니라 **"부가 계측 표면 자체가 두 서버에 동형으로 존재하고, 그 위에 게이트가 대칭으로 얹힌다"**를 뜻한다. 구체적으로, **XGB 최소 서빙도 ON으로 기동하면 GRU와 동형의 부가 계측 표면을 관측 가능하게 노출한다**:
+- ON 기동 XGB에 `/predict`를 여러 번 보낸 뒤 `/metrics`를 읽으면, **피처별 입력분포 계열**(`serve_input_feature_value_*{feature=...}` / `serve_input_missing_total{feature=...}`)의 라벨 샘플 라인이 **나타나고**(A1-b가 XGB에서도 성립), **드리프트 윈도우 적재**가 일어난다(요청당 부가 계측 세금이 실재).
+- OFF 기동 XGB에선 그 계열의 라벨 샘플 라인이 **한 줄도 안 나타난다**(A1-a가 XGB에서도 성립).
+- 그리고 **A3의 요청 카운터(`serve_predict_requests_total`)·latency 계측이 XGB에서도 게이트와 무관하게 유지**된다.
+
+즉 "XGB가 부가 계측 표면을 갖췄다"는 **가정이 아니라 이 핸드오프가 만들고 관측 검증하는 성공기준**이다. 이 표면이 XGB에 없으면 arm-1의 "부가 계측 세금"이 GRU에만 붙어 벤치가 구조적으로 비대칭이 되고, A0-대칭이 막으려던 오염이 이미 성립한다. (구축 소유 경계는 문서 상단 "선행 의존 + 소유 경계" 참조 — 1차 = XGB latency 히스토그램, 2A = XGB 부가계측 표면 + 게이트.)
+
+> XGB 최소 서빙의 응답 스키마·피처 개수(18키)·featureset 이름은 GRU와 다를 수 있으나, **게이트의 관측 계약(OFF→피처 샘플 라인 부재, ON→출현, 예측 불변, latency 유지) 및 부가 계측 표면의 존재는 두 서버에서 동형**이다. 각 서버의 구체적 응답 키·피처 목록은 해당 서버의 핸드오프(GRU=기존 serve, XGB=`handoff.md` 1차)를 따른다. (LATENCY 히스토그램의 버킷 해상도는 이 핸드오프의 범위가 아니다 — 2A는 latency 히스토그램을 건드리지 않고, 부가 계측 표면만 소유한다.)
 
 ## A1. 게이트 OFF → 부가 계측 시계열이 사라진다 (arm-2)
 
@@ -76,6 +85,10 @@
 1. **피처별 입력 분포 루프**: `src/sepsis/serve/metrics.py:52-56` — `for name, v in zip(feature_names, raw_row): INPUT_MISSING.labels().inc() / INPUT_FEATURE.labels().observe()`. (GRU 9회 / XGB 18회 루프.)
 2. **드리프트 윈도우 적재**: `src/sepsis/serve/app.py:102` — `get_window().add(req.patient_id, row)`.
 
+> **XGB 부가 계측 표면 = 공유 코드 재사용으로 구축 (R2-B1 — load-bearing)**: XGB 최소 앱은 독립 앱(`serve/xgb_app.py` 류, handoff.md B6 재량)이더라도, 그 `/predict` 핸들러는 위 두 지점을 **자체 구현하지 말고 공유 `sepsis.serve.metrics.record`(피처 루프, `metrics.py:52-56`)와 `get_window().add`(`app.py:102`가 쓰는 `window.get_window()`)를 재사용해야 한다.** handoff.md B6의 "독립 신규 앱" 재량은 이 지점(부가 계측 표면)에서 제약된다 — 표면을 재구현하면 GRU와 미세 비동형이 생겨 arm 비교가 오염된다. 이 재사용으로 (a) 게이트가 얹을 대상(피처 루프·window)이 XGB에도 물리적으로 존재하고, (b) A0-대칭-표면(§A)이 관측 검증 가능해지며, (c) 아래 §B1-XGB 소유 근거대로 A1·A3가 XGB에서 충족된다. [정합: decisions.md 결정4 arm-1(`decisions.md:103`) "XGB 최소 앱도 GRU와 같은 계측 표면(동일 `metrics.record` + 동일 drift window add)". 이 요구가 1차 핸드오프로 안 내려온 갭(handoff.md:102가 계측 대칭을 2차로 미룸)을 2A가 소유해 메움.]
+> - **A1 앵커의 XGB 성립**: XGB가 `metrics.record`(피처 18키 루프)를 재사용하므로 `serve_input_feature_value_*{feature=...}`·`serve_input_missing_total{feature=...}` 계열이 ON에서 출현·증가(A1-b), OFF에서 부재(A1-a) — GRU와 동일 게이트로.
+> - **A3 앵커의 XGB 성립**: XGB가 `metrics.record`(=`PREDICT_REQUESTS.inc`·`LATENCY.observe`, `metrics.py:45-46`)를 재사용하므로 `serve_predict_requests_total`·latency count가 게이트와 무관하게 호출당 1 증가(A3) — GRU와 동일.
+
 **절대 건드리지 않는 것**(게이트와 무관하게 항상 실행):
 - `metrics.py:45-46` `PREDICT_REQUESTS.inc()` · `LATENCY.observe(latency_s)` — 요청 카운터·서버 latency 히스토그램(A3). `PRED_PROB.observe`(:47)도 유지 권장(예측 분포는 부가계측 아님) — 단 이건 §A 성공기준 아님, main 판단.
 - `app.py:96-98` `t0=perf_counter(); out=predict(...); metrics.record(...)`의 **predict 호출과 latency 관측** — A2·A3.
@@ -87,7 +100,7 @@
 
 - 이름 제안: `SEPSIS_SERVE_AUX_METRICS`(기본 ON). 호출 시점 동적 판독(import 상수화 금지) — 기존 `_per_patient_enabled()`(`metrics.py:38-40`, `SERVE_PER_PATIENT_GAUGE`)와 **동형 패턴**. 관대한 파싱(`1/true/yes/on` → 켬; 그 외/미설정 처리는 아래).
 - **기본값 = ON**: `_per_patient_enabled()`는 미설정 시 OFF(옵트인)지만, 이 스위치는 미설정 시 **ON**(A4-a — 프로덕션은 계측 켠 채가 정상, 끄는 게 opt-in). 즉 "명시적으로 `0/false/off`일 때만 OFF". 관대한 파싱으로 알 수 없는 값은 ON 유지(A4-b, 500 금지).
-- GRU 서빙(`app.py` 재사용)과 XGB 최소 서빙(**`handoff.md`(1차)가 생성한 앱** — 선행 의존, 헤더 전제 참조) **양쪽에 동일 스위치·동일 의미**로 심는다.
+- GRU 서빙(`app.py` 재사용)과 XGB 최소 서빙(**`handoff.md`(1차)가 생성한 앱 뼈대** — 선행 의존, 헤더 "선행 의존 + 소유 경계" 참조) **양쪽에 동일 스위치·동일 의미**로 심는다. **단 XGB의 부가 계측 표면 자체는 2A가 §B1의 공유코드 재사용 앵커대로 구축**한 뒤 그 위에 게이트를 얹는다(GRU는 표면이 이미 있어 게이트만, XGB는 표면 구축 + 게이트 — 소유 비대칭, 의미 대칭).
 
 ## B3. 격리 예외 준수 (PASS 게이트 1 — grep 강제)
 

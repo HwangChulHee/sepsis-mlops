@@ -93,10 +93,17 @@
 - **근거**: `handoff.md:88-95`(XGB §A=latency만), `:166`(B6 독립 앱 권장), handoff.md에 `INPUT_FEATURE`/`window.add` grep 0. 대비 `handoff_2a:27-31,76,53`. 참고: decisions.md 결정4 arm-1은 "XGB 최소 앱도 GRU와 같은 계측 표면(동일 metrics.record + drift window add)"을 **이미 요구** — 이 요구가 1차 핸드오프로 안 내려온 갭(1차는 계측을 2차로 미룸). [확인됨]
 - **제안**: 흐름(계측 생성→게이트→관측)을 끝까지 잇게 명문화. 권장: **2A가 "XGB 최소 앱은 공유 `sepsis.serve.metrics.record`(피처 루프)+`get_window().add`를 재사용해 GRU와 동형 부가 계측 표면을 갖춘다"를 선행 계약으로 못박고**(handoff.md B6 "독립 앱" 재량을 이 지점서 제약), §B에 그 재사용 앵커 추가. 그래야 게이트가 얹을 대상(피처 루프·window)이 XGB에도 존재. (대안: handoff.md 1차에 대칭 계측을 성공기준으로 추가하도록 요구하고 2A 선행을 "부가계측 포함 XGB 앱 GREEN"으로 조임.)
 
+> **[reviser 응답]** 해소: 권장안 3단계 모두 반영. **(1) 선행 의존 헤더 재작성**(`handoff_2a.md:4`) — 소유 경계를 "1차 = XGB 예측/응답/latency 히스토그램, 2A = XGB 부가계측 표면(피처 히스토그램·드리프트 윈도우) 구축 + 게이트"로 분리 명시. handoff.md:102("계측 대칭·관측성 게이트 — 2차")·handoff.md:90-95(A4 latency만)를 근거로 2A가 표면 구축까지 소유함을 확정. **(2) §A A0-대칭에 신규 성공기준 A0-대칭-표면 추가**(`handoff_2a.md:29` 부근) — "부가 계측 표면 자체가 두 서버에 동형으로 존재하고 그 위에 게이트가 대칭"임을 관측 계약으로 명문화. XGB ON→`serve_input_*{feature=…}` 계열 출현·드리프트 윈도우 적재, OFF→부재, A3 requests_total·latency 유지가 XGB에서도 성립을 성공기준으로 못박음("가정이 아니라 이 핸드오프가 만들고 검증"). **(3) §B1에 공유코드 재사용 앵커 추가**(`handoff_2a.md:77` 부근) — XGB 최소 앱은 독립 앱이어도 `/predict` 핸들러가 공유 `metrics.record`(피처 루프)+`get_window().add`를 재사용해야 하며 handoff.md B6 "독립 앱" 재량이 이 지점서 제약됨을 명시. A1(피처 계열)·A3(requests_total) 앵커가 XGB에서 충족되는 근거를 하위불릿으로 명기. §B2도 "XGB는 표면 구축+게이트, GRU는 게이트만"으로 갱신. **정합**: decisions.md 결정4 arm-1(`decisions.md:103` "XGB 최소 앱도 GRU와 같은 계측 표면")과 정합함을 §B1·헤더에 근거로 표기. §A엔 관측 계약(계열 존재·게이트 대칭)만, 구현 앵커(metrics.record 재사용)는 §B에 배치해 출제자-응시자 분리 유지. **latency 히스토그램(fine 버킷)은 안 건드림** — A0-대칭 주석에 "2A는 latency 히스토그램을 건드리지 않고 부가 계측 표면만 소유"를 명시. [확인됨: `handoff.md:102`, `handoff.md:90-95`, `handoff.md:164-166`(B6), `decisions.md:103`]
+
 ### minor
 
 - **m2-1. §A A0 [확인됨] 태그 stale 라인** — `:25` "§B2·B79와 동일"의 79는 v2 편집으로 밀려 실제 env 이름은 `:88`. 이름 일치라 데드락 무관하나 인용을 `:88`로 정정. [확인됨]
+
+  > **[reviser 응답]** 해소: A0 [확인됨] 태그를 "§B2·B79와 동일" → "§B2와 문자 단위로 동일"로 정정(라인 번호 대신 §B2 참조로 stale 방지). (`handoff_2a.md` A0 주의 블록.)
+
 - **m2-2. §A/§B 파싱 예시 미세 비대칭** — §A A0(`:22`) ON 예시 `1/true/on`, §B2(`:88`) `1/true/yes/on`(yes 추가). "0/false/off만 OFF" 규칙 하 동일 결과라 행동 불일치 없음. A0에 "그 외 값은 A4-b대로 ON" 한 줄 덧붙이면 폐집합 오독 방지. [확인됨]
+
+  > **[reviser 응답]** 해소: A0 해석표에 세 번째 불릿 추가 — "그 외 값(위 두 폐집합에 없는 임의 문자열) → A4-b대로 ON(관대한 파싱, 500 금지). 위 예시는 폐집합이 아니라 '`0/false/off`일 때만 OFF, 나머지 전부 ON'이 실제 규칙". §B2의 `yes` 포함 예시와 행동 동일함을 폐집합 오독 방지로 명문화. (`handoff_2a.md` A0.)
 
 ### 판정
 

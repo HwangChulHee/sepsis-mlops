@@ -28,4 +28,6 @@ RUN mkdir -p /app/deploy/artifacts
 ENV PYTHONPATH=/app/src
 
 EXPOSE 8000
-CMD ["uvicorn", "sepsis.serve.app:app", "--host", "0.0.0.0", "--port", "8000"]
+# sh -c + exec: LOG_LEVEL env(configmap 주입)을 uvicorn --log-level 로 실제 소비한다.
+# exec 로 uvicorn 을 PID 1 로 승격 → K8s SIGTERM graceful drain 유지(sh 가 신호를 안 삼킴).
+CMD ["/bin/sh", "-c", "exec uvicorn sepsis.serve.app:app --host 0.0.0.0 --port 8000 --log-level ${LOG_LEVEL:-info}"]

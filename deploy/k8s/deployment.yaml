@@ -51,18 +51,33 @@ spec:
                 configMapKeyRef:
                   name: sepsis-serving-config
                   key: LOG_LEVEL
+          # startupProbe: 첫 /health 는 state()→_load_all 로 torch 로드 + 300-trial 캘리브레이션을
+          # _LOCK 아래 동기 수행한다(app.py, synthetic.calibrate n_trials=300). liveness 가
+          # 그 부팅창에 걸리면 기본 1s 타임아웃/3회 실패로 파드가 죽어 크래시루프가 된다.
+          # startupProbe 가 통과할 때까지 liveness/readiness 는 유예된다 → 부팅 예산 확보
+          # (30×10s = 최대 300s). 통과 후엔 /health 가 캐시된 _S 를 반환해 값싸다.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 30       # ~300s 부팅 예산(캘리브레이션 포함)
           readinessProbe:
             httpGet:
               path: /health
               port: 8000
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 5
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 20
+            timeoutSeconds: 5          # 기본 1s 는 로드된 뒤에도 GC/락 순간에 오탐 위험
+            failureThreshold: 3
           volumeMounts:
             # B2 — 공유 번들 PVC를 console-api와 동일 경로에 마운트. serve는 ARTIFACTS(기본
             # /app/deploy/artifacts) 아래 alias gru_<fs>를 읽으므로, 콘솔이 PVC에 쓴 alias를

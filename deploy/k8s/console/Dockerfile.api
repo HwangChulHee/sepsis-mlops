@@ -26,5 +26,5 @@ RUN mkdir -p /app/deploy/artifacts
 ENV PYTHONPATH=/app/src
 
 EXPOSE 8000
-# K8s 매니페스트가 command 로 덮어쓰지만 standalone 기본값도 동일하게.
-CMD ["uvicorn", "sepsis.console.api:app", "--host", "0.0.0.0", "--port", "8000"]
+# K8s 매니페스트가 command 로 덮어쓰지만 standalone 기본값도 동일하게(LOG_LEVEL 소비 + exec PID1).
+CMD ["/bin/sh", "-c", "exec uvicorn sepsis.console.api:app --host 0.0.0.0 --port 8000 --log-level ${LOG_LEVEL:-info}"]

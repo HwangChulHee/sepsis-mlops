@@ -40,7 +40,8 @@ spec:
           # serving 이미지와 같은 베이스에 진입점만 다르게 둘 수 있다.
           image: sepsis-console:a
           imagePullPolicy: IfNotPresent
-          command: ["uvicorn", "sepsis.console.api:app", "--host", "0.0.0.0", "--port", "8000"]
+          # sh -c + exec: LOG_LEVEL(아래 env)을 uvicorn --log-level 로 실제 소비 + uvicorn PID1 유지(SIGTERM).
+          command: ["/bin/sh", "-c", "exec uvicorn sepsis.console.api:app --host 0.0.0.0 --port 8000 --log-level ${LOG_LEVEL:-info}"]
           ports:
             - containerPort: 8000
           # 비-root 실행: root 로 돌 이유가 없고, 권한상승/캡 전부 제거로 공격면 축소.

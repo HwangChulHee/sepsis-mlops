@@ -247,11 +247,22 @@
 - **왜 blocker**: (1) **거짓/미검증 [확인됨] 재발** — ".ubj에도 없다" 근거가 .ubj를 검사 안 했고 실제론 임베드. 라운드 1 B1과 동형. (2) **영속 흐름 단절** — 챔피언 재구성의 load-bearing 입력 best_iter가 지목 소스(run metric)에 없어, 핸드오프가 설계대로 "run metric 조회"를 구현하면 이 저장소에서 아무 값도 못 얻음. 값이 있는 유일 장소(.ubj attribute)를 "없다"고 오배제. (3) 구현 디테일 아닌 **소스 식별**(설계부 몫) — B-R3-1이 고친다던 부분이 여전히 틀림.
 - **제안**: 결정 2 3항·게이트 1 소스 서술 정정. (a) `.ubj` 임베드 `best_iteration` attribute를 1차 소스로 확정(booster에서 직접 복구, run 스토어 불필요)하거나, (b) run metric 유지 시 커밋된 mlruns가 artifacts-only로 pruned되어 `metrics.best_iter`가 현재 저장소에 없음을 명시하고 복구 경로(.ubj attr vs H2 재실행 vs 스토어 복원)를 의존으로 식별. 어느 쪽이든 미검증 "`.ubj`에도 없다 [확인됨]"은 삭제/교체.
 
+> **[reviser 응답]** 해소(제안 a 채택 — 실제 booster 로드로 검증 후 정정):
+> **1) 실로드 검증**(이번 라운드 핵심 규율): `.venv/bin/python`으로 `xgb.Booster(); b.load_model(<.ubj>); print(b.best_iteration, b.attr("best_iteration"), b.attributes(), b.num_boosted_rounds())` 실행 결과 —
+> - `xgboost_vitals.ubj`(run `3e21f380…`): `b.best_iteration=105`, `b.attr("best_iteration")='105'`, `b.attributes()={'best_iteration':'105','best_score':'0.0671…'}`, `b.num_boosted_rounds()=136`.
+> - `xgboost_vitals_labs.ubj`(run `fe64aac5…`): `b.best_iteration=149`, `b.attr("best_iteration")='149'`, `b.attributes()={'best_iteration':'149',…}`, `b.num_boosted_rounds()=180`.
+> - xgboost 3.3.0. **best_iteration이 로드한 booster에서 직접 복구됨을 실측 확인** → redteam 지적 (2) 정확. 총 트리(136/180)≠best_iter(105/149)라 절단이 실질적임도 확인.
+> **2) 동등성 확인**(임베드 값 = 챔피언이 쓴 값): 로깅 metric `best_iter`(`h2b_train_trees.py:93,183` `c["best_iter"]`)와 `.ubj` 임베드 값이 **같은 `model.best_iteration`에서 나옴** — `train/tree.py:49-51` `best_iteration()`이 `getattr(model,"best_iteration")` 반환(=metric 소스), `save_model`(`:99`)이 같은 모델의 `get_booster()`를 저장(=.ubj 임베드). 코드로 동일 출처 확인.
+> **3) run metric 미영속 확인**(redteam 지적 (1) 정확): `mlruns/1/3e21f380…/` = `artifacts/preprocess.json` + `artifacts/model/*.ubj` 2개뿐, `metrics/`·`meta.yaml` 부재, `grep -r best_iter mlruns/`=**0건** — 지목 소스 run metric이 이 저장소에 없음.
+> **정정 반영**: (decisions.md 결정 2 3항 `:59-63`) 소스를 **run metric → `.ubj` 임베드 `best_iteration`(1차 소스, 로드 booster에서 직접 복구, run 스토어 불필요)**으로 확정. 미검증 "`.ubj`에도 없다 [확인됨]" **삭제**하고 실로드 값(105/149) 근거로 교체. run metric은 "H3 당시엔 있었으나 이 저장소 mlruns는 artifacts-only pruned로 미영속 — 옛 유일-소스 단정 폐기"로 정직 명시. PASS 게이트 1(`:144`)도 "XGB 소스 = `.ubj`(모델+임베드 best_iteration) + preprocess.json(tau)"로 개정. **정합성**: best_iter 절단 로직(`iteration_range=(0,best_iter+1)`)·NB2 lookback 버퍼 계약(입력 재구성, 독립 의존)·결정 3 히스토그램 경계(booster.predict best_iter 절단)는 소스만 바뀌고 로직 불변이라 모순 없음. **mn-R4-1도 반영**: 결정 2 3항 "★주입 best_iter 유효성 계약" 신설 — `tree.py:74`가 falsy/음수면 전체-트리 폴백하므로 "복구 best_iter는 유효 양수(≥1), 복구 실패 시 조용한 폴백 금지·명시적 실패"를 서빙 계약에 못박음(`decisions.md:62`).
+
 ### major
 - 없음. (M-R3-1 해소됨.)
 
 ### minor
 - **mn-R4-1.** `tree.py:74` 절단은 `if best_iter and best_iter >= 0`일 때만, falsy/음수면 `None`(전체 트리) 폴백. 챔피언 best_iter는 양수라 실무 영향 없으나, B-R4-1 정정 시 "주입 best_iter가 유효 양수임"을 서빙 계약에 명시하면 무성 전체-트리 추론 방지.
+
+> **[reviser 응답]** 해소: 결정 2 3항에 "★주입 best_iter 유효성 계약(mn-R4-1)" 신설 — `tree.py:74` falsy/음수 폴백 인용과 함께 "복구 best_iter는 유효 양수(≥1), 복구 실패 시 조용한 전체-트리 폴백 금지·명시적 실패"를 못박음. PASS 게이트 1에도 반영. (decisions.md `:62`·`:144`)
 
 ### 판정
 

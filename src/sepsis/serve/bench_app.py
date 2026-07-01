@@ -13,6 +13,7 @@ Prometheus 레지스트리**가 필요하므로(부가계측 시계열·환자 h
 from __future__ import annotations
 
 import functools
+import os
 import time
 
 import numpy as np
@@ -45,8 +46,8 @@ def build_gru_app(*, artifacts_dir=None, metrics_set=None) -> FastAPI:
     artifacts_dir: 내보낸 GRU 번들 dir(meta.json+pre.npz+model.pt). 기본 = deploy 활성 별칭.
     metrics_set: 인스턴스별 `MetricSet`(fresh 레지스트리)이면 부가계측 격리. 안 주면 전역 기본.
     """
-    adir = str(artifacts_dir) if artifacts_dir is not None else str(
-        C.ROOT / "deploy" / "artifacts" / "gru_vitals"
+    adir = str(artifacts_dir) if artifacts_dir is not None else os.environ.get(
+        "SEPSIS_GRU_ARTIFACTS_DIR", str(C.ROOT / "deploy" / "artifacts" / "gru_vitals")
     )
     bundle = _load_bundle_cached(adir)
     pred = StatefulPredictor(bundle)             # ★ 인스턴스별 fresh per-patient 상태

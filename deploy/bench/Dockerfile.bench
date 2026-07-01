@@ -1,0 +1,23 @@
+# serving-benchmark k8s 실측 이미지 — GRU/XGB 서빙 + 벤치 클라이언트 한 이미지.
+# 로컬 실측(uvicorn 서브프로세스)을 k8s(파드↔파드 네트워크·컨테이너 메모리)로 옮기기 위한 것.
+# 버전은 uv.lock 과 일치(torch 2.12.1 / numpy 2.5.0 / xgboost 3.3.0 — 골든 전제 / httpx 0.28.1).
+FROM python:3.12-slim
+WORKDIR /app
+
+RUN pip install --no-cache-dir torch==2.12.1 --index-url https://download.pytorch.org/whl/cpu \
+ && pip install --no-cache-dir \
+      "fastapi==0.138.1" "uvicorn[standard]==0.49.0" "prometheus-client==0.25.0" \
+      "numpy==2.5.0" "pydantic==2.13.4" "xgboost==3.3.0" "httpx==0.28.1"
+
+COPY src/ /app/src/
+COPY scripts/ /app/scripts/
+# 아티팩트 베이킹: .dockerignore 가 mlruns/·deploy/artifacts/ 를 제외하므로, 빌드 컨텍스트에
+# 포함되는 deploy/bench/bake/ 로 스테이징한 것을 /app/bake 로 굽는다. 앱은 env 로 이 경로를 읽는다
+# (bench_app: SEPSIS_GRU_ARTIFACTS_DIR, xgb_app: SEPSIS_XGB_MODEL_DIR).
+COPY deploy/bench/bake/ /app/bake/
+
+ENV PYTHONPATH=/app/src
+EXPOSE 8000
+# BENCH_FACTORY 로 어느 앱을 서빙할지 선택(gru=bench_app / xgb=xgb_app), SEPSIS_XGB_FEATURESET·
+# SEPSIS_SERVE_AUX_METRICS 로 featureset·게이트 arm 을 정한다(배포별 env).
+CMD ["/bin/sh", "-c", "exec uvicorn ${BENCH_FACTORY} --factory --host 0.0.0.0 --port 8000 --log-level warning"]

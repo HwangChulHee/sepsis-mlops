@@ -118,6 +118,9 @@ serve `/admin/reload` → **`/health.run_id`가 synthA→synthC로 실제 변경
 > **정직한 단서:** NetworkPolicy는 bridge CNI라 미강제, 브라우저 접속은 port-forward 필요.
 > WSL 라우팅·PVC accessMode·ingressClass·`up{job=}`는 [검증 필요]로 분리.
 
+> **처음부터 띄우는 순서**(이미지 빌드→minikube 로드→PVC 번들 시딩→검증→알려진 함정):
+> [`deploy/README.md`](deploy/README.md) 런북 참고.
+
 ---
 
 ## 리플레이어 — 운영 관측 장치 (집계가 가리는 알람 텍스처)

@@ -108,3 +108,37 @@
 ### 판정
 
 **라운드 2 blocker 1건(R2-B1) → HOLD.** B-1·B-2·minor 실질 해소, A2·A3·A4·§분리 PASS. 그러나 A0-대칭이 실재하지 않는 XGB 부가 계측을 전제해 A1·§B1 앵커·A3가 XGB에서 충족 불가. "누가 XGB 대칭 부가 계측을 만드나"가 handoff.md(latency만)에서 끊김 → PASS 아님.
+
+---
+
+## 라운드 3
+
+- 대상: `handoff_2a.md` 명세부 **v3** (reviser R2-B1 + m2-1·m2-2 반영)
+- 검토일: 2026-07-02
+- 판정: **PASS — blocker 0** (minor 3건, 통과 불가 아님)
+
+### R2 항목별 판정
+
+- **R2-B1 (XGB 부가계측 실재 안 함) → 해소됨.** 흐름(부가계측 표면 구축→게이트→관측)이 2A 안에서 완결: (1) 소유 경계 헤더(`:4-5` 1차=예측/응답/latency, 2A=부가계측 표면+게이트), (2) A0-대칭-표면 신설(`:33-40`, XGB ON→계열 출현·OFF→부재 관측 계약), (3) §B1 공유코드 재사용 앵커(`:88-90`, XGB `/predict`도 공유 `metrics.record`+`get_window().add` 재사용, B6 독립앱 재량을 계측표면 지점서 제약). [확인됨]
+- **m2-1 → 해소됨.** [확인됨] 태그 라인번호 제거("§B2와 문자 단위로 동일"). [확인됨]
+- **m2-2 → 해소됨.** A0 해석표에 "0/false/off일 때만 OFF, 나머지 전부 ON" 규칙 명시(폐집합 오독 방지). [확인됨]
+
+### PASS
+
+- **decisions.md 결정4 arm-1 정합** — `decisions.md:103` "XGB 최소 앱도 GRU와 같은 계측 표면(동일 metrics.record + drift window add)"을 §B1이 그대로 인용·근거화. 1차가 안 내려보낸 갭을 2A가 소유해 메움, 모순 없음. [확인됨]
+- **소유권 비순환** — 선형: 1차 XGB 뼈대 GREEN(predict/응답/latency) → 2A가 부가계측 표면+게이트 추가. `handoff.md:102`가 게이트를 "2차" 명시 이관. 순환 아님. [확인됨]
+- **A0-대칭-표면 블랙박스 관측 가능(피처 계열)** — XGB ON→`serve_input_feature_value_*{feature=…}` 출현/OFF→부재, `/metrics`로 관측. XGB 앱 GREEN 선행은 헤더에 정직 명시.
+- **§B1/불변 앵커 v3에서도 코드 1:1** — `metrics.py:45-56`, `app.py:96-104` 전부 일치. record가 `LATENCY.observe`+피처 루프 동시 수행이라 `aux` 파라미터 1개로 GRU·XGB 게이트 동시 성립. [확인됨]
+- **A3 XGB requests_total 근거 확정** — §B1이 XGB의 requests/latency count를 record 재사용(`PREDICT_REQUESTS.inc`·`LATENCY.observe`, 게이트 밖)으로 앵커. [확인됨]
+- **A2 예측 격리 구조 불변** — 게이트 두 지점이 predict 입력 아님, ON/OFF 응답 바이트 동일. [확인됨]
+- **신규 [확인됨] 정합** — 헤더 `handoff.md:102`·§B1 `decisions.md:103` 문자 대조 일치.
+
+### minor
+
+- **m3-1. Prometheus 전역 REGISTRY 공유 → 인스턴스 간 오염 경고 부재.** A0-대칭이 GRU-ON/OFF·XGB-ON/OFF 4인스턴스 파라미터화를 요구하는데, `INPUT_FEATURE`/`INPUT_MISSING`은 모듈 전역 default REGISTRY 1회 등록(`metrics.py:23-27`). 한 pytest 프로세스에서 여러 인스턴스면 ON child가 OFF `/metrics`에도 나타나 A1-a "0줄 부재" 허위 실패. 격리(별도 프로세스/신규 `CollectorRegistry`)면 정상 → blocker 아니나 "각 인스턴스 레지스트리 격리 필수" 주의 권고.
+- **m3-2. A0-대칭-표면의 "드리프트 윈도우 적재"가 블랙박스 관측 불가.** `:34` window 적재는 `/metrics`에 없고 XGB는 드리프트 스택 없음(`decisions.md:101`). 관측 앵커는 피처 계열, window는 §B grep-증명 대상임을 명시 권고("윈도우 적재는 §B 코드 보장, spec-writer 관측 대상 아님").
+- **m3-3. §A `:40` "LATENCY 히스토그램" 대문자 = 코드 상수명 노출 기미.** 소문자 "latency 히스토그램" 또는 metric 이름으로 통일 권고(하드 누수 아님).
+
+### 판정
+
+**라운드 3 blocker 0건 → PASS.** R2-B1 실질 해소(소유·구축·게이트·관측 완결), decisions.md 결정4 정합, 비순환, §분리 유지. minor 3건은 통과 불가 아님. **spec-writer TDD 진행 가능.**

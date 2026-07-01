@@ -22,7 +22,6 @@ import numpy as np
 import pytest
 
 # --- 핸드오프가 명세한 심볼(이름/경로를 그대로 신뢰) ---
-from sepsis import config as C
 from sepsis.retrain import deploy
 from sepsis.retrain.pipeline import RetrainResult
 from sepsis.retrain.validate import ValidationResult
@@ -50,7 +49,20 @@ class _RefSentinel:
 
 @pytest.fixture(autouse=True)
 def _isolate_reference_build(monkeypatch):
+    import sepsis.data.cache as cache_mod
     import sepsis.drift.reference as R
+
+    # (0) manifest 우회: materialize 는 reference 빌드 **직전에** cache.load_manifest()
+    #     로 pid2site 를 만든다(deploy.py:64-65). 이건 실 data/cache/h1/manifest.parquet
+    #     을 읽어 fresh clone·CI 에서 FileNotFoundError 로 죽는다 — 외부 데이터 의존이지
+    #     JSON 영속 계약의 일부가 아니다. pid2site 는 (1) 의 faked build 로만 흘러가
+    #     무시되므로, 빈 manifest 로 우회하면 테스트가 진짜 hermetic 해진다.
+    class _FakeManifest:
+        pid: list = []
+        site: list = []
+
+    monkeypatch.setattr(cache_mod, "load_manifest",
+                        lambda *a, **k: _FakeManifest(), raising=False)
 
     # (1) 시작점: 실제 manifest pid 를 읽는 reference 빌드를 sentinel 로 우회.
     def _fake_build_reference_from_pids(featureset, pids, pid2site):

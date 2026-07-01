@@ -19,6 +19,16 @@ dependencies = [
     "xgboost>=3.3.0",
 ]
 
+[dependency-groups]
+# dev 그룹은 `uv run`/`uv sync` 가 기본 포함한다(PEP 735). pytest 를 프로젝트 env 에
+# 넣어야 `uv run pytest` 가 프로젝트 패키지(sepsis·pandas 등)를 보는 진짜 단일 커맨드가
+# 된다 — 안 넣으면 uv 가 pytest 를 격리 tool env 로 띄워 pandas 미발견으로 수집이 깨진다.
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "ruff>=0.6",
+]
+
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
@@ -37,6 +47,39 @@ pythonpath = ["src"]
 # TestClient 등)이 의존하는 플러그인까지 죽어 collection error가 났다(검증됨). 설치 안 된
 # 환경에서도 `-p no:<name>`은 무해.
 addopts = "-p no:launch_ros -p no:launch_testing"
+
+[tool.ruff]
+src = ["src", "tests", "scripts"]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# 보수적 기본셋: pyflakes(F)·pycodestyle(E)·isort(I)·pyupgrade(UP)·flake8-bugbear(B).
+# 스타일 재작성은 최소화하고 실버그(미사용/미정의·shadowing)만 우선 잡는다.
+select = ["F", "E", "I", "UP", "B"]
+ignore = [
+    "E501",   # 줄길이는 formatter 가 관리, 린트 실패로 막지 않음
+    # --- 아래는 이 코드베이스의 의도된 관습(방어적 침묵이 아니라 명시적 선택) ---
+    "E741",   # `l` = length/label 로 수치·EDA 코드에서 관습적으로 쓴다
+    "E702",   # 스모크·eval 스크립트의 compact `x; y` 한 줄 스타일(가독성 목적)
+    "E731",   # 스크립트의 짧은 lambda 할당 — def 승격은 불필요한 churn
+    "B905",   # zip pair 는 구조상 등길이(등길이 계약은 상위에서 보장) — strict= 는 근거 없는 churn
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 이미지 슬림화용 lazy import 설계(console import 체인에서 torch/numpy 제외): dataclass
+# 필드/반환 어노테이션이 `from __future__ import annotations` 로 문자열 평가만 되고
+# 실 심볼은 함수 내부에서 lazy import 된다. ruff F821 은 이를 미정의로 오탐한다(실행은 정상).
+"src/sepsis/serve/bundle.py" = ["F821"]
+"src/sepsis/retrain/deploy.py" = ["F821"]
+# 독립 실행 스크립트는 import 전에 os.environ/warnings.filterwarnings 를 세팅한다(예:
+# lightgbm import 전 경고 필터, serve 번들 경로 env). 이 pre-import 셋업은 의도된 것 —
+# E402(module import not at top)는 이 패턴에선 오탐이다.
+"scripts/**" = ["E402"]
+
+[tool.coverage.run]
+source = ["sepsis"]
+branch = true
 
 # PyPI stays the default index; the pytorch CPU index is used ONLY for torch.
 [[tool.uv.index]]

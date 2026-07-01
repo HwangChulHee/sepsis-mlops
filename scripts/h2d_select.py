@@ -88,7 +88,7 @@ def render(df, robust, choice) -> str:
 
 
 def main() -> int:
-    tracking = f"sqlite:///{C.ROOT}/mlflow.db"
+    tracking = C.mlflow_uri()
     df = select.load_results(tracking)             # A-val only (guard raises on B leak)
     frozen = {r["model"]: r["utility"] for _, r in df.iterrows()
               if r["model"] in select.TREE_MODELS and r["featureset"] == "vitals"}

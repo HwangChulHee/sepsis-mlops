@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
+from sepsis import config as C
 from sepsis.console.audit import AuditStore
 from sepsis.console.config import CONSOLE_FEATURESETS
 from sepsis.retrain import deploy
@@ -26,7 +27,7 @@ ARTIFACTS: Path = deploy.ARTIFACTS                  # = C.ROOT/deploy/artifacts 
 # 감사 DB는 env(CONSOLE_AUDIT_DB_URL)로 PVC 경로 주입. env 없으면 기존 상대경로(하위호환) =
 # 비영속이므로 프로덕션 매니페스트가 sqlite:////app/auditdb/console_audit.db 를 반드시 주입.
 # 프로덕션은 env가, 테스트는 fixture(conftest monkeypatch)가 이 전역을 교체한다.
-audit: AuditStore = AuditStore(os.environ.get("CONSOLE_AUDIT_DB_URL", "sqlite:///console_audit.db"))
+audit: AuditStore = AuditStore(os.environ.get("CONSOLE_AUDIT_DB_URL") or C.audit_uri())
 MLFLOW_UI_BASE = os.environ.get("MLFLOW_UI_BASE")   # None → mlflow_link 폴백 null(6-A)
 MLFLOW_EXPERIMENT_ID = os.environ.get("MLFLOW_EXPERIMENT_ID", "0")  # retrain/h2 런의 실험 id(≠0)로 지정
 

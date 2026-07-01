@@ -5,14 +5,21 @@ __pycache__/
 *.log
 mlruns/
 mlartifacts/
-mlflow.db
 *.egg-info/
+
+# 런타임 산출물·캐시는 모두 var/ 아래로 모은다(config.mlflow_uri/audit_uri, pyproject cache_dir).
+/var/
 
 # H4s-c: exported serving bundles (derived from MLflow via scripts/h4s_export_bundle.py)
 deploy/artifacts/
-console_audit.db
 
-# coverage 산출물 (uv run pytest --cov / CI) — 커밋 금지
-.coverage
+# coverage report 산출물(루트 생성분) — 커밋 금지
 coverage.xml
 htmlcov/
+
+# 레거시 루트 위치(과거 산출물 잔재가 있어도 무시)
+mlflow.db
+console_audit.db
+.coverage
+.pytest_cache/
+.ruff_cache/

@@ -11,6 +11,8 @@ import datetime as dt
 from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, create_engine, event
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
+from sepsis import config as C  # config 는 pathlib 만 import — slim console 이미지에 안전
+
 Base = declarative_base()
 
 
@@ -49,8 +51,8 @@ def _block_bulk_mutation(state):
 class AuditStore:
     """서비스 계층이 부르는 얇은 API. INSERT(append)·SELECT(query)만, UPDATE/DELETE 없음."""
 
-    def __init__(self, url: str = "sqlite:///console_audit.db"):
-        self.engine = create_engine(url)
+    def __init__(self, url: str | None = None):
+        self.engine = create_engine(url or C.audit_uri())   # dev 기본 = var/console_audit.db
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
 

@@ -113,7 +113,7 @@ def retrain(featureset: str = "vitals", *, holdout_frac: float = 0.3, seed: int 
     # truth). experiment="retrain" keeps it separate from the h2 training runs; run_id is
     # globally unique within the store, so the deep-link resolves regardless of experiment.
     import mlflow
-    mlflow.set_tracking_uri(f"sqlite:///{C.ROOT}/mlflow.db")
+    mlflow.set_tracking_uri(C.mlflow_uri())
     mlflow.set_experiment("retrain")
     with mlflow.start_run() as run:
         res = gru.train_gru(train_data, aval_data, len(idx), hp, pos_weight=spw, seed=seed,

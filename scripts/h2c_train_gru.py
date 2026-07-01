@@ -170,7 +170,7 @@ def main() -> int:
     # --- MLflow (sqlite); failure is a stop trigger ---
     mlflow_ok = True
     try:
-        mlflow.set_tracking_uri(f"sqlite:///{C.ROOT}/mlflow.db")
+        mlflow.set_tracking_uri(C.mlflow_uri())
         mlflow.set_experiment("h2")
         with tempfile.TemporaryDirectory() as td:
             for fs, c in combos.items():

@@ -29,7 +29,7 @@ TOL = 1e-6
 MODELS_FS = [("xgboost", "vitals"), ("xgboost", "vitals_labs"),
              ("lightgbm", "vitals"), ("lightgbm", "vitals_labs"),
              ("gru", "vitals"), ("gru", "vitals_labs")]
-TRACKING = f"sqlite:///{C.ROOT}/mlflow.db"
+TRACKING = C.mlflow_uri()
 H2_RESULTS = C.ROOT / "reports" / "h2_results.md"
 REPORT = C.ROOT / "reports" / "h3_results.md"
 DATE = "2026-06-28"

@@ -47,11 +47,13 @@ pythonpath = ["src"]
 # TestClient 등)이 의존하는 플러그인까지 죽어 collection error가 났다(검증됨). 설치 안 된
 # 환경에서도 `-p no:<name>`은 무해.
 addopts = "-p no:launch_ros -p no:launch_testing"
+cache_dir = "var/.pytest_cache"       # 런타임 캐시는 루트가 아니라 var/ 아래로
 
 [tool.ruff]
 src = ["src", "tests", "scripts"]
 target-version = "py312"
 line-length = 100
+cache-dir = "var/.ruff_cache"
 
 [tool.ruff.lint]
 # 보수적 기본셋: pyflakes(F)·pycodestyle(E)·isort(I)·pyupgrade(UP)·flake8-bugbear(B).
@@ -80,6 +82,7 @@ ignore = [
 [tool.coverage.run]
 source = ["sepsis"]
 branch = true
+data_file = "var/.coverage"       # 커버리지 데이터도 var/ 아래로(루트 정리)
 
 # PyPI stays the default index; the pytorch CPU index is used ONLY for torch.
 [[tool.uv.index]]

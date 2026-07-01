@@ -13,6 +13,22 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data" / "raw"
 CACHE_DIR = ROOT / "data" / "cache" / "h1"  # under data/ (git-ignored)
 
+# 런타임 산출물(dev sqlite DB·캐시)은 루트를 어지럽히지 않게 var/ 아래로 모은다(git-ignored).
+# 프로덕션은 이 dev 기본값 대신 env(CONSOLE_AUDIT_DB_URL 등)를 주입한다.
+VAR_DIR = ROOT / "var"
+
+
+def mlflow_uri() -> str:
+    """dev MLflow tracking sqlite URI(var/mlflow.db). 접근 시 var/ 를 보장(신규 클론 안전)."""
+    VAR_DIR.mkdir(exist_ok=True)
+    return f"sqlite:///{VAR_DIR / 'mlflow.db'}"
+
+
+def audit_uri() -> str:
+    """dev 감사 sqlite URI(var/console_audit.db). 프로덕션은 CONSOLE_AUDIT_DB_URL 로 대체."""
+    VAR_DIR.mkdir(exist_ok=True)
+    return f"sqlite:///{VAR_DIR / 'console_audit.db'}"
+
 SITES = ("training_setA", "training_setB")
 SITE_COUNTS = {"training_setA": 20336, "training_setB": 20000}
 N_PATIENTS = 40336  # setA 20,336 + setB 20,000

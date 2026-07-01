@@ -125,7 +125,7 @@ def load_bundle(featureset: str = "vitals", *, artifacts_dir: str | None = None,
     import torch  # lazy(결함 7)
     from mlflow.artifacts import download_artifacts
 
-    tracking_uri = tracking_uri or f"sqlite:///{C.ROOT}/mlflow.db"
+    tracking_uri = tracking_uri or C.mlflow_uri()
     mlflow.set_tracking_uri(tracking_uri)
     client = mlflow.tracking.MlflowClient()
     exp = client.get_experiment_by_name(experiment)

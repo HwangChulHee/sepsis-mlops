@@ -40,7 +40,10 @@ where = ["src"]
 # 한 커맨드(`uv run pytest`)로 전체 스위트(console·console_prep·replay)를 돌린다.
 # pythonpath=src: editable 설치 없이도 `sepsis` import 가능 — 매번 `PYTHONPATH=` 칠 필요 제거.
 testpaths = ["tests"]
-pythonpath = ["src"]
+# src: `sepsis` import. ".": 최상위 `loadtest.*`(부하테스트 (나) 드라이버) import
+#   — locustfile/run_matrix는 CLI(`locust -f loadtest/...`)로도 도는 최상위 경로라 여기 둔다.
+#   (패키지명 `loadtest`: `bench`는 테스트 패키지 tests/bench 와 sys.path 충돌.)
+pythonpath = ["src", "."]
 # ROS(jazzy)가 셸 PYTHONPATH로 주입하는 pytest11 플러그인(launch_ros·launch_testing)이
 # 자동수집되며 lark 미설치로 collection을 깨뜨린다(이 프로젝트와 무관한 환경 누수).
 # 이 둘만 핀오프한다 — PYTEST_DISABLE_PLUGIN_AUTOLOAD로 전부 끄면 console_prep(fastapi

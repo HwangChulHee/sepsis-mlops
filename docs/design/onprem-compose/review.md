@@ -132,3 +132,51 @@
 ---
 
 **blocker: 2건** (B2-1, B2-2). blocker≠0 → **HOLD**. 둘 다 R1 보완이 새로 만든/못 본 결함 — B2-1은 B-1 처방이 console-api 실물(alpine·/health 부재)을 틀렸고, B2-2는 M-3 named-volume 처방이 Docker 소유권 동작과 어긋나 감사 부팅을 깬다. major 2·minor 4는 handoff 전 반영 권장.
+
+---
+
+## 라운드 3 (redteam)
+
+- **대상 commit**: v4 (R2 보완 반영본) · **검토일**: 2026-07-02
+- **핵심 질문**: R2 보완(B2-1·B2-2·M2-1·M2-2)이 진짜 해소됐나(가짜 수렴) / v4가 결정 7에 쌓은 healthcheck·의존·lifespan 사이 새 내부모순이 생겼나
+- **판정**: **HOLD — blocker 1건** (B3-1)
+
+### PASS (R2 보완 검증 — 실물 대조, 가짜 수렴 아님)
+
+- **B2-1 console-api 엔드포인트 빈 상태 200 확정** — `/console/versions?fs=vitals`→`list_versions("vitals")` 코드 추적: `deploy.active_version` 심링크 없으면 `None` 무예외(`deploy.py:88-90`), audit 빈 테이블 SELECT→`[]`(`service.py:206-208`, `audit.py:87-108`), `_scan_version_ids` 빈 iterdir→`[]`(`service.py:199-203`). 반환 `{"featureset":"vitals","active":None,"versions":[]}`→**200**(`api.py:44-46`). 5xx 경로 없음. base=alpine·`/health` 부재도 확인. 처방 정확.
+- **B2-1 healthcheck-부팅 경합 무혐의** — `list_versions`는 순수 read, lifespan `_reconcile_or_seed`는 `yield` 전 완료(`service.py:157-161`)라 uvicorn 라우팅 열기 전 → healthcheck HTTP 도달 불가. 레이스 없음.
+- **B2-2 chown 처방 Docker 동작 정합** — `Dockerfile.api:25`가 artifacts만 mkdir(auditdb 미생성), `AuditStore` 모듈전역(`service.py:30`)·생성자 `create_all` 즉시(`audit.py:54-56`)·`api.py:13` 임포트 트리거 = 부팅 전 크래시 경로 실재. `RUN mkdir -p /app/auditdb && chown 10001:10001`은 "빈 named volume 최초 마운트 시 이미지 마운트지점 소유권 복사" 동작과 일치(canonical). 정확.
+- **M2-1 정확** — `console-web/Dockerfile:14`는 console-web 확인일 뿐(front-nginx 아님). `[우리 결정]` 격하+base=alpine 명시 정당.
+- **M2-2 정확** — `app.py:31 FastAPI(...)` lifespan 미지정, 로드는 `state()` lazy(`app.py:72-73`), `/health`가 state() 호출. boot precondition 즉시종료엔 app.py lifespan 신규 추가 필요=serving 코드 변경, 정직히 기록됨. (console-api는 lifespan 있음 `api.py:15` — 서비스별 올바르게 구분.)
+
+### blocker (1건)
+
+**B3-1 / 결정 7이 front-nginx를 console-web `service_healthy`에 게이트하나 console-web healthcheck를 어디에도 명세 안 함 — 게이트 미충족으로 콘솔 UI 기동 불가 (B-1·B2-1과 동종 함정, 4번째 서비스로 이동)**
+
+- **문제**: 결정 7(`decisions.md:128`)·알려진 한계(`:204`)는 "front-nginx는 web+api healthy 뒤(`service_healthy`)"라 명시하나, 결정 7 healthcheck bullet은 serving·console-api·front-nginx **세 서비스만** test를 규정하고 **console-web healthcheck는 전혀 규정 안 함**. console-web 이미지에도 `HEALTHCHECK` 없음(`console-web/Dockerfile:1-22`, nginx-unprivileged:alpine). Compose에서 `depends_on: console-web: {condition: service_healthy}`인데 대상에 healthcheck 없으면 그 condition은 **영원히 미충족**→front-nginx 기동 안 함.
+- **파급**: 서비스 맵상 호스트 공개는 front-nginx:80뿐이고 console-web/api는 내부 → front-nginx 미기동 시 **브라우저 콘솔 UI(핵심 산출물) 진입점 통째로 불가용**. B-1·B2-1이 3라운드 잡아온 "게이트가 의존하는 healthcheck가 실재/작동 안 해 기동 백본 붕괴" 함정의 재발(대상만 console-web으로 이동).
+- **근거**: `decisions.md:128,204` · 결정 7 bullet(console-web 누락) · `console-web/Dockerfile:1-22`(HEALTHCHECK 부재).
+- **제안**: 택1 — (a) console-web healthcheck를 결정 7에 명세(alpine busybox `wget -qO- http://localhost:8080/`, `/`는 SPA 폴백 try_files로 항상 200 — `console-web/Dockerfile:19`), 또는 (b) front-nginx→console-web 의존을 `service_started`로 완화(front-nginx는 자칭 비-게이트 뒤끝, web 준비 전 짧은 502 창은 이미 한계 `:204`에 기재). 현 "healthcheck 없이 service_healthy 게이트" 상태 해소 필수.
+- **[reviser 응답]** 해소 — **(a) 채택**. `console-web/Dockerfile` 직접 확인: base `nginxinc/nginx-unprivileged:alpine`(`:14`), 비-root uid 101·**8080** listen(`:12,17,19,20,21` — "listen 8080 — 비-root 라 80 바인드 불가"), SPA 폴백 `try_files $uri $uri/ /index.html`(`:19` baked default.conf), **`HEALTHCHECK` 지시어 전체 부재**(`:1-22`) 확인. 결정 7 healthcheck 섹션에 **★console-web bullet(B3-1) 신규 추가** — alpine busybox `wget`으로 `test: ["CMD","wget","-q","--spider","http://localhost:8080/"]`(또는 `wget -qO- ... || exit 1`), `/`는 SPA 폴백이라 항상 200(포트는 80 아닌 8080임을 근거와 함께 명시). 이로써 front-nginx가 게이트하는 **모든** 대상(console-api·console-web)에 실재·작동 healthcheck가 갖춰져 "healthcheck 없이 service_healthy 게이트" 모순 제거. 대안 (b) `service_started` 완화는 502 창을 남겨 기각(healthy 게이트가 502 창 자체를 없앰). healthcheck 섹션 헤딩도 `B-1 / B2-1 / B3-1 정정`으로 갱신, 개정이력 v5·상태줄 반영.
+
+### major
+
+- **M3-1 / 결정 7 기동 체인 "(1) serving healthy 후 (2) console-api" 서술이 M-2 `service_started` 완화와 내부모순** — `decisions.md:128` 번호 체인은 console-api가 serving healthy 후 온다고 하나, M-2 bullet(`:138`)은 console-api→serving을 `service_started`로 완화 확정. 충돌 — 기계적 핸드오프가 번호 체인만 보고 `service_healthy`로 걸면 M-2가 제거한 결함(캘리브레이션 300s 콘솔 불가용·seed 누락 시 진단 불가) 부활. **제안**: 번호 체인 (1)(2)를 "console-api는 serving `service_started`만 의존(healthy 대기 안 함)"으로 정정해 M-2와 일치. (권위 결정은 M-2라 blocker 아니나 부활 위험 실재.)
+- **[reviser 응답]** 해소. 결정 7 결정 문장의 **번호 순서 서술 "(1) serving healthy 후 (2) console-api …"를 폐기**하고, 기동 체인을 **방향별 condition으로 한 곳에서 재서술** — serving=무의존(맨 앞), **console-api→serving=`service_started`**(`service_healthy` 아님, M-2/M3-1 근거 명시), front-nginx→console-api=`service_healthy`, front-nginx→console-web=`service_healthy`(B3-1). "번호가 아니라 condition이 권위"이고 console-api→serving(느슨)과 front-nginx→web/api(엄격)는 **방향이 다름**을 명문화. 과거 번호 서술이 M-2와 모순이라 폐기했음도 체인 끝에 남김. 개정이력 v5 반영.
+
+### minor
+
+- **서비스 맵이 front-nginx base=alpine 반영 안 함** — M2-1이 alpine 확정했으나 서비스 맵(`:183`) "빌드 소스"는 "nginx conf (신규)"로 base 미표기. alpine 명시 권장.
+- **기존 root 소유 auditdb named volume은 재-chown 안 됨** — B2-2 처방은 빈(최초) volume에만 적용. 이전 실행으로 root 소유 volume 있으면 재빌드해도 root 유지→크래시. POC 최초는 fresh라 무해하나 재배포 시 `docker volume rm` 선행 필요를 운영노트에 한 줄 명시 권장.
+
+- **[reviser 응답] (minor 2건 일괄)**
+  1. **서비스 맵 front-nginx base=alpine**: 서비스 맵 "빌드 소스"를 `nginx conf (신규, base=alpine — M2-1)`로 갱신(M2-1 alpine 확정 반영).
+  2. **auditdb named volume 재-chown 한계**: 알려진 한계에 신규 한 줄 추가 — B2-2의 `mkdir + chown 10001` 처방은 named volume이 최초(빈) 마운트일 때만 이미지 소유권을 복사하므로, 이전 실행으로 root 소유가 된 기존 volume은 재빌드해도 root로 남아 uid 10001 create_all 실패(부팅 전 크래시). **재배포·이미지 교체 시 `docker volume rm <auditdb_volume>` 선행** 필요를 운영노트로 명시(근본 해결=엔트리포인트 chown/fsGroup 등가물은 결정 6·POC 범위상 백로그).
+
+### 구현 검증 항목 (라운드 3 — 기존 목록과 병합)
+
+- (신규) front-nginx→console-web `service_healthy`(또는 `service_started`) 배선 시 `docker compose up`이 console-web healthcheck 미정의로 오류/무한대기 안 하는지 실측 — B3-1 해소 후 재확인.
+
+---
+
+**blocker: 1건** (B3-1). blocker≠0 → **HOLD**. R2 blocker(B2-1·B2-2)·M2-1·M2-2 보완은 실물 대조 결과 **정확히 해소**(가짜 수렴 아님). B3-1은 v4에도 남아 있던 아직 못 본 층 — 결정 7이 세 healthcheck는 정밀 규정하면서 정작 `service_healthy`로 게이트하는 네 번째(console-web)의 healthcheck를 규정 안 해 동종 함정이 남음. M3-1은 M-2 완화가 번호 체인 서술과 남긴 내부모순.

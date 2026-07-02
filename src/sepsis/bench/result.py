@@ -12,7 +12,7 @@ throughput·비용 입력)를 받아 BenchResult 를 조립한다 — 라이브 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 

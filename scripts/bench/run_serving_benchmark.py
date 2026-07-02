@@ -303,9 +303,9 @@ def _write_report(r, runs):
     A(f"| XGB / vitals_labs18 (배포) | {xgb18_s:.3f} | [{xgb18_sp[0]:.3f}–{xgb18_sp[1]:.3f}] |")
     A(f"\n- **아키텍처 기여**(featureset=9 고정, XGB/9 − GRU/9) = **{arch:+.3f} ms**.")
     A(f"- **featureset 기여**(XGB 9→18) = **{feat:+.3f} ms**.")
-    A(f"- 통제 arm(XGB/9)을 latency 로도 재서, 배포 arm(XGB/18)의 재구성 비용 중 아키텍처 몫과 "
-      f"featureset(입력차원 2배) 몫을 분리. GRU 는 hidden state 로 O(1), XGB 는 매 요청 8행 버퍼 "
-      f"lookback 재구성 + 트리 절단이라 무겁다.")
+    A("- 통제 arm(XGB/9)을 latency 로도 재서, 배포 arm(XGB/18)의 재구성 비용 중 아키텍처 몫과 "
+      "featureset(입력차원 2배) 몫을 분리. GRU 는 hidden state 로 O(1), XGB 는 매 요청 8행 버퍼 "
+      "lookback 재구성 + 트리 절단이라 무겁다.")
 
     A("\n## 2. 헤드라인 — 배포 arm latency (client/server, ms)\n")
     A("| 배포 arm | client 벽시계(p50/95/99) | server(p50/95/99) | client_mean | server_mean | residual | tax |")
@@ -342,7 +342,7 @@ def _write_report(r, runs):
       f"부팅 분리 GRU {g.boot_latency:.2f}s/XGB {x.boot_latency:.2f}s.")
     A(f"- 게이트(A1): arm-1 피처라인 GRU={runs['gru_arm1']['feature_lines']}/XGB={runs['xgb_arm1']['feature_lines']}(>0), "
       f"arm-2 GRU={runs['gru_arm2']['feature_lines']}/XGB={runs['xgb_arm2']['feature_lines']}(==0).")
-    A(f"- 노이즈: server_mean 반복 spread(위 §1). tax·계측세금·입력차원 기여가 spread 안에 들면 노이즈로 해석.")
+    A("- 노이즈: server_mean 반복 spread(위 §1). tax·계측세금·입력차원 기여가 spread 안에 들면 노이즈로 해석.")
 
     A("\n## 7. 한계 (정직)\n")
     A("- client 벽시계=localhost httpx(실 network 작음) — 잔차 network 성분은 arm-2 에서만 추정, 여기선 직렬화+프레임워크가 주.")

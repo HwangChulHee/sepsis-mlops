@@ -67,3 +67,68 @@
 ---
 
 **blocker: 1건** (B-1). blocker≠0 → **HOLD**. major 4·minor 4는 단독 통과 저지는 아니나 handoff 전 반영 강력 권장(특히 M-2·M-3).
+
+---
+
+## 라운드 2 (redteam)
+
+- **대상 commit**: v3 (R1 보완 반영본) · **검토일**: 2026-07-02
+- **핵심 질문**: R1 보완(B-1·M-1~M-4)이 진짜 해소됐나 / 보완이 새 결함을 만들었나
+- **판정**: **HOLD — blocker 2건** (B2-1, B2-2)
+
+### PASS (R1 보완 검증 — 실물 대조)
+
+- **B-1 serving 부분 정확** — `deploy/Dockerfile:4 FROM python:3.12-slim`(curl/wget 미설치). serving `/health` 실재(`app.py:110-115`). `python -c urllib.request` 명령은 serving에서 유효. stuck 검토: `/health`→`_load_all` 실패 시 500→`urlopen`이 `HTTPError` **raise**→미포착→비-0 종료→**올바로** unhealthy. false-healthy 경로 없음.
+- **M-2 정확** — lifespan(`service.py:157-161`)은 `_reconcile_or_seed`만 순회, serving HTTP 미호출. `service_started` 완화 정당, 새 레이스 없음(미-seed면 lifespan no-op graceful, seed는 up 전 수동).
+- **M-3 인용 정정 정확** — `bundle.py:25-39 set_alias`(`os.replace:39`) 실재, `audit.py:56 create_all` 실재, `console-api.yaml:37 fsGroup:10001` 실재. (단 **해결 방식**은 B2-2 참조 — 인용은 맞으나 처방이 틀림.)
+- **M-4 정확** — `Dockerfile:12 torch==2.12.1`·`:15 numpy==2.5.0` 고정, xgboost 미설치. GRU-only 정당.
+- **M-1 정정 적절** — `deploy.resources` 무시 `[확인됨]` 삭제→버전 명시+구현검증 이관. 과대주장 제거.
+
+### blocker (2건)
+
+**B2-1 / 결정 7 B-1 보완이 console-api에 대해 틀렸다 — 기동 백본 재붕괴 (base 이미지·healthcheck 엔드포인트 이중 오류)**
+
+- **문제**: B-1 bullet(결정 7, decisions.md:120)은 serving과 console-api를 한데 묶어 `[확인됨]`으로 "둘 다 `python:3.12-slim`, healthcheck는 `urlopen('.../health')`"라 명문화했으나 실물은 둘 다 틀림:
+  1. **base가 slim이 아니라 alpine** — console-api는 `python:3.12-alpine`(`Dockerfile.api:14`). alpine은 busybox wget 보유 → "curl/wget 부재" 전제가 console-api엔 거짓.
+  2. **`/health` 라우트 부재** — `console/api.py`는 `/console/versions`·`/console/versions/{v}`·`/console/audit`·`/console/approve`·`/console/rollback` 5개뿐, `/health` 없음. K8s도 프로브를 `/console/versions?fs=vitals`로 검(`console-api.yaml:81,87,95`). B-1이 처방한 `urlopen('.../health')`를 console-api에 쓰면 404→HTTPError→비-0→영구 unhealthy → B-1과 **같은 부류 결함이 console-api에 재발**.
+- **부수 내부모순**: 결정 7 체인(:119)은 console-api를 healthcheck 불요(`service_started`)로 취급하는데 B-1 bullet(:120)은 healthcheck를 부여 — 문서 내 불일치.
+- **근거**: `Dockerfile.api:14`(alpine) · `console/api.py:44,49,54,77,87`(/health 부재) · `console-api.yaml:81,87,95`(프로브=/console/versions) · decisions.md:119-120.
+- **제안**: (a) console-api healthcheck 엔드포인트를 `/console/versions?fs=vitals`(빈 상태에서도 200)로, (b) base `[확인됨]`을 serving=slim/console-api=alpine 분리 정정, (c) console-api가 healthcheck를 갖는지/`service_started`만인지 체인과 정합.
+- **[reviser 응답]** 해소. 실물 직접 확인 — `Dockerfile.api:14 FROM python:3.12-alpine`(slim 아님), `api.py`에 `/health` 부재(라우트 5개: `/console/versions`·`/console/versions/{v}`·`/console/audit`·`/console/approve`·`/console/rollback`, `:44,49,54,77,87`), `console-api.yaml:81,87,95` 프로브=`/console/versions?fs=vitals`(`:87` 주석 "빈 클러스터 200 확인됨"). 결정 7의 R1 B-1 bullet을 **서비스별로 분리 정정**(decisions.md 결정 7) — serving=slim+python urllib+`/health`, console-api=alpine+busybox wget(또는 urllib)+`/console/versions?fs=vitals`, front-nginx=alpine+wget+`/`. base `[확인됨]` 태그를 serving=slim/console-api=alpine으로 분리. **내부모순 해소**: console-api는 실제 동작하는 healthcheck를 가지며, **front-nginx→console-api는 `service_healthy`로 확정**(빈 상태 200이라 값싸고 502 창 제거), console-api→serving 방향은 M-2대로 `service_started`(방향이 다름을 결정 문장·근거 섹션·검토요청 항목에 명시). 개정이력 v4·검토요청 항목에도 반영.
+
+**B2-2 / 결정 2 M-3의 "auditdb=named volume이면 소유권 자동 정합" 처방이 Docker 동작과 어긋남 — console-api 부팅 실패(감사 append-only 불변식 붕괴)**
+
+- **문제**: M-3(decisions.md:58)은 "auditdb는 named volume으로 소유권 회피"라 확정하나 Docker named volume은 런타임 uid로 chown하지 않음 — 마운트 지점이 이미지에 있으면 그 소유권 복사, 없으면 **root:root 생성**. `Dockerfile.api`는 `/app/deploy/artifacts`만 mkdir(`:25`), **`/app/auditdb` 미생성** → named volume이 root 소유 → uid 10001이 db 생성 불가.
+- **연쇄 붕괴**: `AuditStore`가 **모듈 임포트 시점** 인스턴스화(`service.py:30`)→생성자가 `create_all` 즉시 실행(`audit.py:54-56`)→`api.py:13`이 service 임포트 순간 root 소유 디렉토리에 sqlite 생성 시도→`OperationalError`→console-api가 **부팅 전 임포트에서 크래시**. K8s는 fsGroup:10001이 PVC 재귀 chown으로 막았으나 Compose엔 등가물 없음 — M-3이 지적한 공백을 그 처방이 못 메움. 감사 테이블 생성조차 실패.
+- **근거**: `Dockerfile.api:25`(auditdb dir 미생성) · `service.py:30`(모듈레벨 AuditStore) · `audit.py:54-56`(생성자 create_all) · `console-api.yaml:37`(K8s fsGroup 해결) · decisions.md:58.
+- **제안**: named volume 단독 불충분 인정 → (i) 이미지에서 `/app/auditdb`를 `chown 10001` 선생성, (ii) 엔트리포인트 init chown, (iii) root 실행(결정 6 비-root와 충돌 → 재서술) 중 택일. artifacts(bind)에 요구한 "호스트 소유권/`user:` 정합" 수준의 구체 처방이 auditdb에도 필요.
+- **[reviser 응답]** 해소. 실물 직접 확인 — `Dockerfile.api:25`는 `/app/deploy/artifacts`만 mkdir(`/app/auditdb` 미생성), `service.py:30` `audit: AuditStore = AuditStore(...)` 모듈 전역, `audit.py:54-56` 생성자가 `create_all` 즉시 실행, `api.py:13` `from sepsis.console import service` 임포트가 그 트리거. 결정 2 M-3 항목에서 **"auditdb=named volume이면 자동 회피" 문구를 삭제**하고 처방을 (i)로 확정 — **콘솔 이미지 Dockerfile에서 `/app/auditdb`를 `RUN mkdir -p /app/auditdb && chown 10001:10001 /app/auditdb`로 선생성**(named volume이 이미지 소유권 uid 10001을 복사하도록). 대안 (ii)는 비-root 실행과 충돌, (iii)은 결정 6 위배라 기각 근거 명시. 부팅 전 임포트 크래시(OperationalError)와 감사 append-only 불변식 붕괴 경로를 결정 2에 명문화. 결정 5·6·검토요청·개정이력 v4에도 연결.
+
+### major
+
+- **M2-1 / front-nginx "alpine nginx `[확인됨]`"이 미확정 이미지 mislabel** — 결정 7(:120)이 인용한 `console-web/Dockerfile:14`는 console-web 확인일 뿐 front-nginx가 아님(front-nginx는 신규, base 미결정). handoff가 debian nginx를 고르면 busybox wget 부재로 B-1과 동종 결함(단 front-nginx healthcheck는 비-게이트라 파급 없음). `[확인됨]`→`[우리 결정]` 격하 + front-nginx base(alpine) 명시.
+- **[reviser 응답]** 해소. `console-web/Dockerfile:14 nginxinc/nginx-unprivileged:alpine`이 console-web 확인일 뿐임을 확인. 결정 7 healthcheck bullet의 front-nginx 항목을 `[확인됨]`→**`[우리 결정]`으로 격하**하고 **front-nginx base = alpine nginx로 명시 결정**(busybox wget 가용, `test: wget -qO- http://localhost:80/`). front-nginx healthcheck가 기동 게이트 뒤끝의 **비-게이트**라 붕괴 파급이 없음(serving/console-api 게이트만 백본)도 명문화.
+- **M2-2 / precondition "즉시 종료"는 lazy-load serving에 boot 훅이 없어 자동 성립 안 함** — 결정 7 B-R0-3의 "부팅 초입 alias 확인→즉시 종료"는 `app.py`에 startup/lifespan 훅이 **없고** 로드가 첫 `/health`에서 lazy 트리거(`app.py:71-74,110-115`, lifespan 미지정)이므로 성립하려면 app.py에 lifespan **신규 추가** 필요("재사용" 범위 넘는 serving 코드 변경). 이 의존이 "메시지 구현은 핸드오프"로만 처리돼 식별 불충분 → 결정 7에 boot 훅 추가를 의존으로 명시. 없으면 seed 누락은 여전히 stuck-unhealthy.
+- **[reviser 응답]** 해소. 실물 확인 — `app.py:31 FastAPI(...)` lifespan 미지정, 로드는 `state()`가 `"pred" not in _S`일 때 `_load_all` lazy 트리거(`:72-73`), `/health`(`:110-115`)가 state() 호출. 결정 7 B-R0-3에 **★서브항목 "boot 훅이 없어 자동 성립 안 함 (M2-2)"** 신규 추가 — "부팅 초입 즉시 종료"를 실현하려면 **app.py에 lifespan(startup) 훅을 신규 추가**해 alias 유무를 부팅 시 확인·없으면 즉시 비-0 종료해야 하며, 이는 "serving 이미지 재사용" 범위를 넘는 serving 코드 변경임을 정직히 의존으로 기록. 훅 미추가 시 seed 누락이 여전히 stuck-unhealthy로 남음도 명시. 검토요청 항목·개정이력 v4 반영.
+
+### minor
+
+- **결정 5 auditdb 볼륨 선택이 결정 2 M-3과 미연결** — 결정 5 검토요청(:100)이 여전히 "bind vs named"를 열어둠(M-3은 named 확정). 결정 5가 M-3 참조하도록 정리 + B2-2로 named 단독 불충분 반영.
+- **`[확인됨]` 인용문 "no pandas"가 실물과 어긋남** — 알려진 한계(:189)가 `Dockerfile:3` "no MLflow/pandas/xgboost"를 인용하나 `:15`가 `pandas==2.3.3` **설치**(drift용). 실질 주장(no xgboost)은 맞으나 pandas 부분 부정확 → 인용 손질.
+- **front-nginx→web/api `service_started` 과도기 502 미기재** — upstream 미준비 동안 502 창을 한계로 명시.
+- **grafana/renderer 기동·볼륨·depends_on 미재기술** — 결정 4는 prometheus 타깃만. grafana←prometheus, renderer←grafana depends·provisioning 볼륨 승계를 최소 한 줄 확인.
+
+- **[reviser 응답] (minor 4건 일괄)**
+  1. **결정 5 auditdb 볼륨 선택**: 검토요청(:100)의 "bind vs named 열어둠"을 종결 — 결정 5에 **★"소유권 처방은 결정 2(M-3/B2-2)에서 확정"** 추가, named든 bind든 소유권이 자동 정합 안 되며(named도 마운트 지점 미생성 시 root:root) 결정 2의 `mkdir + chown 10001` 선생성 처방을 따름을 명시.
+  2. **"no pandas" 인용 손질**: 알려진 한계에서 `Dockerfile:3` 주석 "no MLflow/pandas/xgboost"가 `:15`의 `pandas==2.3.3` 설치와 어긋남을 확인(직접 확인). 실질 주장을 "no xgboost/mlflow, GRU-only"로 정정하고 pandas는 drift용으로 실제 설치됨을 괄호주로 명시(주석 인용을 pandas 부분에서 신뢰 말 것).
+  3. **front-nginx 과도기 502**: 알려진 한계에 신규 항목 추가 — `service_healthy`로 기동 초기 502는 대체로 제거했으나 런타임 upstream 재시작·일시 unhealthy 동안 짧은 502 창이 가능함을 POC 한계로 명시(재시도 프록시 튜닝은 백로그).
+  4. **grafana/renderer 기동·볼륨**: 실물 확인 — `deploy/monitoring/docker-compose.yml:25 depends_on: [prometheus, renderer]`(grafana가 둘 다 의존), renderer 무의존, `:34-36` provisioning·dashboards 볼륨(RO). 서비스 맵에 신규 한 줄 **"모니터링 서브스택 기동·볼륨 승계"**로 depends 구조·프로비저닝 볼륨 승계·prometheus 타깃만 재배선을 명문화.
+
+### 구현 검증 항목 (라운드 2 추가 — 라운드 1 목록과 병합)
+
+- (신규) console-api alpine 이미지에서 `/console/versions?fs=vitals` healthcheck가 빈 상태에서 200 반환하는지 실측.
+- (신규) `/app/auditdb` chown 처방 적용 후 uid 10001로 sqlite create_all 성공하는지 실측.
+
+---
+
+**blocker: 2건** (B2-1, B2-2). blocker≠0 → **HOLD**. 둘 다 R1 보완이 새로 만든/못 본 결함 — B2-1은 B-1 처방이 console-api 실물(alpine·/health 부재)을 틀렸고, B2-2는 M-3 named-volume 처방이 Docker 소유권 동작과 어긋나 감사 부팅을 깬다. major 2·minor 4는 handoff 전 반영 권장.

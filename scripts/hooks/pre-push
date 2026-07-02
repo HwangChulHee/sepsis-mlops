@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# pre-push — push 전 로컬 CI 게이트.
+#
+# 이 저장소는 core.hooksPath=scripts/hooks 로 연결돼 있어(버전 관리됨), git push 직전에
+# scripts/tools/ci_local.sh 를 돌린다. 하나라도 실패하면 non-zero 로 push 를 막는다.
+# 긴급 우회: git push --no-verify
+#
+# 새 clone 후 1회만: git config core.hooksPath scripts/hooks
+exec "$(git rev-parse --show-toplevel)/scripts/tools/ci_local.sh"

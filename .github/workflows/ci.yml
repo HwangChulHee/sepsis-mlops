@@ -3,11 +3,11 @@ name: CI
 # 주제가 "배포해도 안 무너지는 운영 가능한 시스템"인 만큼, 회귀는 로컬 수동이 아니라
 # 여기서 자동으로 잡는다. 테스트는 하드 게이트, 린트는 ratchet(초기 정보성 → 잔여 정리 후 blocking).
 
+# 1차 게이트는 로컬 pre-push 훅(scripts/tools/ci_local.sh)이다 — push 전에 로컬에서 동일한
+# 검사를 돌려 실패하면 push 자체를 막는다. 여기(GitHub Actions)는 자동 실행하지 않고, 필요할
+# 때 Actions 탭에서 수동으로만 돌리는 백스톱으로 남긴다(로컬에 없는 kubeconform/hadolint 포함).
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

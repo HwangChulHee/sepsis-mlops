@@ -26,6 +26,9 @@ from sepsis import config as C
 from sepsis.replay.psv_source import PsvRowSource  # 재사용 로더(PSV→{col:None|float} 시간순)
 
 # 환자 풀은 프로세스 전역 1개(모든 User가 공유, 배타 배정). 소스는 setB 기본.
+# ❗단일 Locust 프로세스 전용: `--worker`(분산)로 돌리면 워커마다 이 모듈을 임포트해
+#   각자 풀을 갖고, 같은 seed면 같은 환자를 중복 배정 → 서버 hidden state causal 오염
+#   (M1/B1 위반). 분산이 필요하면 풀을 중앙화(공유 서비스)해야 한다 — POC는 단일 프로세스.
 _POOL_DIR = os.environ.get("LOADTEST_PATIENT_DIR", str(C.DATA_DIR / "training_setB"))
 _FEATURESET = os.environ.get("SERVE_FEATURESET", "vitals")
 _POOL = PatientPool(_POOL_DIR, shuffle=True, seed=int(os.environ.get("LOADTEST_SEED", "0")))

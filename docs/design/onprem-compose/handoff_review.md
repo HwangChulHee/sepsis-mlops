@@ -55,3 +55,47 @@
 ---
 
 **blocker: 1건** (B1). blocker≠0 → **HOLD**. B1은 §0 대체가 노린 핵심 산출물(읽을 수 있는 실패)을 구현자 선택에 따라 crash-loop으로 붕괴시키며 계약 테스트로도 안 걸림 — reviser가 (1) serving `restart:"no"` 확정, (2) 잘못된 서술 삭제, (3) CG-8 신설로 해소해야 진행 가능. major 2·minor 4 병행 보완 권장.
+
+---
+
+## 라운드 2 (redteam)
+
+- **대상 commit**: handoff v2 (R1 반영) · **검토일**: 2026-07-02
+- **핵심 질문**: R1 보완(B1·M1·M2)이 가짜 수렴 없이 해소됐나 / v2가 새로 만든 결함·아직 못 본 층이 있나
+- **판정**: **HOLD — blocker 1건** (major 0, minor 4)
+
+### PASS (R1 보완 실물 검증 + v2 새 처방)
+
+- **B1 완전 해소** — §2.1이 serving restart를 `restart: "no"` 단일값으로 재작성, "unless-stopped+종료코드 무시" 잔재 없이 삭제. 근거·트레이드오프 명시. §2.2 serving 행도 반영. **CG-8** 신설 — `restart ∉ {always,unless-stopped,on-failure}`. exit 3 후 컨테이너 정지·재기동 없음 = §0 "읽을 수 있는 실패" 보존. decisions.md 결정 7 미결(비재시작 종료코드 구분)을 핸드오프가 "restart 끄기로 해소"로 종결 — decisions.md:153이 위임했으므로 권위 충돌 없음.
+- **M1 해소 + 종료코드 전파 온전** — `ENTRYPOINT ["/bin/sh","/app/deploy/serving-entrypoint.sh"]` 확정, 기존 `deploy/Dockerfile:36`과 형태 정합. `#!/bin/sh` 병기. exit 3 전파 온전(`/bin/sh script`가 exit 3 그대로 전파), `exec uvicorn`이 sh(PID1)→uvicorn 교체로 SIGTERM graceful 보존. §3.1 번역괴리 노트 추가.
+- **M2 해소** — CG-5가 정확성 강제로 확장: console-api·serving·**console-web(8080,`/`)·front-nginx(`/`)**. 실물 대조(console-web `listen 8080`·SPA 폴백, api.py `/health` 부재) 정합. SM 한계 명시.
+- **entrypoint 테스트 §3.1 실현가능** — subprocess `sh entrypoint.sh`, 빈 ARTIFACTS_DIR→returncode==3+stderr assert, alias 케이스는 PATH 앞 가짜 uvicorn으로 exec 도달 확인. spec-writer가 쓸 만큼 구체적.
+- **build context=루트 무해** — 두 Dockerfile 모두 원래 `COPY src/`라 context=루트 요구. monitoring은 pre-built image라 영향 없음.
+- **불변식 보존(restart/entrypoint 변경분)** — restart:"no"는 재기동 정책일 뿐 in-process 핫스왑과 무관. entrypoint 인자·PID1 exec 보존.
+
+### blocker (1건)
+
+**B2-R2 / §2.5 auditdb `chown 10001` 처방이 compose `user:`/USER 없이 내부 모순 — 설계가 "반드시 확정"하라 위임한 artifacts 쓰기권한 정합이 통째로 누락**
+
+- **문제**: §2.5(handoff:102)는 `Dockerfile.api`에서 `/app/auditdb`를 `chown 10001`로 선생성해 named volume이 **uid 10001** 소유권을 상속하게 하라 처방. 그러나 핸드오프 어디에도 `user: "10001"`이 없고(전체 grep 0건), `Dockerfile.api`·`deploy/Dockerfile` 둘 다 **USER 지시어 없음**(실물 확인 — 빌드·런타임 root 기본). 두 갈래 모두 미해결:
+  - **(a) root 실행(문자 그대로)**: root라 chown 10001은 죽은 처방(root는 아무 데나 씀), 결정 6 "비-root" 조용히 위반, B2-2가 상정한 uid 10001 전제 소멸.
+  - **(b) uid 10001 실행**: `user: "10001"` 명시 필요한데 없음. 게다가 **artifacts bind mount 호스트측 소유권 정합**(`chown 10001 ./deploy/artifacts`)이 필요한데 §2.2 volumes·§2.5 운영노트 어디에도 없음 → uid 10001이 승인 시 심링크 alias 스왑(`bundle.py set_alias`→`os.replace`)을 host-owned 폴더에서 시도 → **permission denied** → 승인 전파·**번들 원자성 불변식 붕괴**(SM-7 조용히 깨짐).
+- **근거**: handoff:102(유일하게 10001 상정, `user:` 부재) · `Dockerfile.api`·`deploy/Dockerfile` USER 부재(실물) · **설계 위임 미이행**: decisions.md:69(결정 2 "artifacts 쓰기권한=필수 임계 경로 … 호스트 소유권+`user:` 정합"), decisions.md:125(결정 6 "비-root 택하면 `user:` 정합을 **핸드오프에서 반드시 확정**"). 핸드오프는 auditdb 절반(chown)만 옮기고 artifacts host-chown+`user:` 결정을 드롭. 이건 SM 항목 아님 — "어떤 uid로 돌리고 host chown하는가"의 **결정**은 핸드오프 몫(WSL2 uid 매핑 검증만 SM). artifacts 쓰기권한 커버 SM도 없음(SM-5=auditdb only, SM-1=심링크 해석뿐, SM-7=성공 가정).
+- **chown 순서는 무문제**: `Dockerfile.api` USER 없어 chown이 root로 실행되는 순서 자체는 정상(대조: `console-web/Dockerfile:18-20` USER root→RUN→USER 101). 결함은 순서가 아니라 **어느 uid로 돌리는지·host-chown 누락**.
+- **제안**: §2.2/§2.5에 확정 — (1) serving·console-api compose `user:` 명시(POC root면 §2.5 chown 삭제+결정 6 "비-root 유보" 명기; 비-root면 `user: "10001"`). (2) 비-root면 decisions.md:69 **필수** artifacts host-chown(`chown 10001 ./deploy/artifacts` 또는 seed uid=10001 정합)을 §2.2/운영노트 이관. (3) §2.5 chown 존치/삭제를 선택과 정합. auditdb·artifacts 두 임계 쓰기 경로가 같은 uid 전제 위에 일관되도록.
+- **[reviser 응답]** 해소. **실물 재확인**: `deploy/Dockerfile`·`deploy/k8s/console/Dockerfile.api` 둘 다 **USER 지시어 없음(=root 기본)**, `console-web/Dockerfile`만 `USER 101`(비-root, artifacts·auditdb 미접근) — grep 직접 확인. **POC 스탠스=비-root `user: "10001:10001"` 확정** (권장안 채택): 설계가 이미 uid 10001 chown을 처방(결정 2 M-3·결정 5 B2-2)했고 K8s `runAsUser 10001`·`fsGroup 10001`과 정합하므로 root보다 이 방향이 일관. **(1)** §2.2 serving·console-api 행에 `user: "10001:10001"` 명시 + **★비-root 실행 전용 불릿** 추가(두 임계 쓰기 경로·console-web 예외 서술). **(2)** decisions.md:69 필수 artifacts host-chown(seed 후 `chown -R 10001:10001 ./deploy/artifacts` 또는 seed를 uid 10001로)을 §2.2 volumes 불릿 + §2.5 운영노트에 이관 — alias 스왑 permission denied·번들 원자성 붕괴 방지. **(3)** §2.5 auditdb chown 10001 **존치**로 정합(`user: "10001"`과 짝) + "현재 `Dockerfile.api:25`엔 auditdb·chown 없음, 이 줄 추가" 명기. **(4)** **CG-9 신설**(§3.2) — serving·console-api `user:` uid=10001 정적 파싱 강제(번들 원자성·감사 append-only 두 불변식 가드). **(5)** SM-5를 "쓰기권한 정합 두 경로"로 확장 — auditdb create_all + artifacts uid 10001 alias 스왑 실측. §0 갱신 예약엔 결정 7 restart 확정분도 병기(m8).
+
+### minor (4건)
+
+- **m5 / restart:"no" 복구 절차 미문서화** — seed 전 `up`으로 serving exit 3 정지 후 seed해도 자동 복구 안 됨. entrypoint 메시지(handoff:59)는 "seed first"만, "그 후 `docker compose up -d serving`(수동 재기동)" 없음. 정상 흐름(seed는 up 전)에선 안 걸리는 off-nominal 경로라 minor — 메시지 끝 재기동 한 줄 권장.
+- **[reviser 응답]** 반영. §2.1 entrypoint 스크립트 stderr에 `docker compose up -d serving`(수동 재기동, restart:"no"라 자동 복구 안 됨) echo 한 줄 추가 + §2.5 운영노트 "seed 미완 복구 (m5)" 불릿 추가.
+- **m6 / CG-1 `mem_limit≥1Gi` 단위 함정** — compose `mem_limit`은 `1g`/`1024m`/바이트 문법이고 **k8s식 `1Gi`는 유효 문법 아님**. 구현자가 `mem_limit: 1Gi`(handoff:78 문자대로)로 쓰면 `up` 거부 가능. CG-1은 "≥1Gi"를 문자 비교 말고 바이트 정규화 비교해야 하고, 핸드오프는 compose 문법 예(`1g`) 병기 안전.
+- **[reviser 응답]** 반영. §2.2 serving 행에 `mem_limit: "2g"` 병기 + "compose 문법 — k8s식 `1Gi` 무효" 명기, 자원제한 불릿에 **compose 문법 주의** 서브불릿 추가(docker `RAMInBytes`는 1024 기반이라 `"1g"`=정확히 1Gi=여유 0 → reload 2배 창 여유 위해 `"2g"` 권장). §3.2 **CG-1을 "바이트로 정규화해 ≥1Gi(1073741824B) 비교, 문자 `"1Gi"` 비교 금지"로 재서술**.
+- **m7 / CG-5 front-nginx `/` 검사 준-공허** — 모든 healthcheck URL이 `/` 포함이라 front-nginx "엔드포인트 `/`" 파싱은 사실상 항상 통과(가드 미미). console-web은 `8080` 포트 검사가 실질 가드라 유효하나 front-nginx엔 포트 검사 없어 회귀 방지력 약함(비-게이트라 파급 없음).
+- **[reviser 응답]** 반영. §3.2 CG-5 front-nginx 서브불릿에 **포트 80 검사 추가**(실질 가드)하고 "`/` 준-공허·front-nginx는 비-게이트라 파급 없음"을 명시 주석.
+- **m8 / decisions.md:153 문구 잔류** — 결정 7 미결이 아직 `restart(unless-stopped)`·"POC는 restart만"으로 서술. 핸드오프가 restart:"no"로 종결·권위이나 §0 갱신 예약은 M2-2만 걸고 restart 해소분은 안 걸었음. 통과 후 reviser가 결정 7에 restart:"no" 확정도 함께 반영 권장.
+- **[reviser 응답]** 반영. §0 "decisions.md 반영 예약"을 재작성 — (a) M2-2 entrypoint 대체 + **(b) 결정 7 미결(decisions.md:153) `restart(unless-stopped)`→`restart: "no"` 확정** 두 갱신을 함께 예약. handoff.md 안에서 예약만; decisions.md는 이번에 미수정(통과 후 별도).
+
+---
+
+**blocker: 1건** (B2-R2). blocker≠0 → **HOLD**. R1의 B1·M1·M2는 실물 대조로 **정확히 해소**(가짜 수렴 아님). 남은 blocker는 v2가 새로 만든 게 아니라 **R1이 못 본 층** — §2.5 chown 10001이 `user:` 결정과 짝지어지지 않아 내부 모순이고, 설계(결정 2·6)가 "핸드오프에서 반드시 확정"하라 위임한 artifacts 쓰기권한 정합이 통째로 누락돼 임계 쓰기 경로(alias 스왑=번들 원자성 불변식)를 위협. reviser가 (1) `user:` 확정, (2) 비-root면 artifacts host-chown 이관, (3) §2.5 chown 정합으로 해소해야 진행 가능.

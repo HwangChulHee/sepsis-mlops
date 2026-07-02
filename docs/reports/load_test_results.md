@@ -115,4 +115,4 @@ PYTHONPATH=src:. uv run locust -f loadtest/locustfile.py --host http://localhost
 bash loadtest/results/sweep.sh
 # SM-3: 지속 부하 중 curl -X POST http://localhost:8000/admin/reload + docker stats 관측
 ```
-원자료: `loadtest/results/n{N}_stats.csv`, `sm3_n200_stats.csv`, `sweep.log`, `sm3_locust.log`.
+원자료(커밋됨): `loadtest/results/n{N}_stats.csv`·`_stats_history.csv`, `sm3_n200_stats.csv`, `summary.tsv`, `sweep.sh`. (Locust 실행 로그 `sweep.log`·`sm3_locust.log`는 `*.log` gitignore로 미커밋 — 재현 시 재생성.)

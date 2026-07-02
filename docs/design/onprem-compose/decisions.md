@@ -2,7 +2,7 @@
 
 > **설계 근거**: 운영 엔지니어 포지셔닝 자산(동서메디케어/제조·의료 온프렘 배포). "실제 병원 배포는 온프렘 컨테이너 + EMR 통합이 본체고, K8s 오케스트레이터는 이 부하(시간당 수백)엔 과하다"는 판단을 실물로 구현한다. K8s 자산(`deploy/k8s/`)은 폐기가 아니라 "써보고 과하다고 판단한 증거"로 병존한다.
 > **워크플로우·출처등급**: `CLAUDE.md`. 검토(`docs/design/onprem-compose/review.md`) 통과 후 핸드오프로. 출처등급: `[확인됨]`(코드/파일 실측) · `[우리 결정]`(설계 선택) · `[검증 필요]`(미확인 가정).
-> **상태**: 설계부 v5 — R3 반영(front-nginx가 `service_healthy`로 게이트하는 console-web에 healthcheck 미명세된 동종 함정 정정 + 기동 체인 번호 서술과 M-2 완화의 내부모순 해소; blocker 1·major 1·minor 2 해소).
+> **상태**: 설계부 v5 — R3 반영(front-nginx가 `service_healthy`로 게이트하는 console-web에 healthcheck 미명세된 동종 함정 정정 + 기동 체인 번호 서술과 M-2 완화의 내부모순 해소; blocker 1·major 1·minor 2 해소). **구현·SM 실측 종결** — 리포트 `docs/reports/onprem_compose_smoke.md`(SM-1·2·4·5·6·7 PASS, SM-3은 (나) 이관). ★실측이 계약 밖 런타임 버그 1건 적발: healthcheck의 `localhost`가 `::1`(IPv6) 우선 해석되나 uvicorn/nginx는 IPv4만 리슨 → busybox wget 폴백 부재로 미기동 → **`127.0.0.1` 명시로 수정**, 회귀 가드 **CG-11** 승격(아래 CG의 `localhost` 예시는 실제 `127.0.0.1`로 구현됨).
 > **개정 이력**
 > - v1: 초안 (설계부). 설계 핑퐁 결정 반영 — 스코프(가/나 분리), 공유 볼륨(bind mount), 네트워킹(front nginx + serving 직접), 모니터링 타깃, 감사DB(sqlite), 보안 이식 수준, 기동 순서, featureset 단일.
 > - v2: 예열 라운드(R0) — **B-R0-1**(Compose 자원 제한 미결 + `deploy.resources`는 `docker compose up`에서 무시됨 → BLAS 캡 오정렬로 thrash 아티팩트 재발; **결정 9 신설**), **B-R0-2**(reload 2배 메모리 vs mem_limit 미결 → OOM 위험; 결정 9에 흡수), **B-R0-3**(serving은 seed 없으면 graceful 아님·크래시루프 — console-api는 graceful 확인; 결정 7 보완), **B-R0-4**(console `CONSOLE_FEATURESETS` 순회 vs serving 단일 featureset 불일치; 결정 8 보완) 반영. 무혐의 확정: console-web ConfigMap = baked conf 동일(SPA 폴백뿐), SERVE_URL이 유일 localhost 기본, console-api reconcile은 빈 상태 no-op graceful.

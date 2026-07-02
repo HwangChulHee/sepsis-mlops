@@ -21,7 +21,7 @@
 | **SM-7** | 전파 사슬 (링크별) | ✅ PASS | 쓰기권한(음성→chown 후 양성)·`/admin/reload` 핫스왑(`{"reloaded":true}`)·`SERVE_URL` 링크·front-nginx 라우팅·실추론 `p=0.467` 전부 확인 [실측] |
 | 부가 | 모니터링·라우팅 | ✅ | prometheus `serving:8000` `UP=1`, front-nginx `/`→web·`/console/`→api [실측] |
 
-**SM-3 (부하 중 reload 2배 OOM) 미실행** — 부하 드라이버가 필요해 **(나) 부하테스트 영역**. `mem_limit=2g` **적용**은 SM-2에서 확인됐고, 2배 창에서 OOM 안 나는지는 부하 하에서만 드러난다 [우리 결정].
+**SM-3 (부하 중 reload 2배 OOM) 미실행** — 부하 드라이버가 필요해 **(나) 부하테스트 영역**. `mem_limit=2g` **적용**은 SM-2에서 확인됐고, 2배 창에서 OOM 안 나는지는 부하 하에서만 드러난다 [우리 결정]. → **후속 종결**: (나) 부하테스트에서 N=200 지속 중 reload 트리거 → OOM 없음(peak ~276 MiB ≪ 2g, OOMKilled=false) **PASS**. 리포트 `docs/reports/load_test_results.md` §5.
 
 ## 🐛 실측이 잡은 버그 — IPv6 healthcheck 함정 (커밋 `6ab2c8c`)
 

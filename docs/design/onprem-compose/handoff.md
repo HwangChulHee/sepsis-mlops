@@ -3,7 +3,7 @@
 > **입력**: `docs/design/onprem-compose/decisions.md` (review-loop 4R 통과, blocker 0). **이 핸드오프가 설계→구현 번역의 권위**이며, 충돌 시 실물 코드가 최종 판정.
 > **목적**: 결정 1~9를 "무엇을 어느 파일에 만드는가"로 번역한다. spec-writer는 **이 문서만 보고** TDD RED를 쓴다(src/ 미열람 원칙 유지). 단 이 핸드오프는 src/ 실물 시그니처·경로를 이미 대조해 기입했다.
 > **출처등급**: `[확인됨]`(코드 대조) · `[핸드오프 결정]`(설계를 구현으로 좁힌 선택) · `[검증 필요]`(런타임 실측=스모크).
-> **상태**: 핸드오프 v4 — 핸드오프 검토 R3 반영(PASS, major·minor 하드닝).
+> **상태**: 핸드오프 v4 — 핸드오프 검토 R3 반영(PASS, major·minor 하드닝). **구현·SM 실측 완료** — 리포트 `docs/reports/onprem_compose_smoke.md`. ★실측 정정: 아래 healthcheck의 `localhost`는 `::1`(IPv6) 우선 해석 함정이라 **실제 구현은 `127.0.0.1`**로 고정(busybox wget IPv6 폴백 부재). 회귀 가드 CG-11 추가(`tests/deploy/test_compose_contract.py`).
 
 ### 개정 로그
 - **v4 (R3 반영, 2026-07-02)** — R3은 **blocker 0 = PASS**. 남은 major 1·minor 1을 spec-writer RED 완성·운영노트 정확화 목적으로 하드닝(통과 저지 아님).

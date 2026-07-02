@@ -50,3 +50,5 @@ ICU 환자 시계열로 패혈증을 조기 예측하는 MLOps 프로젝트. Phy
 
 ## 단계
 풀 학습 = **H1**(전처리·피처·분할) → **H2**(학습+ablation) → **H3**(평가·누수검증). 운영 = **H4**(서빙·드리프트·재학습) — 구현 완료, MLOps 루프 폐쇄. 운영 콘솔 = **console**(R1~R3 배포 승인·버전·감사) — 진행 중.
+
+온프렘 배포 = **온프렘 Compose 통합 스택(가)** — 구현·SM 실측 완료(`docs/design/onprem-compose/`, 리포트 `docs/reports/onprem_compose_smoke.md`). 부하테스트 = **Locust (나)** — 드라이버·실측 완료, 서버 천장 ~700rps·병원 700× 여유·SM-3 종결(`docs/design/load-test/`, 리포트 `docs/reports/load_test_results.md`).

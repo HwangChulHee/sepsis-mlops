@@ -9,7 +9,9 @@
 # Result: data/raw/training_setA/ (20,336 patients) + training_setB/ (20,000) = 40,336.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# repo root = 이 스크립트(scripts/data/download_data.sh)에서 두 단계 위. 예전엔 `/..`(=scripts)
+# 라 data 가 scripts/data/raw 로 잘못 받혔다(config 는 repo root/data/raw 를 기대).
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RAW="$ROOT/data/raw"
 S3="https://physionet-open.s3.amazonaws.com"
 PREFIX="challenge-2019/1.0.0/training"

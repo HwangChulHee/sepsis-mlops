@@ -48,19 +48,24 @@ linux_node() {
 # hermetic 스위트(모델/데이터 캐시 불필요)는 항상 돈다. serve/bench 는 학습된 XGB 모델
 # 아티팩트가 있을 때만 — 없는데 돌리면 오프라인에서 무조건 실패하기 때문(자동 감지→skip).
 # 커버리지(--cov·fail_under)는 CI 관심사라 로컬 게이트에선 빼고, 품질 바는 mutation 이 담당한다.
-HERMETIC=(tests/console tests/console_prep tests/replay tests/data tests/drift tests/eval tests/retrain)
+# bench 는 합성 픽스처(BenchResult 계약 검증)라 모델 불필요 → hermetic 에 포함.
+HERMETIC=(tests/console tests/console_prep tests/replay tests/data tests/drift tests/eval tests/retrain tests/bench)
 header "test — pytest (hermetic)"
 if run "deps: uv sync --frozen" uv sync --frozen; then
-  run "pytest (hermetic 185)" uv run pytest -q "${HERMETIC[@]}"
+  run "pytest (hermetic)" uv run pytest -q "${HERMETIC[@]}"
 else
   fail "pytest (deps 동기화 실패로 미실행)"
 fi
 
-# serve/bench — 학습된 모델 아티팩트(mlruns 의 xgboost_*.ubj)가 있을 때만 포함.
-if [ -n "$(find mlruns -name 'xgboost_*.ubj' -print -quit 2>/dev/null)" ]; then
-  run "pytest (serve/bench, 아티팩트 감지)" uv run pytest -q tests/serve tests/bench
+# serve 는 XGB·GRU 서빙 앱을 실제로 띄운다. XGB 아티팩트가 있으면 XGB serve 를 돌리고,
+# GRU 번들(deploy/artifacts/gru_vitals/model.pt)이 있을 때만 [gru] 케이스까지 포함한다.
+if [ -z "$(find mlruns -name 'xgboost_*.ubj' -print -quit 2>/dev/null)" ]; then
+  skip "serve (XGB 모델 아티팩트 없음 — 학습 후 자동 포함)"
+elif [ -f deploy/artifacts/gru_vitals/model.pt ]; then
+  run "pytest (serve, XGB+GRU)" uv run pytest -q tests/serve
 else
-  skip "serve/bench (학습 모델 아티팩트 없음 — 학습 후 자동 포함)"
+  run "pytest (serve, XGB만·[gru] 제외)" uv run pytest -q tests/serve -k "not gru"
+  skip "serve [gru] 케이스 (GRU 번들 없음 — GRU 학습 시 자동 포함)"
 fi
 
 # ── 2. lint — ruff ───────────────────────────────────────────────────────────

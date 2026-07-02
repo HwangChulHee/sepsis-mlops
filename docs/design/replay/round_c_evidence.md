@@ -96,7 +96,7 @@ Grafana `/render` API 로 "Per-patient risk (latest p)" 패널을 PNG 로 렌더
 - `docs/reports/replay/replay_gauge_series.txt` — 환자별 Gauge 3 시계열 스냅샷.
 - `docs/reports/replay/replay_p000018_gauge_curve.tsv` — p000018 Gauge 시간 궤적 40 표본(수동 폴링, 위험도 선 raw).
 - `docs/reports/img/replay_per_patient_risk.png` — **Grafana 패널 실렌더**(3명 위험도 선, §2.5).
-- `deploy/monitoring/{docker-compose.yml,prometheus.yml}` — 재현용 로컬 모니터링 스택.
+- `deploy/monitoring/{docker-compose.yml,prometheus.host.yml}` — 재현용 로컬 모니터링 스택(호스트 uvicorn 서빙을 `host.docker.internal`로 스크랩; `prometheus.yml`은 통합 Compose 스택 전용으로 분리됨).
 - 이 문서.
 
 ## 5. 결론

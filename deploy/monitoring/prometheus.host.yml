@@ -1,0 +1,17 @@
+# 스탠드얼론 모니터링 스택(`deploy/monitoring/docker-compose.yml`) 전용 Prometheus 설정.
+# 서빙이 **호스트 uvicorn**(127.0.0.1:8000)으로 돌 때 컨테이너→호스트를 host.docker.internal 로 스크랩.
+# (리플레이 데모·라운드 (다) 증거 재현용 — docs/design/replay/round_c_evidence.md.)
+#
+# ⚠️ 통합 Compose 스택은 이 파일이 아니라 `prometheus.yml`(serving:8000 서비스명 DNS)을 쓴다.
+#    serving 이 컨테이너면 host.docker.internal 이 아니라 서비스명으로 도달해야 하기 때문.
+global:
+  scrape_interval: 2s
+  evaluation_interval: 2s
+
+scrape_configs:
+  - job_name: sepsis-serving
+    metrics_path: /metrics
+    static_configs:
+      # 서빙은 호스트(uvicorn 127.0.0.1:8000). 컨테이너→호스트는 host.docker.internal
+      # (docker-compose.yml 의 extra_hosts: host.docker.internal:host-gateway 로 배선).
+      - targets: ["host.docker.internal:8000"]

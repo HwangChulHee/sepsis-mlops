@@ -1,4 +1,6 @@
-# 통합 Compose 스택용 Prometheus 설정 — serving 컨테이너의 /metrics 를 스크랩한다.
+# 통합 Compose 스택(deploy/docker-compose.yml)용 Prometheus 설정 — serving 컨테이너의 /metrics 스크랩.
+# ⚠️ 스탠드얼론 모니터링(deploy/monitoring/docker-compose.yml, 호스트 uvicorn 서빙)은 이 파일이 아니라
+#    `prometheus.host.yml`(host.docker.internal)을 쓴다 — 서비스명 serving 은 그 스택에 없기 때문.
 # 리플레이 데모는 빠르게 변하므로 scrape_interval 을 짧게(2s) — Gauge 곡선을 촘촘히 표본한다.
 # (운영 기본은 15s 권장; 이건 데모/증거용.)
 global:

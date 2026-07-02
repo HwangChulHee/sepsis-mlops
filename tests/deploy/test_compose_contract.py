@@ -335,3 +335,38 @@ def test_cg10_console_api_audit_db_url_points_to_auditdb_volume():
     assert url.startswith("sqlite:////app/auditdb/"), (
         f"CONSOLE_AUDIT_DB_URL 이 sqlite:////app/auditdb/ 를 가리켜야 함. got={url!r}"
     )
+
+
+# ------------------------------------------------------------------- CG-11
+
+def test_cg11_healthchecks_use_ipv4_loopback_not_localhost():
+    """CG-11: 모든 healthcheck 는 127.0.0.1 을 쓰고 localhost 를 쓰지 않는다(SM IPv6 회귀 가드).
+
+    실측(스모크) 발견: localhost 는 /etc/hosts 상 ::1(IPv6) 우선 해석인데 uvicorn·nginx 는
+    IPv4(0.0.0.0)만 리슨 → busybox wget 이 IPv6 실패 후 폴백 안 함 → connection refused →
+    unhealthy → front-nginx 게이트 미충족 → 스택 미기동(커밋 6ab2c8c, docs/reports/onprem_compose_smoke.md).
+    CG-5 는 포트·엔드포인트 문자열만 봐 localhost/127.0.0.1 을 구별 못 한다 — 그 런타임 함정을
+    정적 가드로 승격해 회귀를 막는다(스모크→계약 피드백). CG-2 가 healthcheck-게이트 교훈을
+    규칙으로 굳힌 것과 같은 계열.
+    """
+    compose = _load_yaml(COMPOSE)
+    services = _services(compose)
+
+    localhost_violations = []
+    missing_ipv4 = []
+    for name, svc in services.items():
+        if not isinstance(svc, dict) or "healthcheck" not in svc:
+            continue
+        hc = _healthcheck_test_str(svc)
+        if "localhost" in hc:
+            localhost_violations.append(f"{name}: {hc!r}")
+        if "127.0.0.1" not in hc:
+            missing_ipv4.append(f"{name}: {hc!r}")
+
+    assert not localhost_violations, (
+        "healthcheck 가 localhost 를 씀(IPv6 ::1 우선 → busybox wget 폴백 부재로 스택 미기동). "
+        "127.0.0.1 로 교체할 것: " + "; ".join(localhost_violations)
+    )
+    assert not missing_ipv4, (
+        "healthcheck 가 127.0.0.1(IPv4 루프백)을 명시해야 함: " + "; ".join(missing_ipv4)
+    )

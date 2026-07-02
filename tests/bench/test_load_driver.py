@@ -37,8 +37,6 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-import pytest
-
 # --- 합성 .psv fixture 헬퍼 -------------------------------------------------
 # PhysioNet/CinC PSV: 파이프(|) 구분, 첫 줄 헤더, 결측은 "NaN" 리터럴 셀.
 # featureset "vitals"(9컬럼) 중 대표 컬럼을 사용한다 — 정확한 9개 컬럼명은
@@ -80,9 +78,9 @@ def _make_pool_dir(tmp_path: Path, k: int) -> Path:
 # ===========================================================================
 def test_t1_claim_returns_distinct_files():
     """연속 claim() N회 → 서로 다른 파일 N개(중복 0)."""
-    from loadtest.patient_pool import PatientPool
-
     import tempfile
+
+    from loadtest.patient_pool import PatientPool
 
     with tempfile.TemporaryDirectory() as tmp:
         d = _make_pool_dir(Path(tmp), k=10)
@@ -99,9 +97,9 @@ def test_t1_claim_returns_distinct_files():
 # ===========================================================================
 def test_t2_no_repeat_beyond_pool_size():
     """풀 크기 K면 claim은 최대 K회 성공 후 None — 이미 claim된 파일 재claim 안 됨."""
-    from loadtest.patient_pool import PatientPool
-
     import tempfile
+
+    from loadtest.patient_pool import PatientPool
 
     K = 7
     with tempfile.TemporaryDirectory() as tmp:
@@ -123,9 +121,9 @@ def test_t2_no_repeat_beyond_pool_size():
 # ===========================================================================
 def test_t3_exhaustion_returns_none_not_exception():
     """풀 소진 후 claim() → None(예외 아님)."""
-    from loadtest.patient_pool import PatientPool
-
     import tempfile
+
+    from loadtest.patient_pool import PatientPool
 
     K = 3
     with tempfile.TemporaryDirectory() as tmp:
@@ -144,9 +142,9 @@ def test_t3_exhaustion_returns_none_not_exception():
 # ===========================================================================
 def test_t4_thread_safe_no_double_claim():
     """여러 스레드 동시 claim해도 같은 파일이 두 번 안 나옴(중복 0)."""
-    from loadtest.patient_pool import PatientPool
-
     import tempfile
+
+    from loadtest.patient_pool import PatientPool
 
     K = 200
     n_threads = 16

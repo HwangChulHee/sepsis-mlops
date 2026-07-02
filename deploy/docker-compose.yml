@@ -38,7 +38,9 @@ services:
       - ./deploy/artifacts:/app/deploy/artifacts   # console-api 와 공유(bind mount, RO 성격)
     healthcheck:
       # slim 엔 curl/wget 없음 → 이미지 내장 python 으로(B-1). /health 200 이면 healthy.
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      # ★127.0.0.1 명시(SM 실측): localhost 는 /etc/hosts 상 ::1(IPv6) 우선인데 uvicorn/nginx 는
+      #   IPv4(0.0.0.0)만 리슨 → busybox wget 은 IPv6 실패 시 폴백 안 해 connection refused.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status==200 else 1)"]
       start_period: 330s          # ≥ 300-trial 캘리브레이션 예산(m2) — 창 내 실패는 unhealthy 미집계.
       timeout: 5s
       interval: 10s
@@ -66,7 +68,7 @@ services:
     healthcheck:
       # alpine — busybox wget. /console/versions?fs=vitals 는 빈 상태에서도 200(B2-1).
       # exec-form 이라 ?fs=vitals 는 리터럴 전달(셸 미경유, m3).
-      test: ["CMD", "wget", "-qO-", "http://localhost:8000/console/versions?fs=vitals"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/console/versions?fs=vitals"]
       start_period: 20s
       timeout: 5s
       interval: 10s
@@ -79,7 +81,7 @@ services:
     container_name: sepsis-console-web
     healthcheck:
       # base=nginx-unprivileged:alpine(uid 101, listen 8080). / 는 SPA 폴백이라 항상 200(B3-1).
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
       start_period: 5s
       timeout: 5s
       interval: 10s
@@ -99,7 +101,7 @@ services:
         condition: service_healthy   # ← B3-1: console-web healthcheck 명세로 게이트 성립
     healthcheck:
       # alpine nginx — busybox wget. / 는 라우팅으로 항상 응답(포트 80 이 실가드, m7).
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
       start_period: 5s
       timeout: 5s
       interval: 10s

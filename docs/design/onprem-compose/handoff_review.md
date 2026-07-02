@@ -99,3 +99,35 @@
 ---
 
 **blocker: 1건** (B2-R2). blocker≠0 → **HOLD**. R1의 B1·M1·M2는 실물 대조로 **정확히 해소**(가짜 수렴 아님). 남은 blocker는 v2가 새로 만든 게 아니라 **R1이 못 본 층** — §2.5 chown 10001이 `user:` 결정과 짝지어지지 않아 내부 모순이고, 설계(결정 2·6)가 "핸드오프에서 반드시 확정"하라 위임한 artifacts 쓰기권한 정합이 통째로 누락돼 임계 쓰기 경로(alias 스왑=번들 원자성 불변식)를 위협. reviser가 (1) `user:` 확정, (2) 비-root면 artifacts host-chown 이관, (3) §2.5 chown 정합으로 해소해야 진행 가능.
+
+---
+
+## 라운드 3 (redteam) — 수렴 판정
+
+- **대상 commit**: handoff v3 (R2 반영) · **검토일**: 2026-07-02
+- **핵심 질문**: R2 보완(B2-R2·m6)이 가짜 수렴 없이 해소됐나 / v3 새 처방(user 10001·host-chown·CG-9) 자체 결함 / 남은 blocker가 정말 0인가
+- **판정**: **blocker: 0건 — PASS** (major 1, minor 1)
+
+### PASS (v3 새 처방 실물 검증 — 가짜 수렴 아님)
+
+- **B2-R2 `user: "10001:10001"` 실물 정합** — §2.2 serving·console-api 두 행에 명시 확정. K8s 정합 근거 `console-api.yaml:37 fsGroup:10001`·`:53 runAsUser:10001` 실물 확인. 두 Dockerfile USER 부재(root 기본)·`console-web/Dockerfile:20 USER 101` 실물 확인. 문자 단위 일치.
+- **serving `/app` 쓰기 경로 없음 — uid 10001 안전(핵심 검증)** — `app.py`는 artifacts **읽기만**(`_resolve_alias`→`load_bundle_from_dir`, `/admin/reload`도 재해석+로드뿐 write 없음). `metrics.py`는 인-프로세스 레지스트리만(`PROMETHEUS_MULTIPROC_DIR` grep 0건). `--reload` 없음, 포트 8000 non-priv. serving은 artifacts **읽기 권한만** 필요 → §2.2 "artifacts 읽기" 처방 정확(과잉 권한 없음). `__pycache__` write 실패는 non-fatal.
+- **console-api 임계 쓰기 두 경로 = artifacts + auditdb 뿐** — (1) alias 스왑 `bundle.py:25-39 set_alias`가 artifacts ROOT에 `.swap` 심링크+`os.replace` → artifacts write 필요 → host-chown 정당. (2) 감사 `service.py:30`→`audit.py:56 create_all`이 `/app/auditdb` write → auditdb chown 정당. 그 외 write 없음. 두 처방이 실제 쓰기 지점 정확히 커버.
+- **m6 mem_limit 단위 정정 정확** — Docker `RAMInBytes`는 `g`를 1024³ 파싱 → `"1g"`=정확히 1Gi. "여유 0 → reload 2배 위해 `"2g"` 권장" 정확. CG-1 "바이트 정규화 후 ≥1073741824B, 문자 `1Gi` 비교 금지" 관측가능.
+- **CG-9 파싱 계약 무모순** — serving·console-api `user:` 첫 필드 uid==10001 정적 파싱. CG-8·다른 CG와 키 충돌 없음. console-web은 uid 101이라 CG-9 대상 제외 → §2.2 console-web `user:` 부재와 정합.
+- **불변식 4개 보존** — 예측(read-only, uid 무관)·번들 원자성(`os.replace`+host-chown으로 permission denied 제거)·감사 append-only(auditdb chown으로 create_all 성공)·무중단 핫스왑(심링크 재해석, restart:"no"·user와 직교). 변경 총합이 어느 하나도 훼손 안 함.
+- **§4·§5 v3 반영 정합** — SM-5가 "쓰기권한 두 경로"로 확장. §5 스코프(파이썬 코드 변경 금지)는 compose-level `user:` 처방과 무모순(파이썬 0줄). 개정로그·면접 문장 v3 일치, 옛 잔재 없음.
+
+### major (1건)
+
+- **CONSOLE_AUDIT_DB_URL 미가드 — uid 10001 전환이 "잘못된 경로"를 "부팅 크래시"로 승격** — §2.2가 env `CONSOLE_AUDIT_DB_URL=sqlite:////app/auditdb/...`를 처방하나 CG-1~9 어디에도 이 env 존재를 강제하는 계약 없음. env 누락 시 `service.py:30`이 `config.py:30` 기본 `sqlite:///{VAR_DIR}/...`(=`/app/var`)로 폴백 → `/app` root 소유 → **uid 10001이 `/app/var` mkdir 불가 → `audit.py:56 create_all` permission denied → import 단계 부팅 크래시**. root(v2 이전)면 var/ 생성돼 비영속에 그쳤을 문제가 uid 10001에서 하드 크래시로 승격. CG-3(SERVE_URL localhost 금지)와 동일 클래스인데 감사 쪽만 무가드. **값은 §2.2에 정확히 명시돼 spec-준수 구현은 정상 동작 → blocker 아니라 회귀 가드 공백(major)**. 제안: CG-3와 대칭 CG 추가(console-api env에 `CONSOLE_AUDIT_DB_URL` 존재하고 `/app/auditdb` 가리킴).
+- **[reviser 응답]** 반영. **실물 확정**: `config.py:12` `ROOT=Path(__file__).resolve().parents[2]`(컨테이너 `__file__=/app/src/sepsis/config.py`→`/app`)·`:18` `VAR_DIR=ROOT/"var"`(=`/app/var`)·`:27-30` `audit_uri()`가 `VAR_DIR.mkdir(exist_ok=True)` 후 `sqlite:///{VAR_DIR}/console_audit.db` 반환, `service.py:30` `AuditStore(os.environ.get("CONSOLE_AUDIT_DB_URL") or C.audit_uri())`, `audit.py:54-56` `__init__`이 `create_engine`+`Base.metadata.create_all` — env 누락 시 폴백은 실제로 **`create_all` 직전 `VAR_DIR.mkdir(/app/var)`에서 먼저** PermissionError(모두 [확인됨]). **CG-10 신설**(§3.2): console-api env에 `CONSOLE_AUDIT_DB_URL`이 존재하고 `sqlite:////app/auditdb/`(auditdb named volume 경로)를 가리킴을 정적 파싱 강제(=`/app/var` 기본 폴백 금지) — CG-3와 대칭. §3.2 CG 요약 주석에 "CG-9·CG-10은 짝 — CG-9가 uid 10001을 확정하는 순간 감사 DB 폴백이 '비영속'→'부팅 크래시'로 승격하므로 CG-10이 env를 정적 단계에서 봉인" 한 줄 근거 병기. 상태줄 v4·개정로그에 CG-10 근거(uid 10001 전환이 승격 원인) 기입.
+
+### minor (1건)
+
+- **host-chown 특권(sudo) 미명시** — §2.2·§2.5 `chown -R 10001:10001 ./deploy/artifacts`는 다른 uid로 변경이라 CAP_CHOWN(root/sudo) 필요. 호스트 개발자가 uid 1000이면 "Operation not permitted" 실패. 대안 "seed를 uid 10001로 실행"도 특권 필요. 운영노트에 "chown/seed-as-10001은 sudo 필요(호스트 uid≠0 시)" 한 줄 권장. SM-5 실측 예약돼 파급 좁음 → minor.
+- **[reviser 응답]** 반영. §2.5 운영노트 "artifacts 호스트 소유권 정합" 불릿 아래 **"특권 필요 (R3 minor)"** 서브불릿 추가 — `chown -R 10001:10001`은 다른 uid로의 변경이라 CAP_CHOWN(root/sudo) 필요, 호스트 uid≠0(예: 1000)이면 sudo 없이 "Operation not permitted", 대안 seed-as-10001(`sudo -u '#10001'`/컨테이너 내 seed)도 특권 필요 → **host-chown·seed-as-10001은 호스트 uid≠0일 때 sudo 필요**([검증 필요: WSL2 sudo·uid 매핑]). 개정로그 minor 항목에도 병기. SM-5 실측 예약 유지.
+
+### 수렴 판정
+
+**blocker: 0건.** R1(B1 restart)·R2(B2-R2 user/host-chown) 실물 대조로 정확 해소, v3 새 처방도 코드와 무모순. 핵심 검증 (a) artifacts host-chown이 실제 write 지점(`set_alias`+`create_all`) 정확 커버, (b) serving이 uid 10001에서 `/app` write로 죽는 경로 없음(read-only 실측) 모두 통과. CG-1~9 계약 세트 yaml 파싱 구현·관측 가능, 상호 무충돌. 남은 major 1(회귀 가드 공백, 값은 정확)·minor 1(특권 명시)뿐 — **PASS, 다음 단계(spec-writer RED·구현) 진행 가능**.

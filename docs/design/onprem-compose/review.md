@@ -180,3 +180,40 @@
 ---
 
 **blocker: 1건** (B3-1). blocker≠0 → **HOLD**. R2 blocker(B2-1·B2-2)·M2-1·M2-2 보완은 실물 대조 결과 **정확히 해소**(가짜 수렴 아님). B3-1은 v4에도 남아 있던 아직 못 본 층 — 결정 7이 세 healthcheck는 정밀 규정하면서 정작 `service_healthy`로 게이트하는 네 번째(console-web)의 healthcheck를 규정 안 해 동종 함정이 남음. M3-1은 M-2 완화가 번호 체인 서술과 남긴 내부모순.
+
+---
+
+## 라운드 4 (redteam) — 수렴 판정
+
+- **대상 commit**: v5 (R3 보완 반영본) · **검토일**: 2026-07-02
+- **핵심 질문**: healthcheck-게이트 계열(B-1→B2-1→B3-1)이 진짜 다 닫혔나(가짜 수렴) / v5가 아직 아무도 안 본 축(모니터링·불변식·자원·결정간 참조·문서 일관성)에 새 blocker를 남겼나
+- **판정**: **PASS — blocker 0건**
+
+### PASS (R3 보완 검증 — 실물 대조, 가짜 수렴 아님)
+
+- **B3-1 console-web healthcheck 명세·정합 확정** — 결정 7이 console-web healthcheck를 `test: wget -q --spider http://localhost:8080/`로 신규 명세. 실물 `console-web/Dockerfile:14`(base alpine → busybox wget 보유), `:19`(`listen 8080` + `try_files $uri $uri/ /index.html`), `:21`(EXPOSE 8080), HEALTHCHECK 지시어 전체 부재(`:1-22`) 모두 확인. 명세 포트(8080)가 실제 listen 포트와 일치, `/`는 SPA 폴백 항상 200. 처방 정확.
+- **healthcheck-게이트 계열 전수 확인 — 계열이 닫혔다** — front-nginx가 `service_healthy`로 게이트하는 대상 전수 열거: console-api·console-web **두 서비스뿐**. 둘 다 실재·작동 healthcheck 보유(console-api=`/console/versions?fs=vitals` 빈 상태 200 — `console-api.yaml:87`, console-web=`/` SPA 폴백 200). serving은 `service_started`로만 의존받음(게이트 백본 아님)에도 자체 `/health` 보유. **healthy로 게이트되는데 healthcheck 없는 서비스가 더는 없음** — B-1/B2-1/B3-1 계열 완전 종결.
+- **M3-1 기동 체인 방향별 재서술 정합** — 결정 7이 번호 서술 폐기, 방향별 condition으로 재서술(serving=무의존, console-api→serving=`service_started`, front-nginx→console-api·console-web=`service_healthy`). "번호가 아니라 condition이 권위"·"방향이 다름" 명문. M-2와 모순 없음, 새 모순 없음.
+- **불변식 4개 v5 보존** — 예측/추론(`app.py:82-107` NaN 계약 불변), 번들 원자성(`bundle.py`), 감사 append-only(`audit.py` 훅 + B2-2 chown이 create_all 성공 보장), 무중단 핫스왑(`app.py:62-68` 원자 리바인드). v1~v5 변경 어느 것도 훼손 안 함.
+- **결정 9 자원 정렬 실재** — `deployment.yaml:127 limits.memory:1Gi`·`:126 limits.cpu:2`·`:81-84 BLAS 캡=2`·`:96 startupProbe 300s`. 결정 9·7 정렬 근거 실재.
+- **모니터링 서브스택 정합** — `docker-compose.yml:25` grafana `depends_on:[prometheus,renderer]`(plain=service_started), `:34-36` provisioning 볼륨, renderer 무의존. 결정 4·서비스맵 정합.
+
+### major
+
+없음.
+
+### minor
+
+- **결정 9 mem_limit 근거의 torch 이중계상(보수적 과대추정)** — "GRU RSS ~248MB × 2 + torch 런타임"에서 248MB가 이미 torch 포함이면 `×2`가 torch 이중계상(핫스왑은 모델 가중치만 2배). **과대추정 방향이라 안전**(실피크 < 1Gi, K8s 1Gi 정렬값). 표현만 "모델 상태 2배 + torch 1회"로 다듬으면 정확. 수치 결론(1Gi)은 유효.
+- **결정 4 "serving용 extra_hosts" 표현 부정확** — 제거 대상은 실물상 **prometheus** 서비스의 `extra_hosts: host.docker.internal`(`docker-compose.yml:17-18`). "prometheus의 host.docker.internal 라인 제거"가 정확. 소유 서비스 오기.
+- **모니터링 서브스택 병합 시 상대경로 리베이스 미언급** — `./prometheus.yml`·`../grafana/provisioning`(`:16,35-36`) 상대경로가 단일 통합 compose 병합 시 어긋날 수 있음. 결정은 "볼륨 승계"만 언급, 경로 리베이스 무언급. 핸드오프-레벨 배관 디테일이라 설계 blocker 아니나 한 줄 명시 권장.
+- **busybox wget `--spider` 지원은 구현검증** — alpine busybox wget `--spider` 전제. 문서가 대안(`wget -qO- ... || exit 1`) 병기해 리스크 흡수됨. 구현검증 편입.
+
+### 구현 검증 항목 (라운드 4 — 기존 목록과 병합)
+
+- (신규) console-web·console-api·front-nginx alpine busybox `wget`이 명세 플래그(`--spider`/`-qO-`) 지원하는지 실측.
+- (신규) 모니터링 서브스택 단일 통합 compose 병합 시 `prometheus.yml`·grafana provisioning 상대 볼륨 경로가 올바로 마운트되고 prometheus가 `serving:8000` DNS 해석하는지 실측.
+
+---
+
+**blocker: 0건 — PASS.** 세 라운드 연속(B-1→B2-1→B3-1) 서비스를 옮겨 다니던 "healthy 게이트가 의존하는 healthcheck의 실재/작동" 함정 계열이 **완전히 닫혔음을 전수 확인**. R3 보완(B3-1·M3-1)은 실물 대조 결과 정확 해소(가짜 수렴 아님). 라운드 4에서 새로 연 축(모니터링·불변식 4개·결정 9 자원·결정 2↔5↔6 및 7↔9 참조·문서 일관성)에서 blocker 없음. 남은 것은 minor 4·구현검증 항목뿐. **HOLD 해제 → 다음 단계(핸드오프) 진행 가능.**

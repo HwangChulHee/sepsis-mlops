@@ -23,6 +23,10 @@ RUN pip install --no-cache-dir \
 # 마운트 전에도 경로가 존재해야 list_versions/_scan_version_ids 가 graceful(빈 목록).
 COPY src/ /app/src/
 RUN mkdir -p /app/deploy/artifacts
+# auditdb 마운트 지점을 uid 10001 소유로 선생성(B2-2/B2-R2) — 빈 named volume 최초 마운트 시
+# 이 소유권을 상속한다. compose 가 console-api 를 user:"10001:10001" 로 실행하므로, 이게 없으면
+# named volume 이 root 소유로 생겨 AuditStore.create_all 이 permission denied → 부팅 크래시.
+RUN mkdir -p /app/auditdb && chown 10001:10001 /app/auditdb
 
 ENV PYTHONPATH=/app/src
 

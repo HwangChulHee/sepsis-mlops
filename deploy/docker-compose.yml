@@ -1,0 +1,143 @@
+# On-Prem 통합 Compose 스택 (가) — serving(GRU) + console(api+web) + 모니터링을 한 스택으로.
+# 설계: docs/design/onprem-compose/decisions.md (review-loop 4R 통과) / 핸드오프 handoff.md (3R 통과).
+#
+# ★ 실행 (반드시 repo 루트를 project-directory 로):
+#     docker compose -f deploy/docker-compose.yml --project-directory . up -d
+#   build context(.)·bind mount(./deploy/artifacts)가 모두 repo 루트 기준이므로,
+#   compose 파일 위치(deploy/)가 아니라 repo 루트에서 경로가 풀려야 한다(핸드오프 §2.2).
+#
+# ★ 선작업 (up 전):
+#     1) 번들 seed:  uv run python -m scripts.h4.h4s_export_bundle vitals
+#     2) artifacts 소유권 정합(비-root uid 10001):  sudo chown -R 10001:10001 ./deploy/artifacts
+#   seed 안 하면 serving 이 exit 3(읽을 수 있는 실패)로 정지한다(restart:"no" — 자동 복구 안 됨).
+
+services:
+  # ── 서빙(GRU) — 부하/EMR 진입점, 호스트 8000 직접 공개 ──────────────────────
+  serving:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: sepsis-serving:compose
+    container_name: sepsis-serving
+    ports:
+      - "8000:8000"
+    user: "10001:10001"          # 비-root(B2-R2) — artifacts 읽기·K8s runAsUser 10001 정합
+    environment:
+      SERVE_FEATURESET: "vitals"
+      LOG_LEVEL: "info"
+      # BLAS 스레드캡 = cpus 와 동수(결정 9) — 작은 추론 배열 스레드 과투입(thrash) 방지.
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      NUMEXPR_NUM_THREADS: "2"
+    # 자원 제한: 반드시 최상위 키(비-Swarm 이식성). deploy.resources 금지(결정 9·CG-1).
+    cpus: 2                       # = BLAS 스레드캡. 부팅 캘리브레이션 여유 + thrash 방지.
+    mem_limit: "2g"              # compose 문법(1024 기반). reload 2배 창 수용(≥1Gi, CG-1·m6).
+    restart: "no"               # B1 — exit 3(seed 미완)에도 재시작 안 함 → §0 읽을 수 있는 실패 보존.
+    volumes:
+      - ./deploy/artifacts:/app/deploy/artifacts   # console-api 와 공유(bind mount, RO 성격)
+    healthcheck:
+      # slim 엔 curl/wget 없음 → 이미지 내장 python 으로(B-1). /health 200 이면 healthy.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      start_period: 330s          # ≥ 300-trial 캘리브레이션 예산(m2) — 창 내 실패는 unhealthy 미집계.
+      timeout: 5s
+      interval: 10s
+      retries: 3
+
+  # ── 콘솔 API — 승인/롤백/감사, 내부 8000 ──────────────────────────────────
+  console-api:
+    build:
+      context: .
+      dockerfile: deploy/k8s/console/Dockerfile.api
+    image: sepsis-console-api:compose
+    container_name: sepsis-console-api
+    user: "10001:10001"          # 비-root(B2-R2) — alias 스왑·auditdb 쓰기 uid
+    environment:
+      SERVE_URL: "http://serving:8000"                              # CG-3 — localhost 기본 금지
+      CONSOLE_AUDIT_DB_URL: "sqlite:////app/auditdb/console_audit.db"  # CG-10 — /app/var 폴백 금지
+      CONSOLE_FEATURESETS: "vitals"                                 # CG-4 — serving 과 정합
+      LOG_LEVEL: "info"
+    depends_on:
+      serving:
+        condition: service_started   # ❗service_healthy 아님(M-2·CG-7) — 캘리브레이션 300s·seed 진단성
+    volumes:
+      - ./deploy/artifacts:/app/deploy/artifacts   # alias 스왑(RW) — serving 과 공유
+      - auditdb:/app/auditdb                        # 감사 DB(named volume, 이미지 chown 10001 상속)
+    healthcheck:
+      # alpine — busybox wget. /console/versions?fs=vitals 는 빈 상태에서도 200(B2-1).
+      # exec-form 이라 ?fs=vitals 는 리터럴 전달(셸 미경유, m3).
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/console/versions?fs=vitals"]
+      start_period: 20s
+      timeout: 5s
+      interval: 10s
+      retries: 3
+
+  # ── 콘솔 Web — SPA 정적 서빙(자체 nginx), 내부 8080 ────────────────────────
+  console-web:
+    build: console-web/
+    image: sepsis-console-web:compose
+    container_name: sepsis-console-web
+    healthcheck:
+      # base=nginx-unprivileged:alpine(uid 101, listen 8080). / 는 SPA 폴백이라 항상 200(B3-1).
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
+      start_period: 5s
+      timeout: 5s
+      interval: 10s
+      retries: 3
+
+  # ── front nginx — Ingress 라우팅 이식(/console→api, /→web), 호스트 80 공개 ──
+  front-nginx:
+    build: deploy/nginx/
+    image: sepsis-front-nginx:compose
+    container_name: sepsis-front-nginx
+    ports:
+      - "80:80"
+    depends_on:
+      console-api:
+        condition: service_healthy   # 게이트 대상엔 healthcheck 실재 필요(CG-2)
+      console-web:
+        condition: service_healthy   # ← B3-1: console-web healthcheck 명세로 게이트 성립
+    healthcheck:
+      # alpine nginx — busybox wget. / 는 라우팅으로 항상 응답(포트 80 이 실가드, m7).
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      start_period: 5s
+      timeout: 5s
+      interval: 10s
+      retries: 3
+
+  # ── 모니터링(기존 monitoring/ 흡수) ────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: sepsis-prometheus
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"     # POC 무인증 노출(알려진 한계)
+    depends_on:
+      - serving          # 스크랩 대상. service_started(healthy 게이트 아님) — 스크랩은 실패 허용.
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: sepsis-grafana
+    depends_on: [prometheus, renderer]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"     # 데모 익명 Admin(알려진 한계 — 무인증 대시보드)
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_RENDERING_SERVER_URL: "http://renderer:8081/render"
+      GF_RENDERING_CALLBACK_URL: "http://grafana:3000/"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/etc/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+
+  renderer:
+    image: grafana/grafana-image-renderer:3.11.6
+    container_name: sepsis-grafana-renderer
+    environment:
+      ENABLE_METRICS: "false"
+
+volumes:
+  auditdb:      # 감사 DB 영속(append-only) — artifacts 와 수명·백업 정책 분리(결정 5).

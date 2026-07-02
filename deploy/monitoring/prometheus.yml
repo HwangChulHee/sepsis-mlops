@@ -1,4 +1,4 @@
-# 로컬 모니터링 스택용 Prometheus 설정 — 호스트의 서빙 /metrics 를 스크랩한다.
+# 통합 Compose 스택용 Prometheus 설정 — serving 컨테이너의 /metrics 를 스크랩한다.
 # 리플레이 데모는 빠르게 변하므로 scrape_interval 을 짧게(2s) — Gauge 곡선을 촘촘히 표본한다.
 # (운영 기본은 15s 권장; 이건 데모/증거용.)
 global:
@@ -9,5 +9,6 @@ scrape_configs:
   - job_name: sepsis-serving
     metrics_path: /metrics
     static_configs:
-      # 서빙은 호스트(uvicorn 127.0.0.1:8000)에서 돈다. 컨테이너→호스트는 host.docker.internal.
-      - targets: ["host.docker.internal:8000"]
+      # serving 은 이제 통합 스택의 compose 서비스 → 내장 DNS 서비스명으로 도달(결정 4·CG-6).
+      # (구: 호스트 uvicorn 을 host.docker.internal 로 스크랩 — serving 컨테이너화로 폐기.)
+      - targets: ["serving:8000"]

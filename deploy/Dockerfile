@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir torch==2.12.1 --index-url https://download.pytorc
 # mount (dead layer + a trap: stale baked alias if the mount ever misses). Pre-create the dir
 # so serve's alias resolution is graceful (empty) before the PVC mounts, mirroring Dockerfile.api.
 COPY src/ /app/src/
+COPY deploy/serving-entrypoint.sh /app/deploy/serving-entrypoint.sh
 RUN mkdir -p /app/deploy/artifacts
 
 # src layout: config.ROOT = parents[2] of /app/src/sepsis/config.py = /app
@@ -31,6 +32,9 @@ RUN mkdir -p /app/deploy/artifacts
 ENV PYTHONPATH=/app/src
 
 EXPOSE 8000
-# sh -c + exec: LOG_LEVEL env(configmap 주입)을 uvicorn --log-level 로 실제 소비한다.
-# exec 로 uvicorn 을 PID 1 로 승격 → K8s SIGTERM graceful drain 유지(sh 가 신호를 안 삼킴).
-CMD ["/bin/sh", "-c", "exec uvicorn sepsis.serve.app:app --host 0.0.0.0 --port 8000 --log-level ${LOG_LEVEL:-info}"]
+# entrypoint 셸이 seed precondition(활성 alias 존재)을 확인 후 exec uvicorn(핸드오프 §2.1).
+#   - ["/bin/sh", 스크립트] 형태로 인터프리터 명시 → shebang·실행권한 무관하게 기동(M1).
+#     (exec form 에 스크립트 경로만 넣으면 shebang/chmod 없이 "exec format error".)
+#   - 스크립트가 exec uvicorn 으로 PID1 승격 → K8s SIGTERM graceful drain 유지.
+#   - seed 미완이면 exit 3(읽을 수 있는 실패) — compose 는 restart:"no" 와만 결합(B1).
+ENTRYPOINT ["/bin/sh", "/app/deploy/serving-entrypoint.sh"]

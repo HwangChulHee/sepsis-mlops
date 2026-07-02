@@ -136,7 +136,7 @@ jobs:
       # nitpick 으로 빨개지지 않게. 강화하려면 warning 으로 낮출 것.
       - name: Lint Dockerfiles (hadolint)
         run: |
-          for df in deploy/Dockerfile deploy/k8s/console/Dockerfile.api console-web/Dockerfile; do
+          for df in deploy/Dockerfile deploy/k8s/console/Dockerfile.api console-web/Dockerfile deploy/nginx/Dockerfile; do
             echo "== $df =="
             hadolint --failure-threshold error "$df"
           done

@@ -49,7 +49,7 @@ linux_node() {
 # 아티팩트가 있을 때만 — 없는데 돌리면 오프라인에서 무조건 실패하기 때문(자동 감지→skip).
 # 커버리지(--cov·fail_under)는 CI 관심사라 로컬 게이트에선 빼고, 품질 바는 mutation 이 담당한다.
 # bench 는 합성 픽스처(BenchResult 계약 검증)라 모델 불필요 → hermetic 에 포함.
-HERMETIC=(tests/console tests/console_prep tests/replay tests/data tests/drift tests/eval tests/retrain tests/bench)
+HERMETIC=(tests/console tests/console_prep tests/replay tests/data tests/drift tests/eval tests/retrain tests/bench tests/deploy)
 header "test — pytest (hermetic)"
 if run "deps: uv sync --frozen" uv sync --frozen; then
   run "pytest (hermetic)" uv run pytest -q "${HERMETIC[@]}"
@@ -104,7 +104,7 @@ else
 fi
 
 if command -v hadolint >/dev/null 2>&1; then
-  dockerfiles=(deploy/Dockerfile deploy/k8s/console/Dockerfile.api console-web/Dockerfile)
+  dockerfiles=(deploy/Dockerfile deploy/k8s/console/Dockerfile.api console-web/Dockerfile deploy/nginx/Dockerfile)
   hadolint_ok=1
   for df in "${dockerfiles[@]}"; do
     printf '%s== %s ==%s\n' "$DIM" "$df" "$RESET"
